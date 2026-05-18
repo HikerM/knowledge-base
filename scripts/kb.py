@@ -20,220 +20,79 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 
-ROOT = Path(__file__).resolve().parents[1]
-KNOWLEDGE_DIR = ROOT / "knowledge"
-CONFIG_DIR = ROOT / "config"
-TEMPLATES_DIR = ROOT / "templates"
-REPORTS_DIR = ROOT / "reports"
-KB_DIR = ROOT / ".kb"
-DB_PATH = KB_DIR / "index.sqlite"
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
-LAYERS = ["raw", "distilled", "rules", "snippets", "checklists", "deprecated", "rejected", "quarantine"]
-FORMAL_LAYERS = {"rules", "snippets", "checklists"}
-DEFAULT_SEARCH_LAYERS = {"rules", "checklists", "snippets"}
-EXPLORATORY_LAYERS = {"raw", "distilled"}
-STATUS_VALUES = {"active", "experimental", "deprecated", "rejected"}
-CONFIDENCE_VALUES = {"high", "medium", "low"}
-SOURCE_TYPE_VALUES = {"official", "github", "paper", "blog", "forum", "video", "internal_practice", "unknown"}
-RISK_LEVEL_VALUES = {"low", "medium", "high"}
-REQUIRED_SCHEMA_FIELDS = [
-    "title",
-    "category",
-    "type",
-    "status",
-    "confidence",
-    "source_type",
-    "source_url",
-    "created_at",
-    "last_reviewed",
-    "reviewed_by",
-    "valid_for",
-    "not_valid_for",
-    "project_scope",
-    "supersedes",
-    "superseded_by",
-    "risk_level",
-    "verification_method",
-    "review_required",
-]
-FORMAL_REQUIRED_FIELDS = ["reviewed_by", "verification_method", "last_reviewed"]
-GOVERNANCE_OPTIONAL_FIELDS = [
-    "topic_id",
-    "canonical_id",
-    "source_hash",
-    "content_hash",
-    "deprecated_reason",
-    "rejected_reason",
-    "quarantined_reason",
-    "review_cycle_days",
-]
+from knowledge_core import paths as core_paths
+from knowledge_core.config import (
+    DEFAULT_CONFIG_FILES,
+    category_choices,
+    category_path,
+    ensure_list_text,
+    load_categories,
+    load_extract_rules,
+    load_learning_radar,
+    load_sources_config,
+)
+from knowledge_core.frontmatter import (
+    CONFIDENCE_VALUES,
+    FORMAL_REQUIRED_FIELDS,
+    GOVERNANCE_OPTIONAL_FIELDS,
+    REQUIRED_SCHEMA_FIELDS,
+    RISK_LEVEL_VALUES,
+    SOURCE_TYPE_VALUES,
+    STATUS_VALUES,
+    bool_value,
+    frontmatter_text,
+    list_value,
+    metadata_string,
+    parse_frontmatter,
+)
+from knowledge_core.paths import (
+    CONFIG_DIR,
+    DB_PATH,
+    DEFAULT_SEARCH_LAYERS,
+    EXPLORATORY_LAYERS,
+    FORMAL_LAYERS,
+    KB_DIR,
+    KNOWLEDGE_DIR,
+    LAYERS,
+    REPORTS_DIR,
+    ROOT,
+    TEMPLATES_DIR,
+    PathConfigError,
+    ensure_directories,
+    infer_category_layer,
+    resolve_user_path,
+    slugify,
+    to_relative_posix,
+    unique_path,
+    write_if_missing,
+)
+from knowledge_core.security import run_secret_scan
+
+
 SEARCHABLE_EXTENSIONS = {".md", ".markdown"}
 MAX_SNIPPET_CHARS = 500
 DEFAULT_TOP_K = 10
 MAX_TOP_K = 50
 CHUNK_TARGET_CHARS = 1200
 CHUNK_HARD_MAX_CHARS = 1500
-SECRET_SCAN_EXCLUDED_DIRS = {".git", ".kb", "__pycache__", ".venv", "tmp", "exports"}
-SECRET_SCAN_ALLOW_MARKER = "TEST_ONLY_SECRET_PATTERN"
-SECRET_SCAN_BINARY_EXTENSIONS = {
-    ".db",
-    ".gif",
-    ".ico",
-    ".jpg",
-    ".jpeg",
-    ".pdf",
-    ".png",
-    ".pyc",
-    ".sqlite",
-    ".sqlite-shm",
-    ".sqlite-wal",
-    ".webp",
-    ".zip",
-}
-SECRET_PATTERNS: List[Tuple[str, re.Pattern[str]]] = [
-    ("openai_key", re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b")),
-    ("github_token", re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}\b|github_pat_[A-Za-z0-9_]{20,}")),
-    ("private_key_block", re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")),
-    ("bearer_token", re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{20,}")),
-    ("api_key_assignment", re.compile(r"(?i)\b(?:api[_-]?key|apikey)\b\s*[:=]\s*[\"']?([A-Za-z0-9._~+/=-]{20,})")),
-    ("password_assignment", re.compile(r"(?i)\bpassword\b\s*[:=]\s*[\"']?([^\"'\s]{8,})")),
-    ("secret_assignment", re.compile(r"(?i)\bsecret\b\s*[:=]\s*[\"']?([A-Za-z0-9._~+/=-]{12,})")),
-]
 
-DEFAULT_CATEGORIES: Dict[str, Dict[str, str]] = {
-    "frontend": {
-        "path": "knowledge/01-frontend",
-        "description": "前端、组件、状态管理、响应式、构建、测试、可访问性",
-    },
-    "backend": {
-        "path": "knowledge/02-backend",
-        "description": "API、服务分层、鉴权、权限、日志、缓存、队列、部署",
-    },
-    "ui_ux": {
-        "path": "knowledge/03-ui-ux",
-        "description": "自适应 UI、设计系统、组件状态、Unity UI、Dashboard、游戏 UI",
-    },
-    "product": {
-        "path": "knowledge/04-product",
-        "description": "PRD、MVP、用户路径、功能优先级、指标、竞品分析",
-    },
-    "algorithm": {
-        "path": "knowledge/05-algorithm",
-        "description": "算法、数据结构、复杂度、搜索、图、动态规划、推荐、游戏 AI",
-    },
-    "database": {
-        "path": "knowledge/06-database",
-        "description": "数据建模、索引、事务、迁移、查询优化、缓存一致性",
-    },
-    "performance": {
-        "path": "knowledge/07-performance",
-        "description": "Web、后端、数据库、Unity、网络、内存、渲染、压测、Profiling",
-    },
-    "security": {
-        "path": "knowledge/08-security",
-        "description": "鉴权、授权、输入校验、XSS、SQL 注入、依赖漏洞、密钥管理",
-    },
-    "ai_agent": {
-        "path": "knowledge/09-ai-agent",
-        "description": "Codex、Skill、AGENTS.md、RAG、工具调用、上下文管理、Agent 工作流",
-    },
-}
 
-DEFAULT_CONFIG_FILES = {
-    "config/categories.yaml": """frontend:
-  path: knowledge/01-frontend
-  description: 前端、组件、状态管理、响应式、构建、测试、可访问性
+def configure_core_root(root: Path) -> None:
+    core_paths.configure_root(root)
+    globals().update(
+        ROOT=core_paths.ROOT,
+        KNOWLEDGE_DIR=core_paths.KNOWLEDGE_DIR,
+        CONFIG_DIR=core_paths.CONFIG_DIR,
+        TEMPLATES_DIR=core_paths.TEMPLATES_DIR,
+        REPORTS_DIR=core_paths.REPORTS_DIR,
+        KB_DIR=core_paths.KB_DIR,
+        DB_PATH=core_paths.DB_PATH,
+    )
 
-backend:
-  path: knowledge/02-backend
-  description: API、服务分层、鉴权、权限、日志、缓存、队列、部署
-
-ui_ux:
-  path: knowledge/03-ui-ux
-  description: 自适应 UI、设计系统、组件状态、Unity UI、Dashboard、游戏 UI
-
-product:
-  path: knowledge/04-product
-  description: PRD、MVP、用户路径、功能优先级、指标、竞品分析
-
-algorithm:
-  path: knowledge/05-algorithm
-  description: 算法、数据结构、复杂度、搜索、图、动态规划、推荐、游戏 AI
-
-database:
-  path: knowledge/06-database
-  description: 数据建模、索引、事务、迁移、查询优化、缓存一致性
-
-performance:
-  path: knowledge/07-performance
-  description: Web、后端、数据库、Unity、网络、内存、渲染、压测、Profiling
-
-security:
-  path: knowledge/08-security
-  description: 鉴权、授权、输入校验、XSS、SQL 注入、依赖漏洞、密钥管理
-
-ai_agent:
-  path: knowledge/09-ai-agent
-  description: Codex、Skill、AGENTS.md、RAG、工具调用、上下文管理、Agent 工作流
-""",
-    "config/quality-rules.yaml": """score_dimensions:
-  - source_authority
-  - recency
-  - relevance_to_my_projects
-  - actionability
-  - implementation_detail
-  - risk_level
-  - verification_needed
-
-policy:
-  - raw 不得直接作为 Codex 的正式规则。
-  - distilled 是 AI 提炼层，仍需人工审核。
-  - rules、snippets、checklists 才是正式可执行知识。
-  - 不允许存储真实密钥、密码、token、客户隐私数据。
-""",
-    "config/sources.yaml": """sources:
-  - name: OpenAI Codex Docs
-    category: ai_agent
-    type: official_docs
-    url: https://developers.openai.com/codex
-    priority: high
-    enabled: true
-    learn_focus:
-      - Codex workflow
-      - project instructions
-      - agent usage
-    output_targets:
-      - rules
-      - templates
-      - checklists
-    notes: Codex、Skill、AGENTS.md、Agent 工作流相关官方文档。
-""",
-    "config/learning-radar.yaml": """ai_agent:
-  learning_goal: 沉淀 Codex、Skill、AGENTS.md、RAG、工具调用、上下文管理和 Agent 工作流规则。
-  frequency: weekly
-  focus:
-    - Codex workflow
-    - agent instructions
-    - tool use
-  ignore:
-    - prompt hacks without reproducible workflow
-  preferred_outputs:
-    - rules
-    - templates
-    - checklists
-""",
-    "config/extract-rules.yaml": """best_practice:
-  description: 从外部内容提炼可执行工程规则。
-  required_fields:
-    - title
-    - source_url
-    - applicable_context
-    - recommended_practice
-    - verification_method
-    - review_required
-  output_layer: distilled
-""",
-}
 
 DEFAULT_TEMPLATE_FILES = {
     "templates/knowledge-card.md": """---
@@ -361,206 +220,6 @@ def die(message: str, code: int = 1) -> None:
     raise KBError(message)
 
 
-def load_categories() -> Dict[str, Dict[str, str]]:
-    path = CONFIG_DIR / "categories.yaml"
-    if not path.exists():
-        return DEFAULT_CATEGORIES
-
-    categories: Dict[str, Dict[str, str]] = {}
-    current: Optional[str] = None
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.rstrip()
-        if not line or line.lstrip().startswith("#"):
-            continue
-        if not line.startswith(" ") and line.endswith(":"):
-            current = line[:-1].strip()
-            categories[current] = {}
-            continue
-        if current and line.startswith("  ") and ":" in line:
-            key, value = line.strip().split(":", 1)
-            categories[current][key.strip()] = value.strip().strip('"').strip("'")
-    return categories or DEFAULT_CATEGORIES
-
-
-def parse_config_scalar(value: str) -> Any:
-    value = value.strip()
-    if value == "":
-        return ""
-    lowered = value.lower()
-    if lowered == "true":
-        return True
-    if lowered == "false":
-        return False
-    if value.startswith("[") and value.endswith("]"):
-        return parse_frontmatter_value(value)
-    return value.strip().strip('"').strip("'")
-
-
-def load_sources_config() -> List[Dict[str, Any]]:
-    path = CONFIG_DIR / "sources.yaml"
-    if not path.exists():
-        return []
-    sources: List[Dict[str, Any]] = []
-    current: Optional[Dict[str, Any]] = None
-    pending_key: Optional[str] = None
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        if not raw_line.strip() or raw_line.lstrip().startswith("#"):
-            continue
-        indent = len(raw_line) - len(raw_line.lstrip(" "))
-        stripped = raw_line.strip()
-        if stripped == "sources:":
-            continue
-        if indent == 2 and stripped.startswith("- "):
-            if current:
-                sources.append(current)
-            current = {}
-            pending_key = None
-            rest = stripped[2:].strip()
-            if ":" in rest:
-                key, value = rest.split(":", 1)
-                current[key.strip()] = parse_config_scalar(value)
-            continue
-        if current is None:
-            continue
-        if indent >= 4 and stripped.startswith("- ") and pending_key:
-            current.setdefault(pending_key, [])
-            if not isinstance(current[pending_key], list):
-                current[pending_key] = [current[pending_key]]
-            current[pending_key].append(parse_config_scalar(stripped[2:]))
-            continue
-        if indent >= 4 and ":" in stripped:
-            key, value = stripped.split(":", 1)
-            key = key.strip()
-            value = value.strip()
-            if value == "":
-                current[key] = []
-                pending_key = key
-            else:
-                current[key] = parse_config_scalar(value)
-                pending_key = None
-    if current:
-        sources.append(current)
-    return sources
-
-
-def load_mapping_config(filename: str) -> Dict[str, Dict[str, Any]]:
-    path = CONFIG_DIR / filename
-    if not path.exists():
-        return {}
-    result: Dict[str, Dict[str, Any]] = {}
-    current_key: Optional[str] = None
-    pending_key: Optional[str] = None
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        if not raw_line.strip() or raw_line.lstrip().startswith("#"):
-            continue
-        indent = len(raw_line) - len(raw_line.lstrip(" "))
-        stripped = raw_line.strip()
-        if indent == 0 and stripped.endswith(":"):
-            current_key = stripped[:-1].strip()
-            result[current_key] = {}
-            pending_key = None
-            continue
-        if current_key is None:
-            continue
-        if indent >= 4 and stripped.startswith("- ") and pending_key:
-            result[current_key].setdefault(pending_key, [])
-            result[current_key][pending_key].append(parse_config_scalar(stripped[2:]))
-            continue
-        if indent >= 2 and ":" in stripped:
-            key, value = stripped.split(":", 1)
-            key = key.strip()
-            value = value.strip()
-            if value == "":
-                result[current_key][key] = []
-                pending_key = key
-            else:
-                result[current_key][key] = parse_config_scalar(value)
-                pending_key = None
-    return result
-
-
-def load_learning_radar() -> Dict[str, Dict[str, Any]]:
-    return load_mapping_config("learning-radar.yaml")
-
-
-def load_extract_rules() -> Dict[str, Dict[str, Any]]:
-    return load_mapping_config("extract-rules.yaml")
-
-
-def ensure_list_text(value: Any) -> List[str]:
-    if isinstance(value, list):
-        return [str(item) for item in value]
-    if value is None or value == "":
-        return []
-    return [str(value)]
-
-
-def category_choices() -> List[str]:
-    return sorted(load_categories().keys())
-
-
-def category_path(category: str) -> Path:
-    categories = load_categories()
-    if category not in categories:
-        die(f"Unknown category: {category}. Valid: {', '.join(sorted(categories))}")
-    return ROOT / categories[category]["path"]
-
-
-def ensure_directories() -> None:
-    KB_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
-    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    for meta in load_categories().values():
-        base = ROOT / meta["path"]
-        for layer in LAYERS:
-            (base / layer).mkdir(parents=True, exist_ok=True)
-
-
-def write_if_missing(relative_path: str, content: str) -> bool:
-    path = ROOT / relative_path
-    if path.exists():
-        return False
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8", newline="\n")
-    return True
-
-
-def slugify(value: str, fallback: str = "knowledge-card") -> str:
-    value = value.strip().lower()
-    value = re.sub(r"[^\w\s-]", "", value, flags=re.UNICODE)
-    value = re.sub(r"[\s_]+", "-", value)
-    value = re.sub(r"-+", "-", value).strip("-")
-    ascii_slug = value.encode("ascii", "ignore").decode("ascii").strip("-")
-    if ascii_slug:
-        return ascii_slug[:80]
-    digest = hashlib.sha1(value.encode("utf-8")).hexdigest()[:10] if value else datetime.now().strftime("%Y%m%d%H%M%S")
-    return f"{fallback}-{digest}"
-
-
-def unique_path(directory: Path, filename: str) -> Path:
-    directory.mkdir(parents=True, exist_ok=True)
-    stem = Path(filename).stem
-    suffix = Path(filename).suffix
-    candidate = directory / filename
-    counter = 2
-    while candidate.exists():
-        candidate = directory / f"{stem}-{counter}{suffix}"
-        counter += 1
-    return candidate
-
-
-def to_relative_posix(path: Path) -> str:
-    return path.resolve().relative_to(ROOT.resolve()).as_posix()
-
-
-def resolve_user_path(path_text: str) -> Path:
-    path = Path(path_text)
-    if not path.is_absolute():
-        path = ROOT / path
-    return path.resolve()
-
-
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -581,97 +240,6 @@ def read_single_markdown(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def parse_frontmatter(text: str) -> Tuple[Dict[str, Any], str, bool]:
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return {}, text, False
-
-    end_index: Optional[int] = None
-    for idx in range(1, len(lines)):
-        if lines[idx].strip() == "---":
-            end_index = idx
-            break
-    if end_index is None:
-        return {}, text, False
-
-    frontmatter: Dict[str, Any] = {}
-    for line in lines[1:end_index]:
-        if not line.strip() or line.lstrip().startswith("#") or ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        frontmatter[key.strip()] = parse_frontmatter_value(value.strip())
-    body = "\n".join(lines[end_index + 1 :]).lstrip("\n")
-    return frontmatter, body, True
-
-
-def parse_frontmatter_value(value: str) -> Any:
-    if value == "":
-        return ""
-    lowered = value.lower()
-    if lowered == "true":
-        return True
-    if lowered == "false":
-        return False
-    if value.startswith("[") and value.endswith("]"):
-        inner = value[1:-1].strip()
-        if not inner:
-            return []
-        return [item.strip().strip('"').strip("'") for item in inner.split(",")]
-    return value.strip().strip('"').strip("'")
-
-
-def frontmatter_text(meta: Dict[str, Any]) -> str:
-    lines = ["---"]
-    for key, value in meta.items():
-        if isinstance(value, list):
-            rendered = "[" + ", ".join(json.dumps(v, ensure_ascii=False) for v in value) + "]"
-        elif isinstance(value, bool):
-            rendered = "true" if value else "false"
-        elif value is None:
-            rendered = '""'
-        else:
-            rendered = str(value)
-            if rendered == "":
-                rendered = '""'
-            elif any(ch in rendered for ch in [":", "#", "[", "]"]) or rendered.strip() != rendered:
-                rendered = json.dumps(rendered, ensure_ascii=False)
-        lines.append(f"{key}: {rendered}")
-    lines.append("---")
-    return "\n".join(lines) + "\n\n"
-
-
-def metadata_string(value: Any) -> str:
-    if isinstance(value, list):
-        return json.dumps(value, ensure_ascii=False)
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if value is None:
-        return ""
-    return str(value)
-
-
-def bool_value(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in {"true", "1", "yes", "y"}
-
-
-def list_value(value: Any) -> List[str]:
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    if value is None or value == "":
-        return []
-    raw = str(value).strip()
-    if raw.startswith("[") and raw.endswith("]"):
-        try:
-            parsed = json.loads(raw)
-            if isinstance(parsed, list):
-                return [str(item).strip() for item in parsed if str(item).strip()]
-        except json.JSONDecodeError:
-            pass
-    return [item.strip() for item in raw.split(",") if item.strip()]
-
-
 def split_csv(value: str) -> List[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
@@ -682,19 +250,6 @@ def first_heading(body: str) -> Optional[str]:
         if match:
             return match.group(1).strip()
     return None
-
-
-def infer_category_layer(path: Path) -> Tuple[str, str]:
-    rel_parts = path.resolve().relative_to(ROOT.resolve()).parts
-    if len(rel_parts) < 4 or rel_parts[0] != "knowledge":
-        return "unknown", "unknown"
-
-    category_dir = f"knowledge/{rel_parts[1]}"
-    layer = rel_parts[2]
-    for category, meta in load_categories().items():
-        if Path(meta["path"]).as_posix() == category_dir.replace("\\", "/"):
-            return category, layer
-    return "unknown", layer
 
 
 def normalize_document_meta(path: Path, frontmatter: Dict[str, Any], body: str) -> Dict[str, Any]:
@@ -2949,99 +2504,6 @@ def command_vacuum(_: argparse.Namespace) -> None:
     print_json({"status": "ok", "elapsed_ms": elapsed_ms(start)})
 
 
-def should_skip_secret_scan_path(path: Path) -> bool:
-    try:
-        rel = path.resolve().relative_to(ROOT.resolve())
-    except ValueError:
-        return True
-    if any(part in SECRET_SCAN_EXCLUDED_DIRS for part in rel.parts):
-        return True
-    suffixes = {suffix.lower() for suffix in path.suffixes}
-    if suffixes & SECRET_SCAN_BINARY_EXTENSIONS:
-        return True
-    return False
-
-
-def redact_secret(value: str) -> str:
-    value = value.strip()
-    if len(value) <= 10:
-        return "***"
-    return f"{value[:6]}...{value[-4:]}"
-
-
-def secret_scan_files() -> Iterable[Path]:
-    return (
-        path
-        for path in ROOT.rglob("*")
-        if path.is_file() and not should_skip_secret_scan_path(path)
-    )
-
-
-def run_secret_scan(limit: int = 200) -> Dict[str, Any]:
-    start = time.perf_counter()
-    findings: List[Dict[str, Any]] = []
-    scanned_files = 0
-
-    for path in secret_scan_files():
-        scanned_files += 1
-        rel_path = to_relative_posix(path)
-        if path.name == ".env" or (path.name.startswith(".env.") and path.name not in {".env.example", ".env.sample"}):
-            findings.append(
-                {
-                    "path": rel_path,
-                    "line": 0,
-                    "kind": "env_file",
-                    "risk": "high",
-                    "match": path.name,
-                }
-            )
-            continue
-
-        try:
-            with path.open("r", encoding="utf-8") as handle:
-                for line_no, line in enumerate(handle, start=1):
-                    if SECRET_SCAN_ALLOW_MARKER in line:
-                        continue
-                    for kind, pattern in SECRET_PATTERNS:
-                        match = pattern.search(line)
-                        if not match:
-                            continue
-                        findings.append(
-                            {
-                                "path": rel_path,
-                                "line": line_no,
-                                "kind": kind,
-                                "risk": "high",
-                                "match": redact_secret(match.group(0)),
-                            }
-                        )
-                        break
-        except UnicodeDecodeError:
-            continue
-        except OSError as exc:
-            findings.append(
-                {
-                    "path": rel_path,
-                    "line": 0,
-                    "kind": "read_error",
-                    "risk": "low",
-                    "match": str(exc),
-                }
-            )
-
-    high_risk = [finding for finding in findings if finding["risk"] == "high"]
-    result = {
-        "scanned_files": scanned_files,
-        "findings_count": len(findings),
-        "high_risk_count": len(high_risk),
-        "findings": findings[:limit],
-        "truncated": len(findings) > limit,
-        "allow_marker": SECRET_SCAN_ALLOW_MARKER,
-        "elapsed_ms": elapsed_ms(start),
-    }
-    return result
-
-
 def command_secret_scan(args: argparse.Namespace) -> None:
     result = run_secret_scan(args.limit)
     print_json(result)
@@ -3536,6 +2998,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         args.func(args)
         return 0
     except KBError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    except PathConfigError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     except sqlite3.Error as exc:
