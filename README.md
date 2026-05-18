@@ -243,6 +243,14 @@ python tests/smoke_test.py
 
 覆盖内容包括：`init`、`add-raw`、`index`、默认 search 不返回 raw、promote 来源门禁、`internal_practice` promote、promote 后 search、单文件 open、`stats`、`doctor`、`benchmark`。
 
+大型性能 smoke 不进入默认 CI，需要本地手动运行：
+
+```bash
+python tests/perf_10k_smoke.py
+```
+
+`perf_10k_smoke.py` 会在临时目录复制项目并生成 10,000 个 Markdown 文档，覆盖 `raw`、`distilled`、`rules`、`checklists`、`snippets`、`deprecated`，然后运行首次 `index`、第二次 `index`、`search` 和 `stats`。它输出 `document_count`、`chunk_count`、`first_index_elapsed_ms`、`second_index_elapsed_ms`、`search_elapsed_ms`、`skipped`、`hashed` 和 `index_size_bytes`。第二次 `index` 应接近全量 skipped，`hashed` 应为 0 或接近 0。
+
 ## CI 与自动验收
 
 GitHub Actions 配置在 [.github/workflows/ci.yml](D:/AI/personal-knowledge-base/.github/workflows/ci.yml)。每次 `push` 和 `pull_request` 都会运行：
@@ -375,6 +383,178 @@ python scripts/kb.py monthly-maintenance
 不要直接删除旧知识。对于被替代、过期或错误的正式规则，使用 `deprecate`、`rejected` 或 `quarantine` 保留历史原因，这样 Codex/Agent 能理解规则演进并避免重复引入旧问题。
 
 更完整的治理流程见 [docs/data-governance.md](D:/AI/personal-knowledge-base/docs/data-governance.md)。
+
+## Long-term Operations
+
+长期运维不只管理知识内容，还管理数据质量、搜索性能、索引性能、内存占用、SQLite 并发、日志归档、备份恢复、schema migration、release/tag 和未来 EXE/GUI 常驻运行边界。
+
+长期运维设计见 [docs/long-term-operations.md](D:/AI/personal-knowledge-base/docs/long-term-operations.md)。未来桌面软件化设计见 [docs/desktop-app-readiness.md](D:/AI/personal-knowledge-base/docs/desktop-app-readiness.md)。
+
+## Maintenance workflow
+
+`monthly-maintenance` 保持现有月度治理快照，不破坏历史行为：
+
+```bash
+python scripts/kb.py monthly-maintenance
+```
+
+`maintenance` 是更面向长期运维的安全包装，默认只检查和生成报告，不删除、不 promote、不修改 raw/distilled/rules：
+
+```bash
+python scripts/kb.py maintenance
+```
+
+报告写入：
+
+```text
+reports/maintenance/YYYY-MM-maintenance.md
+```
+
+如需压缩 SQLite 索引，必须显式开启：
+
+```bash
+python scripts/kb.py maintenance --vacuum
+```
+
+`--vacuum` 只作用于 `.kb/index.sqlite`，不修改 Markdown 源数据。日常维护不应默认运行 vacuum。
+
+## Memory and performance principles
+
+- 启动时不加载全部 Markdown。
+- `search` 默认只走 SQLite FTS5，不全量扫描 `knowledge/`。
+- 搜索只返回 Top-K chunk 和元数据。
+- `open` 才读取完整单篇文档。
+- 大列表必须分页，未来 GUI 必须使用分页或虚拟滚动。
+- 缓存必须有上限，不能无限保存全文。
+- 后台任务完成后释放文件句柄、DB connection 和大型结果对象。
+- 报告和日志要归档或轮转，大型报告按需读取。
+
+`index` 使用 `path + mtime + size` 优先判断文件是否变化。未变化文件直接 skipped；只有新文件、mtime/size 变化或显式 `--force-hash` 时才计算 sha256。
+
+## Large-scale mode
+
+大规模设计见 [docs/large-scale-performance.md](D:/AI/personal-knowledge-base/docs/large-scale-performance.md)，内存模型见 [docs/memory-model.md](D:/AI/personal-knowledge-base/docs/memory-model.md)。
+
+规模目标：
+
+- 10,000 docs：应流畅，启动不加载全文，搜索目标 < 300ms，第二次 index 目标 < 5s，UI 不阻塞。
+- 30,000 - 50,000 docs：优化后可稳定使用，需要更严格的批处理、后台任务、分页和内存上限。
+- 100,000+ docs：进入 large-scale mode，需要后台索引、分层优先、checkpoint/resume 和 workspace 分片。
+
+首次全量 `index` 可能较久，因为它必须读取 Markdown、解析 frontmatter、切 chunk、写入 `documents/chunks/chunks_fts`。这可以接受，但必须后台执行。软件启动不能等待首次全量 `index`，只能读取 workspace 配置、index 状态、统计信息和最近任务状态；index missing/stale 时只提示，不阻塞 UI。
+
+日常使用依赖增量 `index`。未变化文件通过 `path + mtime + size` 直接 skipped，不计算 sha256；只有新文件、mtime/size 变化文件或显式 `--force-hash` 才 hash。搜索仍只查 SQLite FTS5 / 索引，不读取 Markdown 全文；点击结果或 `open` 单篇时才读取完整 Markdown。
+
+未来 GUI 必须使用虚拟滚动、分页、lazy document loading、background workers、progress events、task cancellation、task logs、search debounce、filter chips 和 incremental result loading。GUI 不得一次渲染所有搜索结果，不得在 UI 主线程运行 index、audit、secret-scan、reindex、dedupe、conflicts、benchmark 或 maintenance。
+
+100K+ 建议 workspace 分片，而不是把所有历史资料塞进单一活跃 workspace：active / archive 分离、raw archive 分离、每个 workspace 独立 `.kb/index.sqlite`。跨 workspace search 可作为未来增强，不作为 100K 首版前提。
+
+## EXE / Desktop app future direction
+
+未来 Windows EXE / GUI 的正确架构是：
+
+```text
+Desktop GUI
+  ↓
+Service Layer
+  ↓
+knowledge_core
+  ↓
+Markdown + SQLite + Git
+```
+
+GUI 不应直接读写 Markdown 或 SQLite，也不应通过拼接 CLI 命令字符串作为主要集成方式。CLI 继续保留给 CI、自动化、调试和高级用户；GUI 应调用 service/core API。
+
+长期任务必须后台化，包括 index、reindex、audit、secret-scan、dedupe、conflicts、benchmark、maintenance、Git sync、backup/export 和 learning queue generation。任务需要 task_id、status、progress、cancellation、retry、error detail、log path 和 result summary。
+
+当前不做 GUI、不做 EXE 打包、不做 Tauri/Electron/PySide/WinUI 选型。未来路线建议：
+
+- 界面质量和长期扩展优先：Tauri + React。
+- 开发速度优先：Electron + React。
+- 最大化复用 Python 优先：PySide6。
+- Windows 原生生态优先：WinUI/.NET。
+
+## Backup / restore principles
+
+主要资产是：
+
+- `knowledge/`
+- `config/`
+- `templates/`
+- `reports/`
+- `docs/`
+- `README.md`
+- `AGENTS.md`
+- Git commit、branch、tag
+
+`.kb/index.sqlite` 是可重建索引，不作为核心备份。恢复流程优先依赖 Git：
+
+```bash
+git log --oneline --decorate
+git checkout <tag-or-commit>
+python scripts/kb.py index
+python scripts/kb.py doctor
+```
+
+如索引损坏，可删除 `.kb` 后重建：
+
+```powershell
+Remove-Item -Recurse -Force .kb
+python scripts/kb.py index
+python scripts/kb.py doctor
+```
+
+公开仓库不得包含真实 secret、客户隐私数据或私有业务数据。发布前必须运行：
+
+```bash
+python scripts/kb.py secret-scan
+```
+
+## Why Markdown remains the source of truth
+
+Markdown 保持为事实来源，因为它可读、可 diff、可 review、可 Git 回滚，也能长期跨工具保存。知识治理所需的来源、状态、confidence、review、valid_for、verification_method 和生命周期历史都必须保存在 Markdown/frontmatter 中。
+
+SQLite 不能替代 Markdown。SQLite 只是为了检索、统计和治理报告服务的索引层。
+
+## Why SQLite index is rebuildable
+
+`.kb/index.sqlite` 保存的是从 Markdown 解析出的索引、chunk、FTS5 和元数据快照。它可以删除后通过 `python scripts/kb.py index` 重建。
+
+这条边界让系统在索引损坏、schema migration、性能调优或未来 GUI 崩溃后仍可恢复：保护 Markdown 源数据优先，索引失败可重建。
+
+## Recommended maintenance frequency
+
+每批导入后：
+
+- `index`
+- `lint`
+- `audit`
+- `review-queue`
+- `secret-scan`
+
+每周：
+
+- `audit`
+- `stale`
+- `review-queue`
+- `secret-scan`
+
+每月：
+
+- `maintenance`
+- `dedupe`
+- `conflicts`
+- `stats`
+- optional `vacuum`
+- report archive review
+
+每季度：
+
+- schema review
+- source-policy review
+- deprecated cleanup
+- performance baseline review
+- backup/restore rehearsal
 
 ## 性能保证
 

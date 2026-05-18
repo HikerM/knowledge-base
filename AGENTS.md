@@ -74,6 +74,31 @@ python scripts/kb.py research --query "react state" --category frontend
 
 `research` 结果未经审核，只能用于学习和待审核提炼。
 
+## 长期运维与 GUI / EXE 边界
+
+- 后续 GUI 任务必须先设计 service boundary，再实现界面。
+- GUI 不得直接读写 Markdown 或 SQLite；必须通过 service/core API 访问。
+- GUI 不得通过拼接 CLI 命令字符串作为主要集成方式。
+- 长任务必须后台化，提供 task_id、status、progress、cancellation、error detail、log path 和 result summary。
+- UI 主线程不得执行 index、audit、secret-scan、reindex、dedupe、conflicts、benchmark、maintenance、Git sync 或 backup/export。
+- 不得把 GUI 写成单文件巨型 `App.tsx`、`main.py` 或等价的大型入口文件。
+- EXE 相关开发必须保护 workspace 数据；软件安装目录不存用户知识数据，workspace 中的 Markdown 始终优先保护。
+- SQLite 索引可删除重建，不得把 `.kb/index.sqlite` 当作事实来源。
+- 所有维护命令默认不得删除、不得 promote、不得修改 raw/distilled/rules。
+- `vacuum`、`reindex`、cleanup、restore 等操作必须显式触发，并在 GUI 中要求确认。
+
+## 大规模性能与内存规则
+
+- 不得实现启动时全量扫描知识库。
+- 不得实现启动时全量读取 Markdown。
+- 不得实现启动时自动全量 index。
+- 不得让 GUI 一次渲染所有搜索结果。
+- 不得在 UI 主线程跑 index、audit、secret-scan、reindex、dedupe、conflicts、benchmark、maintenance、Git sync 或 backup/export。
+- 大规模功能必须考虑分页、Top-K、虚拟滚动、后台任务、内存上限和取消/恢复能力。
+- 10K/100K 相关改动必须说明性能影响，包括启动是否扫描文件、搜索是否读取 Markdown、缓存是否有上限、长任务是否后台化。
+- 搜索默认行为不得因大规模模式改变：默认仍只查 `rules`、`checklists`、`snippets`，并且只查 SQLite FTS5 / 索引。
+- 100K+ 场景优先考虑 workspace 分片、active/archive 分离和 per-workspace index，而不是把所有历史资料强塞进单个活跃索引。
+
 ## 学习雷达边界
 
 - Codex 可以帮助生成 learning queue。
