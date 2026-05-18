@@ -78,6 +78,7 @@ from knowledge_core.reports import (
     generate_digest,
     generate_learning_queue,
     generate_weekly_report,
+    run_maintenance,
     priority_rank,
     run_monthly_maintenance,
 )
@@ -512,6 +513,13 @@ def command_monthly_maintenance(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+def command_maintenance(args: argparse.Namespace) -> None:
+    result = run_maintenance(args.days, args.limit, args.force_hash, args.vacuum)
+    print_json(result)
+    if result["summary"]["high_risk_secret_findings"]:
+        raise SystemExit(1)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="kb.py",
@@ -689,6 +697,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_monthly.add_argument("--limit", type=int, default=100)
     p_monthly.add_argument("--force-hash", action="store_true", help="Force sha256 recomputation during monthly index.")
     p_monthly.set_defaults(func=command_monthly_maintenance)
+
+    p_maintenance = sub.add_parser(
+        "maintenance",
+        help="Run long-term maintenance checks and write reports/maintenance/YYYY-MM-maintenance.md.",
+    )
+    p_maintenance.add_argument("--days", type=int, default=180)
+    p_maintenance.add_argument("--limit", type=int, default=100)
+    p_maintenance.add_argument("--force-hash", action="store_true", help="Force sha256 recomputation during index.")
+    p_maintenance.add_argument("--vacuum", action="store_true", help="Explicitly VACUUM the SQLite index after checks.")
+    p_maintenance.set_defaults(func=command_maintenance)
 
     return parser
 

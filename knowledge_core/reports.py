@@ -11,7 +11,15 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from . import paths as core_paths
 from .config import ensure_list_text, load_categories, load_learning_radar, load_sources_config
 from .frontmatter import bool_value
-from .indexer import connect_db, ensure_schema, iter_markdown_files, perform_index, query_documents
+from .indexer import (
+    connect_db,
+    ensure_schema,
+    iter_markdown_files,
+    perform_index,
+    query_documents,
+    stats as index_stats,
+    vacuum as vacuum_index,
+)
 from .paths import EXPLORATORY_LAYERS, FORMAL_LAYERS, to_relative_posix
 from .quality import (
     build_dedupe_groups,
@@ -315,6 +323,7 @@ def run_monthly_maintenance(days: int, limit: int, force_hash: bool) -> Dict[str
     dedupe_groups = build_dedupe_groups(rows, limit)
     conflicts = possible_conflicts(conn, rows, limit)
     stale_rows = [dict(row) for row in rows if row["status"] == "active" and is_stale_row(row, days)]
+    conn.close()
     secret_result = run_secret_scan(limit)
 
     summary = {
@@ -383,6 +392,114 @@ review_required: false
 """
     core_paths.REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     report_path = core_paths.REPORTS_DIR / f"monthly-maintenance-{month}.md"
+    report_path.write_text(report, encoding="utf-8", newline="\n")
+
+    return {
+        "report": to_relative_posix(report_path),
+        "summary": summary,
+        "elapsed_ms": elapsed_ms(start),
+    }
+
+
+def run_maintenance(days: int, limit: int, force_hash: bool, run_vacuum: bool) -> Dict[str, Any]:
+    start = time.perf_counter()
+    month = datetime.now().strftime("%Y-%m")
+    index_result = perform_index(force_hash=force_hash)
+    conn = connect_db(must_exist=True)
+    ensure_schema(conn)
+    rows = query_documents(conn)
+
+    lint_result = collect_lint_issues(iter_markdown_files(), limit)
+    audit_result = collect_audit_summary(conn, rows, days, limit)
+    dedupe_groups = build_dedupe_groups(rows, limit)
+    conflicts = possible_conflicts(conn, rows, limit)
+    stale_rows = [dict(row) for row in rows if row["status"] == "active" and is_stale_row(row, days)]
+    conn.close()
+    secret_result = run_secret_scan(limit)
+    stats_result = index_stats()
+    vacuum_result: Optional[Dict[str, Any]] = None
+    post_vacuum_stats: Optional[Dict[str, Any]] = None
+    if run_vacuum:
+        vacuum_result = vacuum_index()
+        post_vacuum_stats = index_stats()
+
+    summary = {
+        "month": month,
+        "index": index_result,
+        "lint_errors": lint_result["error_count"],
+        "lint_warnings": lint_result["warning_count"],
+        "audit": {
+            "documents": audit_result["documents"],
+            "formal_missing_source_count": audit_result["formal_missing_source_count"],
+            "missing_formal_review_count": audit_result["missing_formal_review_count"],
+            "stale_active_count": audit_result["stale_active_count"],
+            "raw_in_formal_layer_count": audit_result["raw_in_formal_layer_count"],
+        },
+        "dedupe_groups": len(dedupe_groups),
+        "conflicts": len(conflicts),
+        "stale": len(stale_rows),
+        "secret_findings": secret_result["findings_count"],
+        "high_risk_secret_findings": secret_result["high_risk_count"],
+        "stats": stats_result,
+        "vacuum": vacuum_result,
+    }
+
+    report = f"""---
+title: "Maintenance {month}"
+type: maintenance
+status: active
+source_type: internal_practice
+created_at: "{now_iso()}"
+review_required: false
+---
+
+# Maintenance {month}
+
+本报告是长期运维快照。默认只运行检查和报告，不会 promote，不会删除，不会修改 raw/distilled/rules。`VACUUM` 只有在显式传入 `--vacuum` 时运行。
+
+## Summary
+
+{json_block(summary)}
+
+## Index
+
+{json_block(index_result)}
+
+## Lint
+
+{json_block(lint_result)}
+
+## Audit
+
+{json_block(audit_result)}
+
+## Dedupe
+
+{json_block({"count": len(dedupe_groups), "groups": dedupe_groups})}
+
+## Conflicts
+
+{json_block({"count": len(conflicts), "results": conflicts})}
+
+## Stale
+
+{json_block({"days": days, "count": len(stale_rows), "results": stale_rows[:limit]})}
+
+## Secret Scan
+
+{json_block(secret_result)}
+
+## Stats
+
+{json_block(stats_result)}
+
+## Vacuum
+
+{json_block({"requested": run_vacuum, "result": vacuum_result, "post_vacuum_stats": post_vacuum_stats})}
+"""
+    report_dir = core_paths.REPORTS_DIR / "maintenance"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_path = report_dir / f"{month}-maintenance.md"
     report_path.write_text(report, encoding="utf-8", newline="\n")
 
     return {

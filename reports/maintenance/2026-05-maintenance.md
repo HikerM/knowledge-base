@@ -1,15 +1,15 @@
 ---
-title: "Monthly Maintenance 2026-05"
-type: monthly_maintenance
+title: "Maintenance 2026-05"
+type: maintenance
 status: active
 source_type: internal_practice
-created_at: "2026-05-18T18:42:41"
+created_at: "2026-05-18T18:42:53"
 review_required: false
 ---
 
-# Monthly Maintenance 2026-05
+# Maintenance 2026-05
 
-本报告基于索引元数据和 frontmatter 检查生成。它不会把 raw/distilled 提升为正式规则，也不会删除历史知识。
+本报告是长期运维快照。默认只运行检查和报告，不会 promote，不会删除，不会修改 raw/distilled/rules。`VACUUM` 只有在显式传入 `--vacuum` 时运行。
 
 ## Summary
 
@@ -22,7 +22,7 @@ review_required: false
     "deleted": 0,
     "skipped": 30,
     "hashed": 0,
-    "elapsed_ms": 12
+    "elapsed_ms": 13
   },
   "lint_errors": 0,
   "lint_warnings": 0,
@@ -37,7 +37,29 @@ review_required: false
   "conflicts": 0,
   "stale": 0,
   "secret_findings": 0,
-  "high_risk_secret_findings": 0
+  "high_risk_secret_findings": 0,
+  "stats": {
+    "documents": 30,
+    "chunks": 228,
+    "by_category": {
+      "ai_agent": 14,
+      "frontend": 8,
+      "ui_ux": 8
+    },
+    "by_layer": {
+      "distilled": 5,
+      "raw": 24,
+      "rules": 1
+    },
+    "by_status": {
+      "active": 1,
+      "experimental": 29
+    },
+    "index_size_bytes": 245760,
+    "last_indexed_at": "2026-05-18T18:32:01",
+    "elapsed_ms": 1
+  },
+  "vacuum": null
 }
 ```
 
@@ -50,7 +72,7 @@ review_required: false
   "deleted": 0,
   "skipped": 30,
   "hashed": 0,
-  "elapsed_ms": 12
+  "elapsed_ms": 13
 }
 ```
 
@@ -545,6 +567,42 @@ review_required: false
   "findings": [],
   "truncated": false,
   "allow_marker": "TEST_ONLY_SECRET_PATTERN",
-  "elapsed_ms": 112
+  "elapsed_ms": 159
+}
+```
+
+## Stats
+
+```json
+{
+  "documents": 30,
+  "chunks": 228,
+  "by_category": {
+    "ai_agent": 14,
+    "frontend": 8,
+    "ui_ux": 8
+  },
+  "by_layer": {
+    "distilled": 5,
+    "raw": 24,
+    "rules": 1
+  },
+  "by_status": {
+    "active": 1,
+    "experimental": 29
+  },
+  "index_size_bytes": 245760,
+  "last_indexed_at": "2026-05-18T18:32:01",
+  "elapsed_ms": 1
+}
+```
+
+## Vacuum
+
+```json
+{
+  "requested": false,
+  "result": null,
+  "post_vacuum_stats": null
 }
 ```
