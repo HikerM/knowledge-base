@@ -257,6 +257,9 @@ python scripts/kb.py benchmark
 python scripts/kb.py audit
 python tests/smoke_test.py
 python tests/search_quality_test.py
+python tests/search_explain_test.py
+python tests/perf_smoke.py
+python tests/governance_test.py
 python scripts/kb.py secret-scan
 ```
 
@@ -283,6 +286,20 @@ python tests/search_quality_test.py
 ```
 
 覆盖内容包括：正式层可检索、默认不返回 raw、默认不返回 deprecated、category filter、layer filter、主题相关结果排序，以及自定义 benchmark query 的稳定断言。
+
+需要审计搜索排序时，可以显式使用：
+
+```bash
+python scripts/kb.py search --query "react state" --explain-score
+```
+
+默认 search 不输出 score 拆解，以保持常规 JSON 精简和兼容。`--explain-score` 会在每条结果中额外输出 `score_breakdown`，用于查看 BM25、title/heading/content 命中加权、layer/status/source_type/confidence 权重和最终分数；它只用于审计和调参，不改变默认排序和正式层过滤策略。
+
+大样本性能 smoke test 会在临时目录生成 1,000 个 Markdown 文档，验证首次索引、第二次增量 skip、默认搜索走索引、`stats` 和 `doctor` 在较大样本下完成：
+
+```bash
+python tests/perf_smoke.py
+```
 
 ## stale 复查流程
 

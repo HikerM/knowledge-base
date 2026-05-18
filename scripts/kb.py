@@ -661,6 +661,10 @@ def parse_date(value: str) -> Optional[datetime]:
 
 
 def metadata_weight(row: sqlite3.Row, query_tokens: Sequence[str]) -> float:
+    return sum(metadata_weight_components(row, query_tokens).values())
+
+
+def metadata_weight_components(row: sqlite3.Row, query_tokens: Sequence[str]) -> Dict[str, float]:
     layer_weight = {
         "rules": 5.0,
         "checklists": 4.5,
@@ -684,11 +688,16 @@ def metadata_weight(row: sqlite3.Row, query_tokens: Sequence[str]) -> float:
     }
     confidence_weight = {"high": 1.5, "medium": 0.7, "low": -0.5}
 
-    score = 0.0
-    score += layer_weight.get((row["layer"] or "").lower(), 0.0)
-    score += status_weight.get((row["status"] or "").lower(), 0.0)
-    score += source_weight.get((row["source_type"] or "").lower(), 0.0)
-    score += confidence_weight.get((row["confidence"] or "").lower(), 0.0)
+    components = {
+        "layer_weight": layer_weight.get((row["layer"] or "").lower(), 0.0),
+        "status_weight": status_weight.get((row["status"] or "").lower(), 0.0),
+        "source_type_weight": source_weight.get((row["source_type"] or "").lower(), 0.0),
+        "confidence_weight": confidence_weight.get((row["confidence"] or "").lower(), 0.0),
+        "title_boost": 0.0,
+        "heading_boost": 0.0,
+        "content_boost": 0.0,
+        "recency_boost": 0.0,
+    }
 
     title = (row["title"] or "").lower()
     heading = (row["heading"] or "").lower()
@@ -696,22 +705,38 @@ def metadata_weight(row: sqlite3.Row, query_tokens: Sequence[str]) -> float:
     for token in query_tokens:
         token_l = token.lower()
         if token_l in title:
-            score += 3.0
+            components["title_boost"] += 3.0
         if token_l in heading:
-            score += 1.5
+            components["heading_boost"] += 1.5
         if token_l in content:
-            score += 0.2
+            components["content_boost"] += 0.2
 
     reviewed = parse_date(str(row["last_reviewed"] or row["reviewed_at"] or ""))
     if reviewed:
         age_days = max(0, (datetime.now() - reviewed.replace(tzinfo=None)).days)
         if age_days <= 30:
-            score += 1.0
+            components["recency_boost"] += 1.0
         elif age_days <= 90:
-            score += 0.6
+            components["recency_boost"] += 0.6
         elif age_days <= 180:
-            score += 0.2
-    return score
+            components["recency_boost"] += 0.2
+    return components
+
+
+def score_breakdown(row: sqlite3.Row | Dict[str, Any], query_tokens: Sequence[str], bm25: float, final_score: float) -> Dict[str, float]:
+    components = metadata_weight_components(row, query_tokens)
+    return {
+        "bm25": round(bm25, 4),
+        "title_boost": round(components["title_boost"], 4),
+        "heading_boost": round(components["heading_boost"], 4),
+        "layer_weight": round(components["layer_weight"], 4),
+        "status_weight": round(components["status_weight"], 4),
+        "source_type_weight": round(components["source_type_weight"], 4),
+        "confidence_weight": round(components["confidence_weight"], 4),
+        "content_boost": round(components["content_boost"], 4),
+        "recency_boost": round(components["recency_boost"], 4),
+        "final_score": round(final_score, 4),
+    }
 
 
 def snippet_for(content: str, query_tokens: Sequence[str], max_chars: int = MAX_SNIPPET_CHARS) -> str:
@@ -827,22 +852,23 @@ def run_slow_scan(args: argparse.Namespace) -> Dict[str, Any]:
     elapsed = elapsed_ms(start)
     results = []
     for score, row in ranked[:top_k]:
-        results.append(
-            {
-                "path": row["path"],
-                "title": row["title"],
-                "category": row["category"],
-                "layer": row["layer"],
-                "type": row["type"],
-                "status": row["status"],
-                "confidence": row["confidence"],
-                "source_type": row["source_type"],
-                "score": round(score, 4),
-                "heading": row["heading"],
-                "snippet": snippet_for(row["content"], query_tokens),
-                "elapsed_ms": elapsed,
-            }
-        )
+        item = {
+            "path": row["path"],
+            "title": row["title"],
+            "category": row["category"],
+            "layer": row["layer"],
+            "type": row["type"],
+            "status": row["status"],
+            "confidence": row["confidence"],
+            "source_type": row["source_type"],
+            "score": round(score, 4),
+            "heading": row["heading"],
+            "snippet": snippet_for(row["content"], query_tokens),
+            "elapsed_ms": elapsed,
+        }
+        if getattr(args, "explain_score", False):
+            item["score_breakdown"] = score_breakdown(row, query_tokens, 0.0, score)
+        results.append(item)
     return {
         "query": args.query,
         "top_k": top_k,
@@ -922,28 +948,29 @@ def run_search(args: argparse.Namespace) -> Dict[str, Any]:
         bm25_score = float(row["bm25_score"] or 0.0)
         base = 1.0 / (1.0 + abs(bm25_score))
         score = base + metadata_weight(row, query_tokens)
-        ranked.append((score, row))
+        ranked.append((score, row, base))
     ranked.sort(key=lambda item: item[0], reverse=True)
 
     elapsed = elapsed_ms(start)
     results = []
-    for score, row in ranked[:top_k]:
-        results.append(
-            {
-                "path": row["path"],
-                "title": row["title"],
-                "category": row["category"],
-                "layer": row["layer"],
-                "type": row["type"],
-                "status": row["status"],
-                "confidence": row["confidence"],
-                "source_type": row["source_type"],
-                "score": round(score, 4),
-                "heading": row["heading"],
-                "snippet": snippet_for(row["content"], query_tokens),
-                "elapsed_ms": elapsed,
-            }
-        )
+    for score, row, bm25 in ranked[:top_k]:
+        item = {
+            "path": row["path"],
+            "title": row["title"],
+            "category": row["category"],
+            "layer": row["layer"],
+            "type": row["type"],
+            "status": row["status"],
+            "confidence": row["confidence"],
+            "source_type": row["source_type"],
+            "score": round(score, 4),
+            "heading": row["heading"],
+            "snippet": snippet_for(row["content"], query_tokens),
+            "elapsed_ms": elapsed,
+        }
+        if getattr(args, "explain_score", False):
+            item["score_breakdown"] = score_breakdown(row, query_tokens, bm25, score)
+        results.append(item)
     return {
         "query": args.query,
         "top_k": top_k,
@@ -1478,6 +1505,7 @@ def command_benchmark(args: argparse.Namespace) -> None:
             slow_scan=False,
             force=False,
             research=False,
+            explain_score=False,
         )
         item = run_search(search_args)
         results.append(
@@ -1756,6 +1784,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("--include-deprecated", action="store_true")
     p_search.add_argument("--slow-scan", action="store_true", help="Explicit emergency fallback that reads Markdown files.")
     p_search.add_argument("--force", action="store_true", help="Allow --top-k above 50.")
+    p_search.add_argument("--explain-score", action="store_true", help="Include per-result score component breakdown for search tuning.")
     p_search.set_defaults(func=command_search)
 
     p_open = sub.add_parser("open", help="Open exactly one Markdown document by path or document id.")

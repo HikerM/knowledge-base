@@ -41,6 +41,16 @@
 
 V1 的 score 是可解释的启发式排序，不声称等价于机器学习排序。
 
+## score 解释
+
+默认 `search` 不输出分数拆解，避免增大常规检索 JSON 和影响 Agent 默认上下文。需要审计排序或调参时，可以显式使用：
+
+```bash
+python scripts/kb.py search --query "topic" --explain-score
+```
+
+启用后，每条结果会额外包含 `score_breakdown`，展示 BM25 贡献、title/heading/content 命中加权、layer/status/source_type/confidence 权重、recency 加权和最终分数。这个 breakdown 只用于审计和调参，不改变默认排序算法，也不改变默认正式层搜索策略。
+
 ## 默认正式层搜索
 
 `search` 默认只返回 `rules`、`checklists`、`snippets`。`raw`、`distilled`、`deprecated` 不会因为正式层无结果而自动回退返回。
@@ -64,6 +74,17 @@ raw 是原始资料，不是正式规则。默认 search 不返回 raw；researc
 ## snippet 生成策略
 
 结果 snippet 来自命中 chunk。默认最多 500 字符，优先围绕 query 命中位置截取；如果无法定位命中词，则截取 chunk 开头。
+
+## 性能 smoke
+
+`tests/perf_smoke.py` 会在临时目录生成 1,000 个 Markdown 文档，覆盖 raw、distilled、rules、checklists、snippets 和 deprecated，然后验证：
+
+- 首次 `index` 能完整建立索引。
+- 第二次 `index` 对未变化文件走 skip，尽量不重新 hash。
+- `search` 走 SQLite 索引并保持默认正式层过滤。
+- `stats` 和 `doctor` 在大样本下仍能完成。
+
+这个测试用于发现明显的全量读取、增量索引失效或搜索退化问题；性能阈值保持宽松，避免把机器差异变成脆弱失败。
 
 ## 精准度限制与后续向量检索
 
