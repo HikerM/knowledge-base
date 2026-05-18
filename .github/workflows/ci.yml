@@ -46,6 +46,9 @@ jobs:
       - name: Run search explain tests
         run: python tests/search_explain_test.py
 
+      - name: Run deprecated search status tests
+        run: python tests/search_deprecated_status_test.py
+
       - name: Run performance smoke tests
         run: python tests/perf_smoke.py
 

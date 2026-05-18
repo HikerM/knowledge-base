@@ -80,6 +80,32 @@ def assert_any_path_contains(result: dict, expected: str) -> None:
         raise AssertionError(f"expected result path containing {expected}, got {paths}")
 
 
+def assert_layer_deprecated_requires_include(project: Path) -> None:
+    proc = run(
+        [
+            sys.executable,
+            "scripts/kb.py",
+            "search",
+            "--query",
+            "legacy cache timeout marker",
+            "--layer",
+            "deprecated",
+        ],
+        project,
+        expect=1,
+    )
+    combined_output = f"{proc.stdout}\n{proc.stderr}"
+    if "deprecated" not in combined_output or "include-deprecated" not in combined_output:
+        raise AssertionError(f"deprecated layer without include flag should explain the failure: {combined_output}")
+    if proc.stdout.strip():
+        try:
+            payload = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            return
+        if payload.get("results"):
+            raise AssertionError(f"deprecated layer failure must not return results: {payload}")
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="pkb-search-deprecated-status-") as temp:
         project = Path(temp) / "personal-knowledge-base"
@@ -113,6 +139,7 @@ def main() -> int:
             project,
         )
         assert_no_result(layer_default, "default search should not return deprecated layer content")
+        assert_layer_deprecated_requires_include(project)
 
         layer_included = run_json(
             [
