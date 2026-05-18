@@ -304,6 +304,53 @@ python scripts/kb.py deprecate --path knowledge/01-frontend/rules/old.md --reaso
 python scripts/kb.py quarantine --path knowledge/01-frontend/raw/unknown.md --reason "来源不明且无法验证"
 ```
 
+## 长期数据治理
+
+新增治理字段：
+
+- `topic_id`: 同一主题的稳定标识，例如 `ai_agent.codex-sandboxing`。
+- `canonical_id`: 主题下推荐采用的 canonical 文件标识，例如 `ai_agent.codex-sandboxing.rule`。
+- `source_hash`: 来源 URL 的稳定 hash，用于来源重复治理。
+- `content_hash`: 正文规范化后的 hash，用于内容重复治理。
+- `deprecated_reason` / `rejected_reason` / `quarantined_reason`: 历史状态原因。
+- `review_cycle_days`: 单条知识的复查周期。
+
+重复检查：
+
+```bash
+python scripts/kb.py dedupe
+```
+
+`dedupe` 会检查 `source_url`、归一化标题、`content_hash`、`category + topic_id` 重复，并给出 recommended canonical file 和 suggested action。
+
+冲突检查：
+
+```bash
+python scripts/kb.py conflicts
+```
+
+`conflicts` 会检查同一 `topic_id` 下多个 active rules、失效的 `superseded_by`、active 规则 supersedes 的旧规则仍 active，以及适用范围重叠但结论疑似相反的规则。输出包含 evidence，结论仍需人工判断。
+
+主题 canonical 报告：
+
+```bash
+python scripts/kb.py canonical-report
+```
+
+该报告按 `topic_id` 输出 canonical rule、canonical checklist、active/deprecated/raw supporting files、未解决重复和未解决冲突。
+
+月度维护：
+
+```bash
+python scripts/kb.py monthly-maintenance
+```
+
+它会运行 `index`、`lint`、`audit`、`dedupe`、`conflicts`、`stale`、`secret-scan`，并生成 `reports/monthly-maintenance-YYYY-MM.md`。
+
+不要直接删除旧知识。对于被替代、过期或错误的正式规则，使用 `deprecate`、`rejected` 或 `quarantine` 保留历史原因，这样 Codex/Agent 能理解规则演进并避免重复引入旧问题。
+
+更完整的治理流程见 [docs/data-governance.md](D:/AI/personal-knowledge-base/docs/data-governance.md)。
+
 ## 性能保证
 
 - `search` 默认走 SQLite FTS5，不全量读取 Markdown。

@@ -13,11 +13,19 @@ week: ""
 valid_for: []
 not_valid_for: []
 project_scope: ""
+topic_id: ""
+canonical_id: ""
+source_hash: ""
+content_hash: ""
 supersedes: []
 superseded_by: ""
+deprecated_reason: ""
+rejected_reason: ""
+quarantined_reason: ""
 risk_level: low
 verification_method: "generated from SQLite index metadata"
 review_required: false
+review_cycle_days: ""
 ---
 
 # 本周知识报告

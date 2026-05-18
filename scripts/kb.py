@@ -57,6 +57,16 @@ REQUIRED_SCHEMA_FIELDS = [
     "review_required",
 ]
 FORMAL_REQUIRED_FIELDS = ["reviewed_by", "verification_method", "last_reviewed"]
+GOVERNANCE_OPTIONAL_FIELDS = [
+    "topic_id",
+    "canonical_id",
+    "source_hash",
+    "content_hash",
+    "deprecated_reason",
+    "rejected_reason",
+    "quarantined_reason",
+    "review_cycle_days",
+]
 SEARCHABLE_EXTENSIONS = {".md", ".markdown"}
 MAX_SNIPPET_CHARS = 500
 DEFAULT_TOP_K = 10
@@ -240,11 +250,19 @@ reviewed_by: ""
 valid_for: []
 not_valid_for: []
 project_scope: ""
+topic_id: ""
+canonical_id: ""
+source_hash: ""
+content_hash: ""
 supersedes: []
 superseded_by: ""
+deprecated_reason: ""
+rejected_reason: ""
+quarantined_reason: ""
 risk_level: medium
 verification_method: ""
 review_required: true
+review_cycle_days: ""
 ---
 
 # 一句话结论
@@ -285,11 +303,19 @@ reviewed_by: ""
 valid_for: []
 not_valid_for: []
 project_scope: ""
+topic_id: ""
+canonical_id: ""
+source_hash: ""
+content_hash: ""
 supersedes: []
 superseded_by: ""
+deprecated_reason: ""
+rejected_reason: ""
+quarantined_reason: ""
 risk_level: medium
 verification_method: ""
 review_required: true
+review_cycle_days: ""
 ---
 
 # 原始摘录
@@ -543,6 +569,14 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def normalized_hash_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip()
+
+
 def read_single_markdown(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
@@ -671,6 +705,14 @@ def normalize_document_meta(path: Path, frontmatter: Dict[str, Any], body: str) 
         status_default = "deprecated"
     elif layer == "rejected":
         status_default = "rejected"
+    source_url = str(frontmatter.get("source_url") or "")
+    deprecated_reason = str(frontmatter.get("deprecated_reason") or frontmatter.get("deprecation_reason") or "")
+    rejected_reason = str(frontmatter.get("rejected_reason") or frontmatter.get("rejection_reason") or "")
+    quarantined_reason = str(frontmatter.get("quarantined_reason") or frontmatter.get("quarantine_reason") or "")
+    source_hash = str(frontmatter.get("source_hash") or "")
+    if not source_hash and source_url.strip():
+        source_hash = sha256_text(source_url.strip().lower())
+    content_hash = str(frontmatter.get("content_hash") or sha256_text(normalized_hash_text(body)))
     return {
         "path": to_relative_posix(path),
         "title": title,
@@ -680,7 +722,7 @@ def normalize_document_meta(path: Path, frontmatter: Dict[str, Any], body: str) 
         "status": str(frontmatter.get("status") or status_default),
         "confidence": str(frontmatter.get("confidence") or "medium"),
         "source_type": str(frontmatter.get("source_type") or "unknown"),
-        "source_url": str(frontmatter.get("source_url") or ""),
+        "source_url": source_url,
         "created_at": str(frontmatter.get("created_at") or ""),
         "last_reviewed": str(frontmatter.get("last_reviewed") or ""),
         "reviewed_by": str(frontmatter.get("reviewed_by") or ""),
@@ -694,9 +736,16 @@ def normalize_document_meta(path: Path, frontmatter: Dict[str, Any], body: str) 
         "verification_method": str(frontmatter.get("verification_method") or ""),
         "review_required": metadata_string(frontmatter.get("review_required") if "review_required" in frontmatter else layer not in FORMAL_LAYERS),
         "promoted_from": str(frontmatter.get("promoted_from") or ""),
-        "deprecation_reason": str(frontmatter.get("deprecation_reason") or ""),
-        "rejection_reason": str(frontmatter.get("rejection_reason") or ""),
-        "quarantine_reason": str(frontmatter.get("quarantine_reason") or ""),
+        "topic_id": str(frontmatter.get("topic_id") or ""),
+        "canonical_id": str(frontmatter.get("canonical_id") or ""),
+        "source_hash": source_hash,
+        "content_hash": content_hash,
+        "deprecation_reason": deprecated_reason,
+        "rejection_reason": rejected_reason,
+        "quarantine_reason": quarantined_reason,
+        "deprecated_reason": deprecated_reason,
+        "rejected_reason": rejected_reason,
+        "quarantined_reason": quarantined_reason,
         "review_note": str(frontmatter.get("review_note") or ""),
         "review_cycle_days": str(frontmatter.get("review_cycle_days") or ""),
     }
@@ -822,9 +871,16 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
           verification_method TEXT,
           review_required TEXT,
           promoted_from TEXT,
+          topic_id TEXT,
+          canonical_id TEXT,
+          source_hash TEXT,
+          content_hash TEXT,
           deprecation_reason TEXT,
           rejection_reason TEXT,
           quarantine_reason TEXT,
+          deprecated_reason TEXT,
+          rejected_reason TEXT,
+          quarantined_reason TEXT,
           review_note TEXT,
           review_cycle_days TEXT,
           mtime REAL NOT NULL,
@@ -873,15 +929,36 @@ def ensure_document_columns(conn: sqlite3.Connection) -> None:
         "risk_level": "TEXT",
         "verification_method": "TEXT",
         "review_required": "TEXT",
+        "topic_id": "TEXT",
+        "canonical_id": "TEXT",
+        "source_hash": "TEXT",
+        "content_hash": "TEXT",
         "deprecation_reason": "TEXT",
         "rejection_reason": "TEXT",
         "quarantine_reason": "TEXT",
+        "deprecated_reason": "TEXT",
+        "rejected_reason": "TEXT",
+        "quarantined_reason": "TEXT",
         "review_note": "TEXT",
         "review_cycle_days": "TEXT",
     }
     for name, column_type in columns.items():
         if name not in existing:
-            conn.execute(f"ALTER TABLE documents ADD COLUMN {name} {column_type}")
+            try:
+                conn.execute(f"ALTER TABLE documents ADD COLUMN {name} {column_type}")
+                existing.add(name)
+            except sqlite3.OperationalError as exc:
+                if "duplicate column name" not in str(exc).lower():
+                    raise
+                existing = {row["name"] for row in conn.execute("PRAGMA table_info(documents)")}
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_documents_topic_id ON documents(topic_id);
+        CREATE INDEX IF NOT EXISTS idx_documents_canonical_id ON documents(canonical_id);
+        CREATE INDEX IF NOT EXISTS idx_documents_source_hash ON documents(source_hash);
+        CREATE INDEX IF NOT EXISTS idx_documents_content_hash ON documents(content_hash);
+        """
+    )
 
 
 def delete_document_by_id(conn: sqlite3.Connection, document_id: int) -> None:
@@ -910,10 +987,12 @@ def index_one_file(conn: sqlite3.Connection, path: Path, stat: os.stat_result, d
           source_url, created_at, last_reviewed, reviewed_by, reviewed_at,
           valid_for, not_valid_for, project_scope, supersedes, superseded_by,
           risk_level, verification_method, review_required, promoted_from,
-          deprecation_reason, rejection_reason, quarantine_reason, review_note,
+          topic_id, canonical_id, source_hash, content_hash,
+          deprecation_reason, rejection_reason, quarantine_reason,
+          deprecated_reason, rejected_reason, quarantined_reason, review_note,
           review_cycle_days, mtime, size, sha256, indexed_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             rel_path,
@@ -938,9 +1017,16 @@ def index_one_file(conn: sqlite3.Connection, path: Path, stat: os.stat_result, d
             meta["verification_method"],
             meta["review_required"],
             meta["promoted_from"],
+            meta["topic_id"],
+            meta["canonical_id"],
+            meta["source_hash"],
+            meta["content_hash"],
             meta["deprecation_reason"],
             meta["rejection_reason"],
             meta["quarantine_reason"],
+            meta["deprecated_reason"],
+            meta["rejected_reason"],
+            meta["quarantined_reason"],
             meta["review_note"],
             meta["review_cycle_days"],
             stat.st_mtime,
@@ -1047,11 +1133,19 @@ def build_new_card_content(
         "valid_for": [],
         "not_valid_for": [],
         "project_scope": "",
+        "topic_id": "",
+        "canonical_id": "",
+        "source_hash": sha256_text(source_url.strip().lower()) if source_url.strip() else "",
+        "content_hash": "",
         "supersedes": [],
         "superseded_by": "",
+        "deprecated_reason": "",
+        "rejected_reason": "",
+        "quarantined_reason": "",
         "risk_level": "medium",
         "verification_method": "",
         "review_required": True,
+        "review_cycle_days": "",
     }
     body = f"""# 一句话结论
 
@@ -1121,11 +1215,19 @@ def build_raw_note_content(category: str, title: str, source_url: str, text: str
         "valid_for": [],
         "not_valid_for": [],
         "project_scope": "",
+        "topic_id": "",
+        "canonical_id": "",
+        "source_hash": sha256_text(source_url.strip().lower()) if source_url.strip() else "",
+        "content_hash": "",
         "supersedes": [],
         "superseded_by": "",
+        "deprecated_reason": "",
+        "rejected_reason": "",
+        "quarantined_reason": "",
         "risk_level": "medium",
         "verification_method": "",
         "review_required": True,
+        "review_cycle_days": "",
     }
     body = f"""# 原始摘录
 
@@ -1777,7 +1879,10 @@ def lint_file(path: Path) -> List[Dict[str, Any]]:
         add("error", "invalid_risk_level", risk_level)
 
     if status == "deprecated" or layer == "deprecated":
-        if not str(frontmatter.get("superseded_by") or "").strip() and not str(frontmatter.get("deprecation_reason") or "").strip():
+        if (
+            not str(frontmatter.get("superseded_by") or "").strip()
+            and not str(frontmatter.get("deprecation_reason") or frontmatter.get("deprecated_reason") or "").strip()
+        ):
             add("error", "deprecated_missing_superseded_by_or_reason")
     if layer == "raw" and status == "active":
         add("error", "raw_must_not_be_active")
@@ -1819,7 +1924,9 @@ def query_documents(conn: sqlite3.Connection) -> List[sqlite3.Row]:
                    source_type, source_url, created_at, last_reviewed, reviewed_by,
                    reviewed_at, valid_for, not_valid_for, project_scope, supersedes,
                    superseded_by, risk_level, verification_method, review_required,
-                   promoted_from, deprecation_reason, rejection_reason, quarantine_reason,
+                   promoted_from, topic_id, canonical_id, source_hash, content_hash,
+                   deprecation_reason, rejection_reason, quarantine_reason,
+                   deprecated_reason, rejected_reason, quarantined_reason,
                    review_note, review_cycle_days, sha256, indexed_at
             FROM documents
             ORDER BY category, layer, title
@@ -1862,33 +1969,147 @@ def title_similarity(a: str, b: str) -> float:
     return len(a_tokens & b_tokens) / len(a_tokens | b_tokens)
 
 
-def duplicate_titles(rows: Sequence[sqlite3.Row]) -> List[Dict[str, Any]]:
-    buckets: Dict[Tuple[str, str], List[sqlite3.Row]] = {}
-    for row in rows:
-        key = (str(row["category"]), title_key(str(row["title"])))
-        buckets.setdefault(key, []).append(row)
-    return [
-        {
-            "category": key[0],
-            "title_key": key[1],
-            "items": [{"id": row["id"], "path": row["path"], "title": row["title"]} for row in bucket],
-        }
-        for key, bucket in buckets.items()
-        if key[1] and len(bucket) > 1
-    ]
+def row_summary(row: sqlite3.Row) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "path": row["path"],
+        "title": row["title"],
+        "category": row["category"],
+        "layer": row["layer"],
+        "status": row["status"],
+        "type": row["type"],
+        "confidence": row["confidence"],
+        "source_type": row["source_type"],
+        "topic_id": row["topic_id"],
+        "canonical_id": row["canonical_id"],
+    }
 
 
-def source_url_duplicates(rows: Sequence[sqlite3.Row]) -> List[Dict[str, Any]]:
-    buckets: Dict[str, List[sqlite3.Row]] = {}
+def canonical_rank(row: sqlite3.Row) -> Tuple[int, int, int, int, int, str]:
+    layer_rank = {
+        "rules": 60,
+        "checklists": 55,
+        "snippets": 50,
+        "distilled": 30,
+        "raw": 20,
+        "deprecated": 5,
+        "rejected": 0,
+        "quarantine": 0,
+    }.get(str(row["layer"] or ""), 10)
+    status_rank = {"active": 30, "experimental": 15, "deprecated": 4, "rejected": 0}.get(str(row["status"] or ""), 5)
+    confidence_rank = {"high": 20, "medium": 10, "low": 0}.get(str(row["confidence"] or ""), 0)
+    source_rank = {
+        "official": 16,
+        "github": 14,
+        "paper": 12,
+        "internal_practice": 11,
+        "blog": 6,
+        "forum": 3,
+        "video": 2,
+        "unknown": 0,
+    }.get(str(row["source_type"] or ""), 0)
+    review_rank = 5 if str(row["last_reviewed"] or row["reviewed_at"] or "").strip() else 0
+    return (layer_rank, status_rank, confidence_rank, source_rank, review_rank, str(row["path"]))
+
+
+def recommended_canonical(rows: Sequence[sqlite3.Row]) -> sqlite3.Row:
+    return sorted(rows, key=canonical_rank, reverse=True)[0]
+
+
+def suggested_duplicate_action(kind: str, rows: Sequence[sqlite3.Row], canonical: sqlite3.Row) -> str:
+    non_canonical = [row for row in rows if int(row["id"]) != int(canonical["id"])]
+    if any(row["layer"] == "quarantine" or row["status"] == "rejected" for row in non_canonical):
+        return "reject"
+    if kind in {"content_hash", "source_url", "normalized_title"}:
+        if any(row["layer"] in FORMAL_LAYERS for row in rows):
+            return "merge"
+        return "keep"
+    if kind == "topic_id" and len([row for row in rows if row["status"] == "active" and row["layer"] in FORMAL_LAYERS]) > 1:
+        return "merge"
+    if any(row["status"] == "deprecated" for row in non_canonical):
+        return "keep"
+    return "merge"
+
+
+def make_duplicate_group(kind: str, key: str, rows: Sequence[sqlite3.Row], evidence: Dict[str, Any]) -> Dict[str, Any]:
+    canonical = recommended_canonical(rows)
+    return {
+        "kind": kind,
+        "key": key,
+        "duplicate_group": [row_summary(row) for row in rows],
+        "recommended_canonical_file": row_summary(canonical),
+        "suggested_action": suggested_duplicate_action(kind, rows, canonical),
+        "evidence": evidence,
+    }
+
+
+def build_dedupe_groups(rows: Sequence[sqlite3.Row], limit: int = 100) -> List[Dict[str, Any]]:
+    groups: List[Dict[str, Any]] = []
+
+    source_buckets: Dict[str, List[sqlite3.Row]] = {}
+    title_buckets: Dict[Tuple[str, str], List[sqlite3.Row]] = {}
+    content_hash_buckets: Dict[str, List[sqlite3.Row]] = {}
+    topic_buckets: Dict[Tuple[str, str], List[sqlite3.Row]] = {}
+
     for row in rows:
         url = str(row["source_url"] or "").strip()
         if url:
-            buckets.setdefault(url, []).append(row)
-    return [
-        {"source_url": url, "items": [{"id": row["id"], "path": row["path"], "title": row["title"]} for row in bucket]}
-        for url, bucket in buckets.items()
-        if len(bucket) > 1
-    ]
+            source_buckets.setdefault(url, []).append(row)
+        normalized_title = title_key(str(row["title"] or ""))
+        if normalized_title:
+            title_buckets.setdefault((str(row["category"]), normalized_title), []).append(row)
+        content_hash = str(row["content_hash"] or "").strip()
+        if content_hash:
+            content_hash_buckets.setdefault(content_hash, []).append(row)
+        topic_id = str(row["topic_id"] or "").strip()
+        if topic_id:
+            topic_buckets.setdefault((str(row["category"]), topic_id), []).append(row)
+
+    for url, bucket in source_buckets.items():
+        if len(bucket) > 1:
+            groups.append(make_duplicate_group("source_url", url, bucket, {"source_url": url}))
+    for (category, normalized_title), bucket in title_buckets.items():
+        if len(bucket) > 1:
+            groups.append(
+                make_duplicate_group(
+                    "normalized_title",
+                    f"{category}:{normalized_title}",
+                    bucket,
+                    {"category": category, "normalized_title": normalized_title},
+                )
+            )
+    for content_hash, bucket in content_hash_buckets.items():
+        if len(bucket) > 1:
+            groups.append(make_duplicate_group("content_hash", content_hash, bucket, {"content_hash": content_hash}))
+    for (category, topic_id), bucket in topic_buckets.items():
+        if len(bucket) > 1:
+            groups.append(
+                make_duplicate_group(
+                    "topic_id",
+                    f"{category}:{topic_id}",
+                    bucket,
+                    {"category": category, "topic_id": topic_id},
+                )
+            )
+
+    groups.sort(key=lambda item: (item["kind"], item["key"]))
+    return groups[:limit]
+
+
+def duplicate_titles(rows: Sequence[sqlite3.Row]) -> List[Dict[str, Any]]:
+    return [group for group in build_dedupe_groups(rows, 10000) if group["kind"] == "normalized_title"]
+
+
+def source_url_duplicates(rows: Sequence[sqlite3.Row]) -> List[Dict[str, Any]]:
+    return [group for group in build_dedupe_groups(rows, 10000) if group["kind"] == "source_url"]
+
+
+def content_hash_duplicates(rows: Sequence[sqlite3.Row]) -> List[Dict[str, Any]]:
+    return [group for group in build_dedupe_groups(rows, 10000) if group["kind"] == "content_hash"]
+
+
+def topic_id_duplicates(rows: Sequence[sqlite3.Row]) -> List[Dict[str, Any]]:
+    return [group for group in build_dedupe_groups(rows, 10000) if group["kind"] == "topic_id"]
 
 
 def sha_duplicates(rows: Sequence[sqlite3.Row]) -> List[Dict[str, Any]]:
@@ -1898,7 +2119,7 @@ def sha_duplicates(rows: Sequence[sqlite3.Row]) -> List[Dict[str, Any]]:
         if sha:
             buckets.setdefault(sha, []).append(row)
     return [
-        {"sha256": sha, "items": [{"id": row["id"], "path": row["path"], "title": row["title"]} for row in bucket]}
+        make_duplicate_group("sha256", sha, bucket, {"sha256": sha})
         for sha, bucket in buckets.items()
         if len(bucket) > 1
     ]
@@ -1929,46 +2150,144 @@ def similar_filenames(rows: Sequence[sqlite3.Row], threshold: float = 0.82) -> L
     return result
 
 
+def reference_index(rows: Sequence[sqlite3.Row]) -> Dict[str, sqlite3.Row]:
+    index: Dict[str, sqlite3.Row] = {}
+    for row in rows:
+        for value in (row["path"], row["title"], row["canonical_id"], row["topic_id"]):
+            text = str(value or "").strip()
+            if text:
+                index[text] = row
+    return index
+
+
+def marker_hits(content: str, markers: Sequence[str]) -> List[str]:
+    return [marker for marker in markers if marker.lower() in content]
+
+
+def add_conflict(conflicts: List[Dict[str, Any]], item: Dict[str, Any], limit: int) -> bool:
+    conflicts.append(item)
+    return len(conflicts) >= limit
+
+
 def possible_conflicts(conn: sqlite3.Connection, rows: Sequence[sqlite3.Row], limit: int = 50) -> List[Dict[str, Any]]:
     conflicts: List[Dict[str, Any]] = []
-    active_rules = [row for row in rows if row["status"] == "active" and row["layer"] in FORMAL_LAYERS]
-    for i, left in enumerate(active_rules):
-        for right in active_rules[i + 1 :]:
+    active_formal = [row for row in rows if row["status"] == "active" and row["layer"] in FORMAL_LAYERS]
+    active_rules = [row for row in active_formal if row["layer"] == "rules"]
+
+    by_topic: Dict[Tuple[str, str], List[sqlite3.Row]] = {}
+    for row in active_rules:
+        topic_id = str(row["topic_id"] or "").strip()
+        if topic_id:
+            by_topic.setdefault((str(row["category"]), topic_id), []).append(row)
+    for (category, topic_id), bucket in by_topic.items():
+        if len(bucket) > 1:
+            if add_conflict(
+                conflicts,
+                {
+                    "kind": "multiple_active_rules_same_topic_id",
+                    "severity": "high",
+                    "category": category,
+                    "topic_id": topic_id,
+                    "items": [row_summary(row) for row in bucket],
+                    "evidence": {
+                        "active_rule_count": len(bucket),
+                        "paths": [row["path"] for row in bucket],
+                        "reason": "同一 topic_id 下存在多个 active rules，正式层 canonical 规则不唯一。",
+                    },
+                },
+                limit,
+            ):
+                return conflicts
+
+    for i, left in enumerate(active_formal):
+        for right in active_formal[i + 1 :]:
             if left["category"] != right["category"]:
                 continue
             sim = title_similarity(str(left["title"]), str(right["title"]))
             if sim >= 0.75:
-                conflicts.append(
+                if add_conflict(
+                    conflicts,
                     {
                         "kind": "similar_active_titles",
+                        "severity": "medium",
                         "category": left["category"],
                         "similarity": round(sim, 3),
-                        "items": [
-                            {"id": left["id"], "path": left["path"], "title": left["title"]},
-                            {"id": right["id"], "path": right["path"], "title": right["title"]},
-                        ],
-                    }
-                )
-            if len(conflicts) >= limit:
+                        "items": [row_summary(left), row_summary(right)],
+                        "evidence": {
+                            "left_title_key": title_key(str(left["title"])),
+                            "right_title_key": title_key(str(right["title"])),
+                            "reason": "active formal 内容标题高度相似，可能是重复或拆分不清。",
+                        },
+                    },
+                    limit,
+                ):
+                    return conflicts
+
+    refs = reference_index(rows)
+    deprecated_rows = [row for row in rows if row["status"] == "deprecated" or row["layer"] == "deprecated"]
+    deprecated_identities: Dict[str, sqlite3.Row] = {}
+    for row in deprecated_rows:
+        for value in (row["path"], row["title"], row["canonical_id"], row["topic_id"]):
+            text = str(value or "").strip()
+            if text:
+                deprecated_identities[text] = row
+
+    for row in rows:
+        target = str(row["superseded_by"] or "").strip()
+        if target and target not in refs:
+            if add_conflict(
+                conflicts,
+                {
+                    "kind": "superseded_by_missing_target",
+                    "severity": "high",
+                    "item": row_summary(row),
+                    "evidence": {
+                        "superseded_by": target,
+                        "reason": "superseded_by 指向的 path/title/canonical_id/topic_id 在索引中不存在。",
+                    },
+                },
+                limit,
+            ):
                 return conflicts
 
-    docs_by_path_title: Dict[str, sqlite3.Row] = {}
-    for row in rows:
-        docs_by_path_title[str(row["path"])] = row
-        docs_by_path_title[str(row["title"])] = row
-    for row in active_rules:
+    for row in active_formal:
         for item in list_value(row["supersedes"]):
-            old = docs_by_path_title.get(item)
+            old = refs.get(item)
             if old and old["status"] == "active":
-                conflicts.append(
+                if add_conflict(
+                    conflicts,
                     {
                         "kind": "active_rule_supersedes_still_active_rule",
-                        "new": {"id": row["id"], "path": row["path"], "title": row["title"]},
-                        "old": {"id": old["id"], "path": old["path"], "title": old["title"]},
-                    }
-                )
-            if len(conflicts) >= limit:
-                return conflicts
+                        "severity": "high",
+                        "new": row_summary(row),
+                        "old": row_summary(old),
+                        "evidence": {
+                            "reference_field": "supersedes",
+                            "reference_value": item,
+                            "reason": "新 active 规则声明 supersedes 旧规则，但旧规则仍是 active。",
+                        },
+                    },
+                    limit,
+                ):
+                    return conflicts
+            deprecated = deprecated_identities.get(item)
+            if deprecated:
+                if add_conflict(
+                    conflicts,
+                    {
+                        "kind": "deprecated_referenced_by_active_rule",
+                        "severity": "low",
+                        "active": row_summary(row),
+                        "deprecated": row_summary(deprecated),
+                        "evidence": {
+                            "reference_field": "supersedes",
+                            "reference_value": item,
+                            "reason": "active 规则引用 deprecated 内容。作为历史 supersedes 可接受；若作为依赖或依据则需要改为引用 canonical active 规则。",
+                        },
+                    },
+                    limit,
+                ):
+                    return conflicts
 
     opposite_markers = ("禁止", "不得", "不要", "avoid", "must not", "do not", "never")
     positive_markers = ("必须", "应该", "推荐", "默认", "should", "must", "recommend")
@@ -1988,29 +2307,41 @@ def possible_conflicts(conn: sqlite3.Connection, rows: Sequence[sqlite3.Row], li
             if left["category"] != right["category"]:
                 continue
             right_scope = set(list_value(right["valid_for"]))
-            if left_scope and right_scope and not (left_scope & right_scope):
+            overlap = sorted(left_scope & right_scope)
+            if left_scope and right_scope and not overlap:
                 continue
-            if title_similarity(str(left["title"]), str(right["title"])) < 0.45:
+            sim = title_similarity(str(left["title"]), str(right["title"]))
+            same_topic = bool(str(left["topic_id"] or "").strip() and left["topic_id"] == right["topic_id"])
+            if sim < 0.45 and not same_topic:
                 continue
             right_content = content_by_doc.get(int(right["id"]), "")
-            left_positive = any(marker in left_content for marker in positive_markers)
-            left_negative = any(marker in left_content for marker in opposite_markers)
-            right_positive = any(marker in right_content for marker in positive_markers)
-            right_negative = any(marker in right_content for marker in opposite_markers)
-            if (left_positive and right_negative) or (left_negative and right_positive):
-                conflicts.append(
+            left_positive_hits = marker_hits(left_content, positive_markers)
+            left_negative_hits = marker_hits(left_content, opposite_markers)
+            right_positive_hits = marker_hits(right_content, positive_markers)
+            right_negative_hits = marker_hits(right_content, opposite_markers)
+            if (left_positive_hits and right_negative_hits) or (left_negative_hits and right_positive_hits):
+                if add_conflict(
+                    conflicts,
                     {
                         "kind": "possible_opposite_conclusion",
+                        "severity": "medium",
                         "category": left["category"],
-                        "valid_for_overlap": sorted(left_scope & right_scope),
-                        "items": [
-                            {"id": left["id"], "path": left["path"], "title": left["title"]},
-                            {"id": right["id"], "path": right["path"], "title": right["title"]},
-                        ],
-                    }
-                )
-            if len(conflicts) >= limit:
-                return conflicts
+                        "topic_id": left["topic_id"] if same_topic else "",
+                        "valid_for_overlap": overlap,
+                        "items": [row_summary(left), row_summary(right)],
+                        "evidence": {
+                            "title_similarity": round(sim, 3),
+                            "same_topic_id": same_topic,
+                            "left_positive_markers": left_positive_hits,
+                            "left_negative_markers": left_negative_hits,
+                            "right_positive_markers": right_positive_hits,
+                            "right_negative_markers": right_negative_hits,
+                            "reason": "适用范围重叠且一侧包含推荐/必须信号、另一侧包含禁止/避免信号，需人工核对是否结论相反。",
+                        },
+                    },
+                    limit,
+                ):
+                    return conflicts
     return conflicts
 
 
@@ -2052,6 +2383,7 @@ def command_audit(args: argparse.Namespace) -> None:
         "low_confidence_rules": low_conf_rules[: args.limit],
         "unknown_source_type": unknown_source[: args.limit],
         "raw_in_formal_layer": raw_in_formal[: args.limit],
+        "duplicate_groups": build_dedupe_groups(rows, args.limit),
         "duplicate_titles": duplicate_titles(rows)[: args.limit],
         "possible_conflicts": possible_conflicts(conn, rows, args.limit),
         "elapsed_ms": elapsed_ms(start),
@@ -2110,14 +2442,80 @@ def command_dedupe(args: argparse.Namespace) -> None:
     conn = connect_db(must_exist=True)
     ensure_schema(conn)
     rows = query_documents(conn)
+    duplicate_groups = build_dedupe_groups(rows, args.limit)
     result = {
+        "duplicate_groups": duplicate_groups,
+        "count": len(duplicate_groups),
         "duplicate_titles": duplicate_titles(rows)[: args.limit],
         "duplicate_source_urls": source_url_duplicates(rows)[: args.limit],
+        "duplicate_content_hash": content_hash_duplicates(rows)[: args.limit],
+        "duplicate_topic_ids": topic_id_duplicates(rows)[: args.limit],
         "duplicate_sha256": sha_duplicates(rows)[: args.limit],
         "similar_filenames": similar_filenames(rows)[: args.limit],
         "elapsed_ms": elapsed_ms(start),
     }
     print_json(result)
+
+
+def conflict_matches_topic(conflict: Dict[str, Any], topic_id: str, paths: set[str]) -> bool:
+    if str(conflict.get("topic_id") or "") == topic_id:
+        return True
+    for key in ("items",):
+        for item in conflict.get(key, []) or []:
+            if str(item.get("path") or "") in paths or str(item.get("topic_id") or "") == topic_id:
+                return True
+    for key in ("item", "new", "old", "active", "deprecated"):
+        item = conflict.get(key)
+        if isinstance(item, dict) and (str(item.get("path") or "") in paths or str(item.get("topic_id") or "") == topic_id):
+            return True
+    return False
+
+
+def canonical_file_for(rows: Sequence[sqlite3.Row], layer: str) -> Optional[Dict[str, Any]]:
+    candidates = [row for row in rows if row["layer"] == layer and row["status"] == "active"]
+    if not candidates:
+        return None
+    return row_summary(recommended_canonical(candidates))
+
+
+def command_canonical_report(args: argparse.Namespace) -> None:
+    start = time.perf_counter()
+    conn = connect_db(must_exist=True)
+    ensure_schema(conn)
+    rows = query_documents(conn)
+    dedupe_groups = build_dedupe_groups(rows, 10000)
+    conflicts = possible_conflicts(conn, rows, 10000)
+
+    by_topic: Dict[Tuple[str, str], List[sqlite3.Row]] = {}
+    for row in rows:
+        topic_id = str(row["topic_id"] or "").strip()
+        if topic_id:
+            by_topic.setdefault((str(row["category"]), topic_id), []).append(row)
+
+    topics: List[Dict[str, Any]] = []
+    for (category, topic_id), bucket in sorted(by_topic.items()):
+        paths = {str(row["path"]) for row in bucket}
+        unresolved_duplicates = [
+            group
+            for group in dedupe_groups
+            if any(str(item.get("path") or "") in paths for item in group.get("duplicate_group", []))
+        ]
+        unresolved_conflicts = [conflict for conflict in conflicts if conflict_matches_topic(conflict, topic_id, paths)]
+        topics.append(
+            {
+                "category": category,
+                "topic_id": topic_id,
+                "canonical_rule": canonical_file_for(bucket, "rules"),
+                "canonical_checklist": canonical_file_for(bucket, "checklists"),
+                "active_files": [row_summary(row) for row in bucket if row["status"] == "active"],
+                "deprecated_files": [row_summary(row) for row in bucket if row["status"] == "deprecated" or row["layer"] == "deprecated"],
+                "raw_supporting_files": [row_summary(row) for row in bucket if row["layer"] == "raw"],
+                "unresolved_duplicates": unresolved_duplicates[: args.limit],
+                "unresolved_conflicts": unresolved_conflicts[: args.limit],
+            }
+        )
+
+    print_json({"topic_count": len(topics), "topics": topics[: args.limit], "elapsed_ms": elapsed_ms(start)})
 
 
 def command_deprecate(args: argparse.Namespace) -> None:
@@ -2139,6 +2537,7 @@ def command_deprecate(args: argparse.Namespace) -> None:
             "reviewed_at": now_iso(),
             "reviewed_by": args.reviewed_by,
             "deprecation_reason": args.reason,
+            "deprecated_reason": args.reason,
         }
     )
     if args.superseded_by:
@@ -2173,6 +2572,7 @@ def command_quarantine(args: argparse.Namespace) -> None:
             "review_required": True,
             "risk_level": "high",
             "quarantine_reason": args.reason,
+            "quarantined_reason": args.reason,
             "last_reviewed": today_iso(),
         }
     )
@@ -2524,6 +2924,7 @@ def command_doctor(_: argparse.Namespace) -> None:
               AND COALESCE(type, '') = 'rule'
               AND COALESCE(superseded_by, '') = ''
               AND COALESCE(deprecation_reason, '') = ''
+              AND COALESCE(deprecated_reason, '') = ''
             """
         ).fetchall()
         checks["deprecated_without_superseded_by"] = [dict(row) for row in deprecated]
@@ -2576,7 +2977,7 @@ def secret_scan_files() -> Iterable[Path]:
     )
 
 
-def command_secret_scan(args: argparse.Namespace) -> None:
+def run_secret_scan(limit: int = 200) -> Dict[str, Any]:
     start = time.perf_counter()
     findings: List[Dict[str, Any]] = []
     scanned_files = 0
@@ -2633,13 +3034,18 @@ def command_secret_scan(args: argparse.Namespace) -> None:
         "scanned_files": scanned_files,
         "findings_count": len(findings),
         "high_risk_count": len(high_risk),
-        "findings": findings[: args.limit],
-        "truncated": len(findings) > args.limit,
+        "findings": findings[:limit],
+        "truncated": len(findings) > limit,
         "allow_marker": SECRET_SCAN_ALLOW_MARKER,
         "elapsed_ms": elapsed_ms(start),
     }
+    return result
+
+
+def command_secret_scan(args: argparse.Namespace) -> None:
+    result = run_secret_scan(args.limit)
     print_json(result)
-    if high_risk:
+    if result["high_risk_count"]:
         raise SystemExit(1)
 
 
@@ -2791,6 +3197,158 @@ week: "{year}-{week:02d}"
     )
 
 
+def collect_lint_issues(limit: int) -> Dict[str, Any]:
+    issues: List[Dict[str, Any]] = []
+    files_checked = 0
+    for path in iter_markdown_files():
+        files_checked += 1
+        issues.extend(lint_file(path))
+    return {
+        "files_checked": files_checked,
+        "error_count": sum(1 for issue in issues if issue["severity"] == "error"),
+        "warning_count": sum(1 for issue in issues if issue["severity"] == "warning"),
+        "issues": issues[:limit],
+        "truncated": len(issues) > limit,
+    }
+
+
+def collect_audit_summary(conn: sqlite3.Connection, rows: Sequence[sqlite3.Row], days: int, limit: int) -> Dict[str, Any]:
+    missing_source = [dict(row) for row in rows if not str(row["source_url"] or "").strip()]
+    formal_missing_source = [
+        dict(row)
+        for row in rows
+        if row["layer"] in FORMAL_LAYERS
+        and not str(row["source_url"] or "").strip()
+        and str(row["source_type"] or "") != "internal_practice"
+    ]
+    missing_review = [
+        dict(row)
+        for row in rows
+        if row["layer"] in FORMAL_LAYERS and (not str(row["reviewed_by"] or "").strip() or not str(row["verification_method"] or "").strip())
+    ]
+    stale_rows = [dict(row) for row in rows if row["status"] == "active" and is_stale_row(row, days)]
+    low_conf_rules = [dict(row) for row in rows if row["layer"] == "rules" and row["confidence"] == "low"]
+    raw_in_formal = [
+        dict(row)
+        for row in rows
+        if row["layer"] in FORMAL_LAYERS and (row["type"] == "raw" or bool_value(row["review_required"]))
+    ]
+    return {
+        "documents": len(rows),
+        "by_category": group_counts(rows, "category"),
+        "by_layer": group_counts(rows, "layer"),
+        "by_status": group_counts(rows, "status"),
+        "missing_source_count": len(missing_source),
+        "formal_missing_source_count": len(formal_missing_source),
+        "missing_formal_review_count": len(missing_review),
+        "stale_active_count": len(stale_rows),
+        "low_confidence_rules_count": len(low_conf_rules),
+        "raw_in_formal_layer_count": len(raw_in_formal),
+        "missing_source": missing_source[:limit],
+        "formal_missing_source": formal_missing_source[:limit],
+        "missing_formal_review": missing_review[:limit],
+        "stale_active": stale_rows[:limit],
+        "raw_in_formal_layer": raw_in_formal[:limit],
+    }
+
+
+def json_block(data: Any) -> str:
+    return "```json\n" + json.dumps(data, ensure_ascii=False, indent=2) + "\n```"
+
+
+def command_monthly_maintenance(args: argparse.Namespace) -> None:
+    start = time.perf_counter()
+    month = datetime.now().strftime("%Y-%m")
+    index_result = perform_index(force_hash=args.force_hash)
+    conn = connect_db(must_exist=True)
+    ensure_schema(conn)
+    rows = query_documents(conn)
+
+    lint_result = collect_lint_issues(args.limit)
+    audit_result = collect_audit_summary(conn, rows, args.days, args.limit)
+    dedupe_groups = build_dedupe_groups(rows, args.limit)
+    conflicts = possible_conflicts(conn, rows, args.limit)
+    stale_rows = [dict(row) for row in rows if row["status"] == "active" and is_stale_row(row, args.days)]
+    secret_result = run_secret_scan(args.limit)
+
+    summary = {
+        "month": month,
+        "index": index_result,
+        "lint_errors": lint_result["error_count"],
+        "lint_warnings": lint_result["warning_count"],
+        "audit": {
+            "documents": audit_result["documents"],
+            "formal_missing_source_count": audit_result["formal_missing_source_count"],
+            "missing_formal_review_count": audit_result["missing_formal_review_count"],
+            "stale_active_count": audit_result["stale_active_count"],
+            "raw_in_formal_layer_count": audit_result["raw_in_formal_layer_count"],
+        },
+        "dedupe_groups": len(dedupe_groups),
+        "conflicts": len(conflicts),
+        "stale": len(stale_rows),
+        "secret_findings": secret_result["findings_count"],
+        "high_risk_secret_findings": secret_result["high_risk_count"],
+    }
+
+    report = f"""---
+title: "Monthly Maintenance {month}"
+type: monthly_maintenance
+status: active
+source_type: internal_practice
+created_at: "{now_iso()}"
+review_required: false
+---
+
+# Monthly Maintenance {month}
+
+本报告基于索引元数据和 frontmatter 检查生成。它不会把 raw/distilled 提升为正式规则，也不会删除历史知识。
+
+## Summary
+
+{json_block(summary)}
+
+## Index
+
+{json_block(index_result)}
+
+## Lint
+
+{json_block(lint_result)}
+
+## Audit
+
+{json_block(audit_result)}
+
+## Dedupe
+
+{json_block({"count": len(dedupe_groups), "groups": dedupe_groups})}
+
+## Conflicts
+
+{json_block({"count": len(conflicts), "results": conflicts})}
+
+## Stale
+
+{json_block({"days": args.days, "count": len(stale_rows), "results": stale_rows[: args.limit]})}
+
+## Secret Scan
+
+{json_block(secret_result)}
+"""
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    report_path = REPORTS_DIR / f"monthly-maintenance-{month}.md"
+    report_path.write_text(report, encoding="utf-8", newline="\n")
+
+    result = {
+        "report": to_relative_posix(report_path),
+        "summary": summary,
+        "elapsed_ms": elapsed_ms(start),
+    }
+    print_json(result)
+    if secret_result["high_risk_count"]:
+        raise SystemExit(1)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="kb.py",
@@ -2905,6 +3463,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_dedupe.add_argument("--limit", type=int, default=50)
     p_dedupe.set_defaults(func=command_dedupe)
 
+    p_canonical = sub.add_parser("canonical-report", help="Report canonical files and unresolved issues per topic_id.")
+    p_canonical.add_argument("--limit", type=int, default=100)
+    p_canonical.set_defaults(func=command_canonical_report)
+
     p_deprecate = sub.add_parser("deprecate", help="Mark a rule as deprecated and move it to deprecated/.")
     dep_group = p_deprecate.add_mutually_exclusive_group(required=True)
     dep_group.add_argument("--path")
@@ -2957,6 +3519,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_report = sub.add_parser("weekly-report", help="Generate a weekly report from index metadata.")
     p_report.set_defaults(func=command_weekly_report)
+
+    p_monthly = sub.add_parser("monthly-maintenance", help="Run index/lint/audit/dedupe/conflicts/stale/secret-scan and write a monthly report.")
+    p_monthly.add_argument("--days", type=int, default=180)
+    p_monthly.add_argument("--limit", type=int, default=100)
+    p_monthly.add_argument("--force-hash", action="store_true", help="Force sha256 recomputation during monthly index.")
+    p_monthly.set_defaults(func=command_monthly_maintenance)
 
     return parser
 

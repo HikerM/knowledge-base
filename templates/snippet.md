@@ -15,12 +15,20 @@ language: ""
 valid_for: []
 not_valid_for: []
 project_scope: ""
+topic_id: ""
+canonical_id: ""
+source_hash: ""
+content_hash: ""
 supersedes: []
 superseded_by: ""
+deprecated_reason: ""
+rejected_reason: ""
+quarantined_reason: ""
 risk_level: medium
 verification_method: ""
 review_required: false
 review_note: ""
+review_cycle_days: ""
 ---
 
 # 代码片段
