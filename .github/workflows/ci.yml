@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate CLI help
+        run: python scripts/kb.py --help
+
+      - name: Initialize repository structure
+        run: python scripts/kb.py init
+
+      - name: Build incremental index
+        run: python scripts/kb.py index
+
+      - name: Check index stats
+        run: python scripts/kb.py stats
+
+      - name: Run doctor
+        run: python scripts/kb.py doctor
+
+      - name: Run benchmark
+        run: python scripts/kb.py benchmark
+
+      - name: Run audit
+        run: python scripts/kb.py audit
+
+      - name: Run smoke tests
+        run: python tests/smoke_test.py
+
+      - name: Run search quality tests
+        run: python tests/search_quality_test.py
+
+      - name: Run secret scan
+        run: python scripts/kb.py secret-scan

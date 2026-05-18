@@ -235,6 +235,47 @@ python tests/smoke_test.py
 
 覆盖内容包括：`init`、`add-raw`、`index`、默认 search 不返回 raw、promote 来源门禁、`internal_practice` promote、promote 后 search、单文件 open、`stats`、`doctor`、`benchmark`。
 
+## CI 与自动验收
+
+GitHub Actions 配置在 [.github/workflows/ci.yml](D:/AI/personal-knowledge-base/.github/workflows/ci.yml)。每次 `push` 和 `pull_request` 都会运行：
+
+```bash
+python scripts/kb.py --help
+python scripts/kb.py init
+python scripts/kb.py index
+python scripts/kb.py stats
+python scripts/kb.py doctor
+python scripts/kb.py benchmark
+python scripts/kb.py audit
+python tests/smoke_test.py
+python tests/search_quality_test.py
+python scripts/kb.py secret-scan
+```
+
+CI 会在 GitHub public repo 环境中重建本地索引，但 `.kb/index.sqlite` 仍然是生成物，不应提交。
+
+## Secret Scan
+
+公开仓库发布前必须运行：
+
+```bash
+python scripts/kb.py secret-scan
+```
+
+`secret-scan` 默认排除 `.git/`、`.kb/`、`__pycache__/`、`.venv/`、`tmp/`、`exports/`，并检查 API key、GitHub token、OpenAI key、`password=`、`secret=`、private key block、bearer token 和 `.env` 泄露。发现高风险 secret 时命令返回非 0。测试 fixture 如需包含假值，必须在同一行写明 `TEST_ONLY_SECRET_PATTERN`。
+
+公开仓库安全规则见 [docs/security-public-repo.md](D:/AI/personal-knowledge-base/docs/security-public-repo.md)。
+
+## Search Quality Test
+
+检索质量测试使用 [tests/benchmark_corpus](D:/AI/personal-knowledge-base/tests/benchmark_corpus) 中的可控 Markdown fixture，在临时目录复制项目并建立索引：
+
+```bash
+python tests/search_quality_test.py
+```
+
+覆盖内容包括：正式层可检索、默认不返回 raw、默认不返回 deprecated、category filter、layer filter、主题相关结果排序，以及自定义 benchmark query 的稳定断言。
+
 ## stale 复查流程
 
 默认 180 天未复查视为 stale。单个文件可通过 `review_cycle_days` 覆盖默认周期。
