@@ -4,6 +4,14 @@
 
 Markdown 是事实来源；SQLite + FTS5 是本地索引层。搜索默认只查索引，不全量读取 Markdown，也不在 `knowledge/` 中做字符串扫描。
 
+## 代码结构
+
+- `scripts/kb.py`: CLI 入口，保留命令解析、命令处理和索引/搜索/治理流程。
+- `knowledge_core/paths.py`: 仓库路径、生命周期层目录和路径解析工具。
+- `knowledge_core/config.py`: categories、sources、learning-radar、extract-rules 配置加载。
+- `knowledge_core/frontmatter.py`: frontmatter 解析、渲染和 schema 枚举。
+- `knowledge_core/security.py`: secret-scan 的扫描规则、路径排除和脱敏逻辑。
+
 ## 目录结构
 
 每个 category 都有完整生命周期层级：

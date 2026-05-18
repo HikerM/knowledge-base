@@ -29,6 +29,9 @@ def load_kb_module() -> Any:
 
 
 def configure_temp_root(kb: Any, root: Path) -> None:
+    if hasattr(kb, "configure_core_root"):
+        kb.configure_core_root(root)
+        return
     kb.ROOT = root
     kb.KNOWLEDGE_DIR = root / "knowledge"
     kb.CONFIG_DIR = root / "config"
