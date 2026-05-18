@@ -1,0 +1,35 @@
+frontend:
+  path: knowledge/01-frontend
+  description: 前端、组件、状态管理、响应式、构建、测试、可访问性
+
+backend:
+  path: knowledge/02-backend
+  description: API、服务分层、鉴权、权限、日志、缓存、队列、部署
+
+ui_ux:
+  path: knowledge/03-ui-ux
+  description: 自适应 UI、设计系统、组件状态、Unity UI、Dashboard、游戏 UI
+
+product:
+  path: knowledge/04-product
+  description: PRD、MVP、用户路径、功能优先级、指标、竞品分析
+
+algorithm:
+  path: knowledge/05-algorithm
+  description: 算法、数据结构、复杂度、搜索、图、动态规划、推荐、游戏 AI
+
+database:
+  path: knowledge/06-database
+  description: 数据建模、索引、事务、迁移、查询优化、缓存一致性
+
+performance:
+  path: knowledge/07-performance
+  description: Web、后端、数据库、Unity、网络、内存、渲染、压测、Profiling
+
+security:
+  path: knowledge/08-security
+  description: 鉴权、授权、输入校验、XSS、SQL 注入、依赖漏洞、密钥管理
+
+ai_agent:
+  path: knowledge/09-ai-agent
+  description: Codex、Skill、AGENTS.md、RAG、工具调用、上下文管理、Agent 工作流

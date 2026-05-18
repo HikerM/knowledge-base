@@ -1,0 +1,836 @@
+sources:
+  # =========================
+  # Frontend
+  # =========================
+
+  - name: React Official Docs
+    category: frontend
+    type: official_docs
+    url: https://react.dev
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: weekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - component architecture
+      - hooks
+      - state management
+      - rendering behavior
+      - performance
+      - accessibility
+    output_targets:
+      - rules
+      - checklists
+      - snippets
+    notes: React 官方文档，适合提炼组件设计、状态管理、渲染行为和前端工程规则。
+
+  - name: MDN Web Docs
+    category: frontend
+    type: official_docs
+    url: https://developer.mozilla.org/en-US/
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: weekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - HTML
+      - CSS
+      - JavaScript
+      - Web APIs
+      - accessibility
+      - browser compatibility
+      - web security basics
+    output_targets:
+      - rules
+      - checklists
+      - snippets
+    notes: Web 平台基础知识来源，适合沉淀通用前端规则和浏览器兼容性知识。
+
+  - name: web.dev
+    category: frontend
+    type: official_docs
+    url: https://web.dev/
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: weekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - web performance
+      - Core Web Vitals
+      - accessibility
+      - secure websites
+      - responsive web practices
+    output_targets:
+      - rules
+      - checklists
+    notes: Google Chrome/Web 团队维护的 Web 实践资料，适合提炼性能、可访问性和现代 Web 质量规则。
+
+  - name: Next.js Official Docs
+    category: frontend
+    type: official_docs
+    url: https://nextjs.org/docs
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: weekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - React full-stack application
+      - routing
+      - server components
+      - rendering
+      - data fetching
+      - optimization
+    output_targets:
+      - rules
+      - checklists
+      - snippets
+    notes: 适合学习 React 全栈项目、路由、渲染和性能优化模式。
+
+  - name: Vite Official Guide
+    category: frontend
+    type: official_docs
+    url: https://vite.dev/guide/
+    priority: medium
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: biweekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - frontend build tooling
+      - dev server
+      - production build
+      - configuration
+      - plugin ecosystem
+    output_targets:
+      - rules
+      - snippets
+      - checklists
+    notes: 适合沉淀前端构建工具、开发体验和打包配置规则。
+
+  # =========================
+  # Backend
+  # =========================
+
+  - name: Node.js Official Docs
+    category: backend
+    type: official_docs
+    url: https://nodejs.org/api/
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: weekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - runtime APIs
+      - file system
+      - streams
+      - events
+      - diagnostics
+      - performance
+      - security notes
+    output_targets:
+      - rules
+      - snippets
+      - checklists
+    notes: Node.js 后端、工具脚本和服务端运行时的基础来源。
+
+  - name: FastAPI Official Docs
+    category: backend
+    type: official_docs
+    url: https://fastapi.tiangolo.com/
+    priority: medium
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: biweekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - API design
+      - request validation
+      - dependency injection
+      - async APIs
+      - OpenAPI
+      - production deployment
+    output_targets:
+      - rules
+      - snippets
+      - checklists
+    notes: 适合 Python API 项目、数据校验和接口文档规则。
+
+  - name: Spring Boot Official Docs
+    category: backend
+    type: official_docs
+    url: https://docs.spring.io/spring-boot/index.html
+    priority: medium
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: biweekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - service architecture
+      - configuration
+      - REST APIs
+      - production readiness
+      - testing
+      - observability
+    output_targets:
+      - rules
+      - checklists
+      - snippets
+    notes: 适合 Java 后端项目、企业服务分层和生产配置规则。
+
+  - name: Microsoft REST API Guidelines
+    category: backend
+    type: github_repo
+    url: https://github.com/microsoft/api-guidelines
+    priority: high
+    enabled: true
+    source_type: github
+    trust_level: high
+    frequency: monthly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - REST API design
+      - HTTP methods
+      - status codes
+      - resource naming
+      - versioning
+      - JSON conventions
+    output_targets:
+      - rules
+      - checklists
+      - templates
+    notes: 适合沉淀通用 API 设计规范，不绑定具体后端语言。
+
+  - name: OpenTelemetry Docs
+    category: backend
+    type: official_docs
+    url: https://opentelemetry.io/docs/
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: biweekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - observability
+      - tracing
+      - metrics
+      - logs
+      - instrumentation
+      - service diagnostics
+    output_targets:
+      - rules
+      - checklists
+      - snippets
+    notes: 适合后端可观测性、日志、指标、链路追踪和生产诊断规则。
+
+  # =========================
+  # UI / UX
+  # =========================
+
+  - name: Unity UI Toolkit Manual
+    category: ui_ux
+    type: official_docs
+    url: https://docs.unity3d.com/Manual/UIElements.html
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: weekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - Unity UI Toolkit
+      - UXML
+      - USS
+      - UI Builder
+      - runtime UI
+      - editor UI
+    output_targets:
+      - rules
+      - checklists
+      - snippets
+    notes: 适合 Unity UI Toolkit 项目和编辑器工具 UI 规则。
+
+  - name: Unity Canvas Scaler Manual
+    category: ui_ux
+    type: official_docs
+    url: https://docs.unity3d.com/Manual/script-CanvasScaler.html
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: monthly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - UGUI
+      - Canvas Scaler
+      - adaptive UI
+      - screen scaling
+      - reference resolution
+      - UI density
+    output_targets:
+      - rules
+      - checklists
+      - snippets
+    notes: 适合 Unity UGUI 自适应界面、分辨率适配和 Canvas 规则。
+
+  - name: Material Design 3
+    category: ui_ux
+    type: official_docs
+    url: https://m3.material.io/
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: monthly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - design system
+      - components
+      - design tokens
+      - interaction states
+      - layout
+      - accessibility
+    output_targets:
+      - rules
+      - checklists
+      - templates
+    notes: 适合提炼设计系统、组件状态、设计 token 和跨平台 UI 规则。
+
+  - name: Apple Human Interface Guidelines
+    category: ui_ux
+    type: official_docs
+    url: https://developer.apple.com/design/human-interface-guidelines
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: monthly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - mobile UI
+      - desktop UI
+      - interaction patterns
+      - accessibility
+      - platform conventions
+      - safe areas
+    output_targets:
+      - rules
+      - checklists
+    notes: 适合 iOS、iPadOS、macOS 和通用移动端交互规则。
+
+  - name: Nielsen Norman Group UX Articles
+    category: ui_ux
+    type: manual
+    url: https://www.nngroup.com/articles/
+    priority: medium
+    enabled: true
+    source_type: blog
+    trust_level: medium
+    frequency: biweekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - usability
+      - user research
+      - interaction design
+      - navigation
+      - information architecture
+      - heuristic evaluation
+    output_targets:
+      - rules
+      - checklists
+    notes: 研究型 UX 资料来源；默认只进 raw/distilled，不能未经审核直接进入 rules。
+
+  # =========================
+  # Product
+  # =========================
+
+  - name: Atlassian Product Requirements Template
+    category: product
+    type: manual
+    url: https://www.atlassian.com/software/confluence/templates/product-requirements
+    priority: high
+    enabled: true
+    source_type: blog
+    trust_level: medium
+    frequency: monthly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - PRD
+      - requirement definition
+      - stakeholder alignment
+      - user stories
+      - scope control
+      - open questions
+    output_targets:
+      - templates
+      - checklists
+      - rules
+    notes: 适合提炼 PRD 模板、需求澄清问题和产品范围控制清单。
+
+  - name: Google HEART Framework Paper
+    category: product
+    type: manual
+    url: https://research.google/pubs/measuring-the-user-experience-on-a-large-scale-user-centered-metrics-for-web-applications/
+    priority: high
+    enabled: true
+    source_type: paper
+    trust_level: high
+    frequency: quarterly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - product metrics
+      - user-centered metrics
+      - HEART framework
+      - goals signals metrics
+      - UX measurement
+    output_targets:
+      - rules
+      - templates
+      - checklists
+    notes: 适合沉淀产品指标体系、用户体验度量和目标-信号-指标映射方法。
+
+  - name: NNGroup UX Research Methods
+    category: product
+    type: manual
+    url: https://www.nngroup.com/articles/which-ux-research-methods/
+    priority: medium
+    enabled: true
+    source_type: blog
+    trust_level: medium
+    frequency: quarterly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - user research
+      - research methods
+      - product discovery
+      - qualitative methods
+      - quantitative methods
+    output_targets:
+      - checklists
+      - templates
+      - rules
+    notes: 适合产品发现、用户研究方法选择和需求验证流程。
+
+  # =========================
+  # Algorithm
+  # =========================
+
+  - name: MIT 6.006 Introduction to Algorithms
+    category: algorithm
+    type: official_docs
+    url: https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: monthly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - data structures
+      - algorithm paradigms
+      - complexity analysis
+      - sorting
+      - graphs
+      - dynamic programming
+    output_targets:
+      - rules
+      - snippets
+      - checklists
+    notes: 算法基础高质量来源，适合提炼算法选择、复杂度分析和代码模板。
+
+  - name: CP Algorithms
+    category: algorithm
+    type: manual
+    url: https://cp-algorithms.com/
+    priority: medium
+    enabled: true
+    source_type: blog
+    trust_level: medium
+    frequency: monthly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - graph algorithms
+      - number theory
+      - data structures
+      - dynamic programming
+      - implementation patterns
+    output_targets:
+      - snippets
+      - rules
+      - checklists
+    notes: 实现型算法资料，适合转成代码片段和边界条件清单；默认需审核后再进入 snippets/rules。
+
+  # =========================
+  # Database
+  # =========================
+
+  - name: PostgreSQL Official Documentation
+    category: database
+    type: official_docs
+    url: https://www.postgresql.org/docs/
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: biweekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - schema design
+      - indexing
+      - query planning
+      - transactions
+      - migration
+      - performance
+    output_targets:
+      - rules
+      - checklists
+      - snippets
+    notes: PostgreSQL 官方文档，适合沉淀数据库建模、索引和查询优化规则。
+
+  - name: SQLite Official Documentation
+    category: database
+    type: official_docs
+    url: https://sqlite.org/docs.html
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: monthly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - SQLite usage
+      - FTS5
+      - indexing
+      - transactions
+      - application data storage
+      - local database constraints
+    output_targets:
+      - rules
+      - snippets
+      - checklists
+    notes: 适合本地工具、知识库索引、轻量数据库和 SQLite FTS 相关规则。
+
+  # =========================
+  # Performance
+  # =========================
+
+  - name: web.dev Performance
+    category: performance
+    type: official_docs
+    url: https://web.dev/performance
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: biweekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - web performance
+      - rendering
+      - loading speed
+      - responsiveness
+      - Core Web Vitals
+      - performance debugging
+    output_targets:
+      - checklists
+      - rules
+      - snippets
+    notes: Web 性能主来源，适合转成性能检查清单和优化 playbook。
+
+  - name: Core Web Vitals
+    category: performance
+    type: official_docs
+    url: https://web.dev/explore/learn-core-web-vitals
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: biweekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - LCP
+      - INP
+      - CLS
+      - field metrics
+      - user experience metrics
+      - measurement
+    output_targets:
+      - rules
+      - checklists
+    notes: 用于沉淀 Web 前端性能指标、验收标准和优化顺序。
+
+  - name: Google SRE Books
+    category: performance
+    type: official_docs
+    url: https://sre.google/books/
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: monthly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - reliability
+      - SLO
+      - monitoring
+      - incident response
+      - scalable systems
+      - production operations
+    output_targets:
+      - rules
+      - checklists
+      - templates
+    notes: 适合后端性能、可靠性、监控、SLO 和生产运维方法论。
+
+  - name: Unity Profiler Manual
+    category: performance
+    type: official_docs
+    url: https://docs.unity3d.com/Manual/Profiler.html
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: monthly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - Unity Profiler
+      - CPU profiling
+      - memory profiling
+      - rendering profiling
+      - runtime performance
+    output_targets:
+      - checklists
+      - rules
+      - snippets
+    notes: Unity 性能排查核心来源，适合提炼 Profiler 使用、瓶颈定位和性能验收规则。
+
+  - name: Unity Optimization Manual
+    category: performance
+    type: official_docs
+    url: https://docs.unity3d.com/Manual/analysis.html
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: monthly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - memory optimization
+      - graphics performance
+      - runtime performance scaling
+      - profiling workflow
+    output_targets:
+      - rules
+      - checklists
+    notes: 适合 Unity 游戏、移动端和图形性能优化知识沉淀。
+
+  # =========================
+  # Security
+  # =========================
+
+  - name: OWASP Cheat Sheet Series
+    category: security
+    type: official_docs
+    url: https://cheatsheetseries.owasp.org/
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: weekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - secure coding
+      - authentication
+      - authorization
+      - input validation
+      - XSS
+      - SQL injection
+      - secrets management
+    output_targets:
+      - rules
+      - checklists
+      - snippets
+    notes: 应用安全规则主来源，适合沉淀安全编码 checklist 和项目审查规则。
+
+  - name: GitHub Advisory Database
+    category: security
+    type: official_docs
+    url: https://github.com/advisories
+    priority: high
+    enabled: true
+    source_type: github
+    trust_level: high
+    frequency: weekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - dependency vulnerabilities
+      - npm advisories
+      - pip advisories
+      - Maven advisories
+      - package ecosystem risks
+    output_targets:
+      - checklists
+      - rules
+    notes: 适合依赖安全、包漏洞、开源生态安全风险跟踪。
+
+  - name: National Vulnerability Database
+    category: security
+    type: official_docs
+    url: https://nvd.nist.gov/
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: weekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - CVE
+      - vulnerability management
+      - CVSS
+      - security automation
+      - vulnerability impact
+    output_targets:
+      - rules
+      - checklists
+    notes: 漏洞管理高权威来源，适合安全风险判断和依赖升级规则。
+
+  # =========================
+  # AI Agent / Codex
+  # =========================
+
+  - name: OpenAI Codex Docs
+    category: ai_agent
+    type: official_docs
+    url: https://developers.openai.com/codex
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: weekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - Codex workflow
+      - project instructions
+      - code review
+      - development automation
+      - agent usage
+    output_targets:
+      - rules
+      - templates
+      - checklists
+    notes: Codex 使用规范、开发流程和项目自动化规则主来源。
+
+  - name: OpenAI Codex Agent Skills
+    category: ai_agent
+    type: official_docs
+    url: https://developers.openai.com/codex/skills
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: weekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - Codex skills
+      - SKILL.md
+      - reusable workflows
+      - skill packaging
+      - task-specific instructions
+    output_targets:
+      - rules
+      - templates
+      - snippets
+    notes: 用于维护你的 Codex Skill 规范，例如 adaptive-ui-designer 和个人知识库管理 Skill。
+
+  - name: OpenAI Agents SDK Docs
+    category: ai_agent
+    type: official_docs
+    url: https://developers.openai.com/api/docs/guides/agents
+    priority: high
+    enabled: true
+    source_type: official
+    trust_level: high
+    frequency: weekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - agent runtime
+      - tools
+      - handoffs
+      - tracing
+      - guardrails
+      - orchestration
+    output_targets:
+      - rules
+      - snippets
+      - templates
+    notes: 适合后续构建代码型 Agent、自动化工作流和工具调用规则。
+
+  - name: Model Context Protocol Docs
+    category: ai_agent
+    type: official_docs
+    url: https://modelcontextprotocol.io/docs/getting-started/intro
+    priority: medium
+    enabled: true
+    source_type: official
+    trust_level: medium
+    frequency: biweekly
+    max_initial_layer: raw
+    requires_review: true
+    learn_focus:
+      - MCP
+      - tool integration
+      - external data sources
+      - local files
+      - databases
+      - agent context
+    output_targets:
+      - rules
+      - templates
+      - checklists
+    notes: 适合后续把个人知识库接入 Agent/MCP 工具链；涉及安全边界时必须人工审核。

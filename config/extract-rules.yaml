@@ -1,0 +1,95 @@
+changelog:
+  description: 从版本发布、迁移说明、breaking changes 中提炼变化影响和行动项。
+  required_fields:
+    - title
+    - source_url
+    - affected_versions
+    - breaking_changes
+    - migration_steps
+    - project_impact
+    - verification_method
+    - review_required
+  output_layer: distilled
+
+best_practice:
+  description: 从官方文档、实践文章、项目复盘中提炼可执行工程规则。
+  required_fields:
+    - title
+    - source_url
+    - applicable_context
+    - not_applicable_context
+    - recommended_practice
+    - anti_pattern
+    - verification_method
+    - risk_level
+    - review_required
+  output_layer: distilled
+
+pitfall:
+  description: 提炼风险、误区、反例、故障模式和错误用法。
+  required_fields:
+    - title
+    - source_url
+    - failure_mode
+    - trigger_conditions
+    - symptoms
+    - prevention
+    - detection_method
+    - recovery_action
+    - review_required
+  output_layer: distilled
+
+snippet:
+  description: 提炼可复用代码、命令、配置或提示词片段。
+  required_fields:
+    - title
+    - source_url
+    - language_or_tool
+    - prerequisites
+    - snippet
+    - usage
+    - expected_output
+    - verification_method
+    - review_required
+  output_layer: distilled
+
+checklist:
+  description: 提炼审查、上线、性能、安全、UI 或测试检查清单。
+  required_fields:
+    - title
+    - source_url
+    - scenario
+    - checklist_items
+    - blocking_conditions
+    - evidence_required
+    - verification_method
+    - review_required
+  output_layer: distilled
+
+case:
+  description: 提炼项目案例、事故复盘、性能优化或架构实践。
+  required_fields:
+    - title
+    - source_url
+    - context
+    - problem
+    - decision
+    - outcome
+    - lessons
+    - applicability
+    - review_required
+  output_layer: distilled
+
+adr:
+  description: 提炼架构决策记录，保留上下文、权衡和后果。
+  required_fields:
+    - title
+    - source_url
+    - context
+    - decision
+    - alternatives
+    - tradeoffs
+    - consequences
+    - verification_method
+    - review_required
+  output_layer: distilled

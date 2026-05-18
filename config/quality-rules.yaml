@@ -1,0 +1,31 @@
+score_dimensions:
+  - source_authority
+  - recency
+  - relevance_to_my_projects
+  - actionability
+  - implementation_detail
+  - risk_level
+  - verification_needed
+  - duplicate_or_conflict_risk
+  - pollution_risk
+
+score_meaning:
+  5: 可以优先进入 rules/templates/checklists
+  4: 值得提炼，等待人工审核
+  3: 可存入 distilled，暂不作为正式规范
+  2: 只保留摘要或链接
+  1: 丢弃
+
+policy:
+  - raw 不得直接作为 Codex 的正式规则。
+  - distilled 是 AI 提炼层，仍需人工审核。
+  - rules、snippets、checklists 才是正式可执行知识。
+  - 关键规则必须保留来源、适用范围、状态和最后审核时间。
+  - 过期或被替代的规则必须移动到 deprecated 或标注 superseded_by。
+  - 任何来自论坛、博客、视频的内容不得未经审核直接进入 rules。
+  - 不允许存储真实密钥、密码、token、客户隐私数据。
+  - review_required=true 的内容不得进入正式项目决策。
+  - source_type=unknown 且无法验证的内容应移动到 quarantine。
+  - rejected 内容保留历史记录，不得作为知识来源。
+  - promote 必须由人工审核触发，并记录 reviewed_by、verification_method、review_note。
+  - search 默认只返回 rules、checklists、snippets；探索 raw/distilled 必须使用 research 或显式 include。

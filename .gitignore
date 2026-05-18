@@ -1,0 +1,12 @@
+.kb/
+.venv/
+__pycache__/
+*.pyc
+.env
+secrets.*
+private/
+tmp/
+exports/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

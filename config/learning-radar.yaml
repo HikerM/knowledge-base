@@ -1,0 +1,160 @@
+frontend:
+  learning_goal: 沉淀可复用的前端架构、组件、状态管理、性能、测试和可访问性规则。
+  frequency: weekly
+  focus:
+    - component architecture
+    - state management
+    - rendering behavior
+    - accessibility
+    - frontend testing
+    - build tooling
+  ignore:
+    - framework hype without migration path
+    - purely visual showcase
+    - outdated browser hacks
+  preferred_outputs:
+    - rules
+    - checklists
+    - snippets
+
+backend:
+  learning_goal: 沉淀 API、服务分层、鉴权、日志、缓存、队列、部署和可观测性规则。
+  frequency: weekly
+  focus:
+    - API design
+    - service architecture
+    - authentication
+    - authorization
+    - observability
+    - production readiness
+  ignore:
+    - vendor marketing without implementation detail
+    - framework-only tutorials with no production relevance
+  preferred_outputs:
+    - rules
+    - checklists
+    - snippets
+
+ui_ux:
+  learning_goal: 沉淀自适应 UI、设计系统、组件状态、Unity UI、Dashboard 和游戏 UI 规则。
+  frequency: weekly
+  focus:
+    - adaptive layout
+    - design systems
+    - component states
+    - Unity UI
+    - dashboard ergonomics
+    - accessibility
+  ignore:
+    - decorative trends without usability evidence
+    - one-off visual inspiration
+  preferred_outputs:
+    - rules
+    - checklists
+    - templates
+
+product:
+  learning_goal: 沉淀 PRD、MVP、用户路径、功能优先级、指标和竞品分析方法。
+  frequency: biweekly
+  focus:
+    - requirement definition
+    - user journey
+    - prioritization
+    - product metrics
+    - discovery
+  ignore:
+    - vague startup advice
+    - growth claims without metric definition
+  preferred_outputs:
+    - templates
+    - checklists
+    - rules
+
+algorithm:
+  learning_goal: 沉淀算法选择、复杂度分析、数据结构、搜索、图、动态规划和实现模板。
+  frequency: biweekly
+  focus:
+    - complexity analysis
+    - data structures
+    - graph algorithms
+    - dynamic programming
+    - implementation patterns
+  ignore:
+    - contest-only tricks without reusable value
+    - proofs without engineering application
+  preferred_outputs:
+    - snippets
+    - rules
+    - checklists
+
+database:
+  learning_goal: 沉淀数据建模、索引、事务、迁移、查询优化和缓存一致性规则。
+  frequency: weekly
+  focus:
+    - schema design
+    - indexing
+    - transactions
+    - query planning
+    - migrations
+    - consistency
+  ignore:
+    - benchmark claims without setup
+    - database-specific hacks outside current stack
+  preferred_outputs:
+    - rules
+    - checklists
+    - snippets
+
+performance:
+  learning_goal: 沉淀 Web、后端、数据库、Unity、网络、内存、渲染和压测规则。
+  frequency: weekly
+  focus:
+    - profiling
+    - Core Web Vitals
+    - memory
+    - rendering
+    - load testing
+    - observability
+  ignore:
+    - micro-optimizations without measured impact
+    - synthetic benchmarks without methodology
+  preferred_outputs:
+    - checklists
+    - rules
+    - snippets
+
+security:
+  learning_goal: 沉淀鉴权、授权、输入校验、XSS、SQL 注入、依赖漏洞和密钥管理规则。
+  frequency: weekly
+  focus:
+    - secure coding
+    - dependency vulnerabilities
+    - secrets management
+    - authentication
+    - authorization
+    - input validation
+  ignore:
+    - exploit details without defensive guidance
+    - unverified vulnerability rumors
+  preferred_outputs:
+    - rules
+    - checklists
+    - snippets
+
+ai_agent:
+  learning_goal: 沉淀 Codex、Skill、AGENTS.md、RAG、工具调用、上下文管理和 Agent 工作流规则。
+  frequency: weekly
+  focus:
+    - Codex workflow
+    - agent instructions
+    - tool use
+    - context management
+    - RAG
+    - MCP
+  ignore:
+    - prompt hacks without reproducible workflow
+    - agent claims without operational constraints
+  preferred_outputs:
+    - rules
+    - templates
+    - checklists
