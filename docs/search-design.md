@@ -65,7 +65,12 @@ python scripts/kb.py research --query "topic"
 
 ## deprecated 默认排除
 
-默认不返回 deprecated layer 或 status。只有传入 `--include-deprecated` 时才返回。deprecated 内容必须带有替代说明，尤其是正式规则被废弃时应标注 `superseded_by`。
+deprecated 包括两种独立信号：
+
+- 路径层级为 `layer=deprecated`。
+- frontmatter 标记为 `status=deprecated`，即使文件仍位于 `rules`、`checklists` 或 `snippets` 等正式层。
+
+默认 `search` 同时排除这两类 deprecated 内容。`--include-deprecated` 是唯一显式放行方式；未传入时，即使用户指定 `--status deprecated` 也不会返回 deprecated 内容。deprecated 内容必须带有替代说明，尤其是正式规则被废弃时应标注 `superseded_by`。
 
 ## raw 低权重策略
 

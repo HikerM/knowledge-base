@@ -194,6 +194,8 @@ def row_matches_filters(row: Dict[str, Any], args: argparse.Namespace, allowed_l
         return False
     if row.get("layer") not in allowed_layers:
         return False
+    if not getattr(args, "include_deprecated", False) and row.get("status") == "deprecated":
+        return False
     if args.type and row.get("type") != args.type:
         return False
     if args.status and row.get("status") != args.status:
@@ -294,6 +296,9 @@ def run_search(args: argparse.Namespace) -> Dict[str, Any]:
             params.append(args.category)
         where.append("d.layer IN (" + ",".join("?" for _ in allowed_layers) + ")")
         params.extend(allowed_layers)
+        if not getattr(args, "include_deprecated", False):
+            where.append("COALESCE(d.status, '') != ?")
+            params.append("deprecated")
         if args.type:
             where.append("d.type = ?")
             params.append(args.type)
