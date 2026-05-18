@@ -243,6 +243,14 @@ python tests/smoke_test.py
 
 覆盖内容包括：`init`、`add-raw`、`index`、默认 search 不返回 raw、promote 来源门禁、`internal_practice` promote、promote 后 search、单文件 open、`stats`、`doctor`、`benchmark`。
 
+大型性能 smoke 不进入默认 CI，需要本地手动运行：
+
+```bash
+python tests/perf_10k_smoke.py
+```
+
+`perf_10k_smoke.py` 会在临时目录复制项目并生成 10,000 个 Markdown 文档，覆盖 `raw`、`distilled`、`rules`、`checklists`、`snippets`、`deprecated`，然后运行首次 `index`、第二次 `index`、`search` 和 `stats`。它输出 `document_count`、`chunk_count`、`first_index_elapsed_ms`、`second_index_elapsed_ms`、`search_elapsed_ms`、`skipped`、`hashed` 和 `index_size_bytes`。第二次 `index` 应接近全量 skipped，`hashed` 应为 0 或接近 0。
+
 ## CI 与自动验收
 
 GitHub Actions 配置在 [.github/workflows/ci.yml](D:/AI/personal-knowledge-base/.github/workflows/ci.yml)。每次 `push` 和 `pull_request` 都会运行：
@@ -422,6 +430,24 @@ python scripts/kb.py maintenance --vacuum
 - 报告和日志要归档或轮转，大型报告按需读取。
 
 `index` 使用 `path + mtime + size` 优先判断文件是否变化。未变化文件直接 skipped；只有新文件、mtime/size 变化或显式 `--force-hash` 时才计算 sha256。
+
+## Large-scale mode
+
+大规模设计见 [docs/large-scale-performance.md](D:/AI/personal-knowledge-base/docs/large-scale-performance.md)，内存模型见 [docs/memory-model.md](D:/AI/personal-knowledge-base/docs/memory-model.md)。
+
+规模目标：
+
+- 10,000 docs：应流畅，启动不加载全文，搜索目标 < 300ms，第二次 index 目标 < 5s，UI 不阻塞。
+- 30,000 - 50,000 docs：优化后可稳定使用，需要更严格的批处理、后台任务、分页和内存上限。
+- 100,000+ docs：进入 large-scale mode，需要后台索引、分层优先、checkpoint/resume 和 workspace 分片。
+
+首次全量 `index` 可能较久，因为它必须读取 Markdown、解析 frontmatter、切 chunk、写入 `documents/chunks/chunks_fts`。这可以接受，但必须后台执行。软件启动不能等待首次全量 `index`，只能读取 workspace 配置、index 状态、统计信息和最近任务状态；index missing/stale 时只提示，不阻塞 UI。
+
+日常使用依赖增量 `index`。未变化文件通过 `path + mtime + size` 直接 skipped，不计算 sha256；只有新文件、mtime/size 变化文件或显式 `--force-hash` 才 hash。搜索仍只查 SQLite FTS5 / 索引，不读取 Markdown 全文；点击结果或 `open` 单篇时才读取完整 Markdown。
+
+未来 GUI 必须使用虚拟滚动、分页、lazy document loading、background workers、progress events、task cancellation、task logs、search debounce、filter chips 和 incremental result loading。GUI 不得一次渲染所有搜索结果，不得在 UI 主线程运行 index、audit、secret-scan、reindex、dedupe、conflicts、benchmark 或 maintenance。
+
+100K+ 建议 workspace 分片，而不是把所有历史资料塞进单一活跃 workspace：active / archive 分离、raw archive 分离、每个 workspace 独立 `.kb/index.sqlite`。跨 workspace search 可作为未来增强，不作为 100K 首版前提。
 
 ## EXE / Desktop app future direction
 

@@ -87,6 +87,18 @@ python scripts/kb.py research --query "react state" --category frontend
 - 所有维护命令默认不得删除、不得 promote、不得修改 raw/distilled/rules。
 - `vacuum`、`reindex`、cleanup、restore 等操作必须显式触发，并在 GUI 中要求确认。
 
+## 大规模性能与内存规则
+
+- 不得实现启动时全量扫描知识库。
+- 不得实现启动时全量读取 Markdown。
+- 不得实现启动时自动全量 index。
+- 不得让 GUI 一次渲染所有搜索结果。
+- 不得在 UI 主线程跑 index、audit、secret-scan、reindex、dedupe、conflicts、benchmark、maintenance、Git sync 或 backup/export。
+- 大规模功能必须考虑分页、Top-K、虚拟滚动、后台任务、内存上限和取消/恢复能力。
+- 10K/100K 相关改动必须说明性能影响，包括启动是否扫描文件、搜索是否读取 Markdown、缓存是否有上限、长任务是否后台化。
+- 搜索默认行为不得因大规模模式改变：默认仍只查 `rules`、`checklists`、`snippets`，并且只查 SQLite FTS5 / 索引。
+- 100K+ 场景优先考虑 workspace 分片、active/archive 分离和 per-workspace index，而不是把所有历史资料强塞进单个活跃索引。
+
 ## 学习雷达边界
 
 - Codex 可以帮助生成 learning queue。
