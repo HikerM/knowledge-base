@@ -43,6 +43,12 @@ jobs:
       - name: Run search quality tests
         run: python tests/search_quality_test.py
 
+      - name: Run search explain tests
+        run: python tests/search_explain_test.py
+
+      - name: Run performance smoke tests
+        run: python tests/perf_smoke.py
+
       - name: Run governance tests
         run: python tests/governance_test.py
 
