@@ -24,6 +24,17 @@ python scripts/kb.py workspace-status
 
 `workspace-status` 是未来 Windows EXE / GUI 的稳定启动路径。CLI 只调用 `WorkspaceStatusService`；未来 GUI 也应调用同一 service，而不是拼接 CLI 命令字符串。该路径只读 SQLite metadata / workspace status，不扫描 `knowledge/`，不读取 Markdown，不计算 hash，不运行 index。App startup != first index；first index 必须是用户显式触发的后台任务。
 
+Service-layer read paths：
+
+- Dashboard / startup：`WorkspaceStatusService` + `IndexMetadataService`。
+- Search View：`SearchService`，复用现有 SQLite FTS5 search 行为，不启用 slow scan。
+- Category View：`CategoryService`，读取 `config/categories.yaml` 和 SQLite `documents` metadata。
+- Review Queue：`ReviewQueueService`，分页读取 SQLite metadata。
+- Archive / Trash / Quarantine View：`ArchiveMetadataService`，分页读取 archive/deprecated/quarantine metadata。
+- Document Open：`DocumentService.open_document` 是正文读取入口，只能读取用户明确打开的单篇 Markdown。
+
+CLI 仍然是自动化、调试和验收入口，例如 `search-service`、`category-summary`、`review-queue-list`、`archive-list`、`document-open`。未来 GUI / EXE 必须直接调用 service layer，不能拼接 CLI 命令字符串作为集成方式。
+
 ## 代码结构
 
 - `scripts/kb.py`: CLI 入口，保留命令解析、命令处理和索引/搜索/治理流程。
@@ -33,7 +44,13 @@ python scripts/kb.py workspace-status
 - `knowledge_core/security.py`: secret-scan 的扫描规则、路径排除和脱敏逻辑。
 - `knowledge_app/services/workspace_status_service.py`: 长期稳定 startup status service，供 CLI 和未来 GUI/EXE 复用。
 - `knowledge_app/services/index_metadata_service.py`: 只读 SQLite metadata service，不创建索引、不扫描 Markdown、不 hash。
+- `knowledge_app/services/search_service.py`: Search View 的 SQLite FTS service wrapper。
+- `knowledge_app/services/category_service.py`: Category View 的 config + SQLite metadata service。
+- `knowledge_app/services/review_queue_service.py`: Review Queue 的分页 metadata service。
+- `knowledge_app/services/archive_metadata_service.py`: Archive / Deprecated / Quarantine 的分页 metadata service。
+- `knowledge_app/services/document_service.py`: 显式单篇 Markdown open service。
 - `knowledge_app/models/workspace_status.py`: `workspace-status` 稳定输出模型。
+- `knowledge_app/models/search_result.py`: service-layer search 输出模型。
 - `knowledge_app/models/operation_result.py`: service 层结构化结果模型。
 
 ## 目录结构

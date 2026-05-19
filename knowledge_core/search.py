@@ -11,11 +11,13 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .frontmatter import parse_frontmatter
 from .indexer import (
+    IndexerError,
     connect_db,
     ensure_schema,
     iter_markdown_files,
     normalize_document_meta,
 )
+from . import paths as core_paths
 from .markdown import chunk_markdown, read_single_markdown
 from .paths import DEFAULT_SEARCH_LAYERS, EXPLORATORY_LAYERS
 
@@ -275,13 +277,26 @@ def run_slow_scan(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
-def run_search(args: argparse.Namespace) -> Dict[str, Any]:
+def connect_search_db(read_only: bool = False) -> sqlite3.Connection:
+    if not read_only:
+        conn = connect_db(must_exist=True)
+        ensure_schema(conn)
+        return conn
+    if not core_paths.DB_PATH.exists():
+        raise IndexerError("index.sqlite does not exist. Run: python scripts/kb.py index")
+    uri = f"{core_paths.DB_PATH.resolve().as_uri()}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA query_only=ON")
+    return conn
+
+
+def run_search(args: argparse.Namespace, read_only: bool = False) -> Dict[str, Any]:
     start = time.perf_counter()
     if args.slow_scan:
         return run_slow_scan(args)
     top_k = validate_top_k(args.top_k, args.force)
-    conn = connect_db(must_exist=True)
-    ensure_schema(conn)
+    conn = connect_search_db(read_only=read_only)
 
     fts_query = build_fts_query(args.query)
     query_tokens = re.findall(r"[\w]+", args.query, flags=re.UNICODE)

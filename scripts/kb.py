@@ -47,9 +47,6 @@ from knowledge_core.indexer import (
     query_documents,
 )
 from knowledge_core.lifecycle import LifecycleError
-from knowledge_core.markdown import (
-    read_single_markdown,
-)
 from knowledge_core.paths import (
     CONFIG_DIR,
     DB_PATH,
@@ -64,7 +61,6 @@ from knowledge_core.paths import (
     PathConfigError,
     ensure_directories,
     resolve_user_path,
-    to_relative_posix,
     write_if_missing,
 )
 from knowledge_core.quality import (
@@ -84,6 +80,11 @@ from knowledge_core.reports import (
 )
 from knowledge_core.security import run_secret_scan
 from knowledge_core.search import DEFAULT_TOP_K, SearchError, run_search
+from knowledge_app.services.archive_metadata_service import ArchiveMetadataService
+from knowledge_app.services.category_service import CategoryService
+from knowledge_app.services.document_service import DocumentService
+from knowledge_app.services.review_queue_service import ReviewQueueService
+from knowledge_app.services.search_service import SearchService
 from knowledge_app.services.workspace_status_service import WorkspaceStatusService
 
 
@@ -214,6 +215,16 @@ def print_json(data: Any) -> None:
     print(json.dumps(data, ensure_ascii=False, indent=2))
 
 
+def print_service_result(result: Any) -> None:
+    if getattr(result, "data", None) is not None:
+        data = result.data
+        print_json(data.to_dict() if hasattr(data, "to_dict") else data)
+    else:
+        print_json(result.to_dict())
+    if not getattr(result, "success", False):
+        raise SystemExit(1)
+
+
 def die(message: str, code: int = 1) -> None:
     raise KBError(message)
 
@@ -284,30 +295,15 @@ def command_search(args: argparse.Namespace) -> None:
 
 
 def command_open(args: argparse.Namespace) -> None:
-    start = time.perf_counter()
-    path: Optional[Path] = None
-    metadata: Dict[str, Any] = {}
-
-    if args.id is not None:
-        conn = connect_db(must_exist=True)
-        row = conn.execute("SELECT id, path, title, category, layer FROM documents WHERE id = ?", (args.id,)).fetchone()
-        if not row:
-            die(f"No document with id={args.id}")
-        path = ROOT / row["path"]
-        metadata = dict(row)
-    elif args.path:
-        path = resolve_user_path(args.path)
-        metadata = {"path": to_relative_posix(path) if path.exists() else args.path}
-    else:
-        die("open requires --path or --id")
-
-    if not path.exists():
-        die(f"File not found: {path}")
-    content = read_single_markdown(path)
+    result = DocumentService().open_document(document_id=args.id, path=args.path)
+    if not result.success or not result.data:
+        die("; ".join(result.errors) or "open failed")
+    payload = result.data
+    metadata = dict(payload.get("metadata") or {"path": payload["path"]})
     print("--- kb-open-meta ---")
-    print_json({**metadata, "elapsed_ms": elapsed_ms(start)})
+    print_json({**metadata, "elapsed_ms": payload["elapsed_ms"]})
     print("--- kb-open-content ---")
-    print(content)
+    print(payload["content"])
 
 
 def command_list(args: argparse.Namespace) -> None:
@@ -324,6 +320,58 @@ def command_workspace_status(_: argparse.Namespace) -> None:
         print_json(result.to_dict())
         return
     print_json(result.data.to_dict())
+
+
+def command_search_service(args: argparse.Namespace) -> None:
+    filters = {
+        "category": args.category,
+        "layer": args.layer,
+        "type": args.type,
+        "status": args.status,
+        "confidence": args.confidence,
+        "source_type": args.source_type,
+    }
+    include_options = {
+        "include_distilled": args.include_distilled,
+        "include_raw": args.include_raw,
+        "include_deprecated": args.include_deprecated,
+        "force": args.force,
+    }
+    result = SearchService().search(
+        query=args.query,
+        filters=filters,
+        top_k=args.top_k,
+        include_options=include_options,
+        explain_score=args.explain_score,
+    )
+    print_service_result(result)
+
+
+def command_category_summary(args: argparse.Namespace) -> None:
+    service = CategoryService()
+    result = service.get_category_summary(args.category) if args.category else service.list_categories()
+    print_service_result(result)
+
+
+def command_review_queue_list(args: argparse.Namespace) -> None:
+    result = ReviewQueueService().list_review_queue(limit=args.limit, offset=args.offset, category_id=args.category)
+    print_service_result(result)
+
+
+def command_archive_list(args: argparse.Namespace) -> None:
+    service = ArchiveMetadataService()
+    if args.kind == "deprecated":
+        result = service.list_deprecated(limit=args.limit, offset=args.offset, category_id=args.category)
+    elif args.kind == "quarantine":
+        result = service.list_quarantine(limit=args.limit, offset=args.offset, category_id=args.category)
+    else:
+        result = service.list_archived(limit=args.limit, offset=args.offset, category_id=args.category)
+    print_service_result(result)
+
+
+def command_document_open(args: argparse.Namespace) -> None:
+    result = DocumentService().open_document(document_id=args.id, path=args.path)
+    print_service_result(result)
 
 
 def resolve_document_path(path_text: Optional[str], document_id: Optional[int]) -> Path:
@@ -605,6 +653,60 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show startup-safe workspace/index status from SQLite metadata only.",
     )
     p_workspace_status.set_defaults(func=command_workspace_status)
+
+    p_search_service = sub.add_parser(
+        "search-service",
+        help="Service-layer SQLite FTS search wrapper for future GUI/EXE callers.",
+    )
+    p_search_service.add_argument("--query", required=True)
+    p_search_service.add_argument("--category", choices=category_choices())
+    p_search_service.add_argument("--layer", choices=LAYERS)
+    p_search_service.add_argument("--type")
+    p_search_service.add_argument("--status", choices=sorted(STATUS_VALUES))
+    p_search_service.add_argument("--confidence", choices=sorted(CONFIDENCE_VALUES))
+    p_search_service.add_argument("--source-type", dest="source_type", choices=sorted(SOURCE_TYPE_VALUES))
+    p_search_service.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
+    p_search_service.add_argument("--include-distilled", action="store_true")
+    p_search_service.add_argument("--include-raw", action="store_true")
+    p_search_service.add_argument("--include-deprecated", action="store_true")
+    p_search_service.add_argument("--force", action="store_true")
+    p_search_service.add_argument("--explain-score", action="store_true")
+    p_search_service.set_defaults(func=command_search_service)
+
+    p_category_summary = sub.add_parser(
+        "category-summary",
+        help="Service-layer category counts from config and SQLite metadata.",
+    )
+    p_category_summary.add_argument("--category", choices=category_choices())
+    p_category_summary.set_defaults(func=command_category_summary)
+
+    p_review_queue_list = sub.add_parser(
+        "review-queue-list",
+        help="Service-layer paginated review queue from SQLite metadata.",
+    )
+    p_review_queue_list.add_argument("--category", choices=category_choices())
+    p_review_queue_list.add_argument("--limit", type=int, default=50)
+    p_review_queue_list.add_argument("--offset", type=int, default=0)
+    p_review_queue_list.set_defaults(func=command_review_queue_list)
+
+    p_archive_list = sub.add_parser(
+        "archive-list",
+        help="Service-layer archive/deprecated/quarantine metadata listing.",
+    )
+    p_archive_list.add_argument("--kind", choices=["archived", "deprecated", "quarantine"], default="archived")
+    p_archive_list.add_argument("--category", choices=category_choices())
+    p_archive_list.add_argument("--limit", type=int, default=50)
+    p_archive_list.add_argument("--offset", type=int, default=0)
+    p_archive_list.set_defaults(func=command_archive_list)
+
+    p_document_open = sub.add_parser(
+        "document-open",
+        help="Service-layer explicit single-document Markdown open.",
+    )
+    document_group = p_document_open.add_mutually_exclusive_group(required=True)
+    document_group.add_argument("--path")
+    document_group.add_argument("--id", type=int)
+    p_document_open.set_defaults(func=command_document_open)
 
     p_sources = sub.add_parser("sources", help="List configured learning sources without fetching content.")
     p_sources.add_argument("--category", choices=category_choices())
