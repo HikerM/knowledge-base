@@ -125,6 +125,45 @@ audit / stale / conflicts / deprecate
 - archive 不得破坏 `source_url`、`source_file`、`promoted_from`、`supersedes`、`superseded_by` 等来源链路。
 - `rules`、`checklists`、`snippets` 必须少而准，优先保持 canonical；raw 可以多，但必须可整理、可归档、可恢复。
 
+## Generic Workspace / Template System
+
+下一阶段是 Generic Workspace / Template System，设计见 [docs/generic-workspace-template-system.md](D:/AI/personal-knowledge-base/docs/generic-workspace-template-system.md) 和 [docs/category-management-design.md](D:/AI/personal-knowledge-base/docs/category-management-design.md)。目标是把本项目从单一“开发者知识库”升级为可创建不同 workspace、选择不同模板、配置不同分类/来源/提炼规则/质量规则的通用知识库引擎。
+
+Workspace 是一个独立知识库实例，包含：
+
+- `knowledge/`
+- `config/`
+- `templates/`
+- `reports/`
+- `.kb/index.sqlite`
+- `workspace.yaml`
+
+为什么需要 workspace：
+
+- 不同用户或不同领域可以使用不同模板，例如 Developer、Designer、Product、Research、AI Agent 或 Custom Knowledge Base。
+- 每个 workspace 可以有独立 categories、sources、learning-radar、extract-rules、quality-rules、review cycles 和 Markdown templates。
+- 10W+ 场景下，workspace 分片比把所有历史资料强塞进一个活跃索引更可控。
+- archive workspace 可以单独存在，降低 active working set，又保留可恢复历史。
+
+为什么分类不能直接删除：
+
+- category 不只是目录名，还被 Markdown frontmatter、SQLite index、reports、sources、templates、promoted_from、supersedes、superseded_by 等链路引用。
+- 非空 category 直接删除会破坏来源链路和治理闭环。
+- 默认应使用 disable、archive、merge、restore；只有空分类、无 references、无 files、无 reports 依赖时才允许 advanced delete，并且必须先生成 delete plan。
+
+为什么 `display_name` 和 `category_id` 要分离：
+
+- `category_id` 是稳定身份，用于 frontmatter、SQLite、配置引用、报告引用和未来 GUI 内部引用。
+- `display_name` 只用于 UI 和报告展示，可翻译、可改名，不应影响搜索过滤或历史引用。
+- `path` 可迁移，但属于危险操作，必须先生成 migration plan；不能因为改显示名称就移动文件。
+
+为什么每个 workspace 独立 `.kb/index.sqlite`：
+
+- `.kb/index.sqlite` 是该 workspace 从 Markdown 派生的可重建索引，不是事实来源。
+- workspace 切换时只打开当前 workspace 的 index，不扫描其他 workspace。
+- startup 只读取当前 workspace metadata / index metadata，不全量读取 Markdown、不自动全量 index。
+- cross-workspace search 是未来增强，不应影响当前默认 search 行为。
+
 ## 常用流程
 
 初始化：
