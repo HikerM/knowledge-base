@@ -35,6 +35,13 @@ Service-layer read paths：
 
 CLI 仍然是自动化、调试和验收入口，例如 `search-service`、`category-summary`、`review-queue-list`、`archive-list`、`document-open`。未来 GUI / EXE 必须直接调用 service layer，不能拼接 CLI 命令字符串作为集成方式。
 
+GUI Design Contract：
+
+- 未来 Windows GUI 的 Product UI Architecture Contract 见 [docs/gui-product-ui-architecture.md](D:/AI/personal-knowledge-base/docs/gui-product-ui-architecture.md)。
+- 当前文档只是 GUI Phase 0 架构合同，不是 GUI 实现，不包含 EXE 打包，也不做 Tauri / Electron / PySide / WinUI 等实现选型。
+- GUI Phase 1 只能做 read-only MVP：startup、search、category/library、document open、task status read path。
+- GUI Phase 1 不暴露 category `display_name` / `description` execute，不接入 destructive execute。
+
 Plan-only mutation services：
 
 - 所有会修改 Markdown、config、workspace、category、template 的操作必须 plan-first。
@@ -625,6 +632,8 @@ python scripts/kb.py maintenance --vacuum
 100K+ 建议 workspace 分片，而不是把所有历史资料塞进单一活跃 workspace：active / archive 分离、raw archive 分离、每个 workspace 独立 `.kb/index.sqlite`。跨 workspace search 可作为未来增强，不作为 100K 首版前提。
 
 ## EXE / Desktop app future direction
+
+GUI Product UI Architecture Contract 见 [docs/gui-product-ui-architecture.md](D:/AI/personal-knowledge-base/docs/gui-product-ui-architecture.md)。当前只完成 Phase 0 架构合同；它用于约束未来 GUI 设计和实现边界，不代表已经实现 GUI、打包 EXE 或完成技术选型。
 
 未来 Windows EXE / GUI 的正确架构是：
 

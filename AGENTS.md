@@ -127,6 +127,10 @@ python scripts/kb.py research --query "react state" --category frontend
 
 ## 长期运维与 GUI / EXE 边界
 
+- GUI 开发必须先遵守 `docs/gui-product-ui-architecture.md` 中的 Product UI Architecture Contract。
+- GUI Phase 1 只能做 read-only MVP：startup、search、category/library、document open、task status read path。
+- GUI Phase 1 不得暴露 category `display_name` / `description` execute。
+- GUI 不得提前接入 destructive execute；archive、delete、merge、template apply、restore execute 在 service 明确支持前必须 disabled 或 plan-only。
 - 后续 GUI 任务必须先设计 service boundary，再实现界面。
 - GUI 不得直接读写 Markdown 或 SQLite；必须通过 service/core API 访问。
 - GUI 不得通过拼接 CLI 命令字符串作为主要集成方式。
