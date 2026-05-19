@@ -21,7 +21,7 @@
 - archive 必须可恢复。恢复也必须先生成 plan，不能覆盖当前 canonical 内容。
 - organize/archive 默认只生成 plan，不自动移动文件、不删除文件、不改写 Markdown。
 - `archive`、`restore`、`deprecate`、`quarantine` 必须人工确认。
-- archive 前建议有 Git snapshot、tag、backup/export 或等价快照。
+- archive 前建议有 local snapshot / backup；Git snapshot、tag 只能作为高级用户可选补充。
 - archive 不能破坏 `source_url`、`source_file`、`promoted_from`、`supersedes`、`superseded_by` 等来源链路。
 
 ## 2. Archive 不是删除
@@ -217,7 +217,7 @@ knowledge/09-ai-agent/archive/distilled/...
 优点：
 
 - 路径简单。
-- Git history 和同 category 语境容易查看。
+- 本地 snapshot manifest、可选 Git history 和同 category 语境容易查看。
 - 现有工具适配成本较低。
 
 限制：

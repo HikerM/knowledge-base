@@ -249,7 +249,8 @@ Markdown 卡片应短而结构化。建议：
 Desktop GUI
   -> service layer
   -> knowledge_core
-  -> Markdown + SQLite + Git
+  -> Markdown + SQLite + Local Backup/Snapshot
+  -> Optional Git Sync
 ```
 
 GUI 写入必须通过 service/core API，由 core 负责：
@@ -262,7 +263,7 @@ GUI 写入必须通过 service/core API，由 core 负责：
 - 增量 index 调度。
 - 错误详情和日志路径。
 
-UI 主线程不得执行 index、audit、secret-scan、reindex、dedupe、conflicts、benchmark、maintenance、Git sync 或 backup/export。
+UI 主线程不得执行 index、audit、secret-scan、reindex、dedupe、conflicts、benchmark、maintenance、Optional Git Sync 或 backup/export。
 
 ## 9. 来源链路与生命周期保留
 
