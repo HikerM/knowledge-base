@@ -25,8 +25,8 @@ class TaskStatus(str, Enum):
 class TaskType(str, Enum):
     """Known task types.
 
-    Only a small safe subset is executable. v1.8.0 adds the lowest-risk
-    category display_name mutation; future destructive task types are
+    Only a small safe subset is executable. v1.8.x adds low-risk category
+    config mutations for display_name and description; future destructive task types are
     represented here so callers can create records without accidentally
     enabling execution.
     """
@@ -37,6 +37,7 @@ class TaskType(str, Enum):
     AUDIT = "audit"
     INDEX = "index"
     CATEGORY_UPDATE_DISPLAY_NAME_EXECUTE = "category_update_display_name_execute"
+    CATEGORY_UPDATE_DESCRIPTION_EXECUTE = "category_update_description_execute"
     FUTURE_RESTORE = "future_restore"
     FUTURE_ARCHIVE = "future_archive"
     FUTURE_TEMPLATE_APPLY = "future_template_apply"

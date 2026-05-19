@@ -33,4 +33,4 @@ security:
 ai_agent:
   display_name: "AI Agent"
   path: knowledge/09-ai-agent
-  description: Codex、Skill、AGENTS.md、RAG、工具调用、上下文管理、Agent 工作流
+  description: "AI Agent knowledge and Codex governance"

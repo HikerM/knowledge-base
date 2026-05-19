@@ -111,6 +111,112 @@ class CategoryPlanService:
             elapsed_ms=elapsed_ms(start),
         )
 
+    def update_description_plan(
+        self,
+        category_id: str,
+        new_description: str,
+        allow_empty_description: bool = False,
+    ) -> PlanResult:
+        start = time.perf_counter()
+        category_id = category_id.strip()
+        new_description = new_description.strip()
+        categories = load_categories_for_workspace(self.workspace_path)
+        blockers: List[str] = []
+        warnings: List[str] = []
+        if not category_id:
+            blockers.append("category_id must not be empty")
+        category = categories.get(category_id)
+        if not category:
+            blockers.append(f"unknown category_id: {category_id}")
+            category = {}
+        if "\n" in new_description or "\r" in new_description:
+            blockers.append("new_description must be a single line")
+        if not new_description and not allow_empty_description:
+            blockers.append("new_description is empty; pass --allow-empty-description to intentionally clear it")
+
+        old_description = str(category.get("description") or "")
+        if category and old_description == new_description:
+            warnings.append("new_description is identical to the current description")
+        if not new_description and allow_empty_description:
+            warnings.append("description will be intentionally cleared")
+
+        return PlanResult(
+            plan_type="category_update_description",
+            summary="Plan to update category description only; no identity, path, Markdown, or index changes are performed.",
+            target={
+                "category_id": category_id,
+                "old_description": old_description,
+                "new_description": new_description,
+                "allow_empty_description": bool(allow_empty_description),
+                "workspace_path": str(self.workspace_path),
+            },
+            affected_files=[
+                {
+                    "scope": "markdown",
+                    "count": 0,
+                    "count_source": "not_applicable",
+                    "note": "description change does not edit Markdown files",
+                }
+            ],
+            affected_configs=[
+                {
+                    "path": relative_to_workspace(self.categories_path, self.workspace_path),
+                    "operation": "would_update_field",
+                    "field": f"{category_id}.description",
+                    "would_overwrite": False,
+                }
+            ],
+            affected_categories=[
+                {
+                    "category_id": category_id,
+                    "display_name": str(category.get("display_name") or category_id),
+                    "path": str(category.get("path") or ""),
+                    "old_description": old_description,
+                    "new_description": new_description,
+                    "allow_empty_description": bool(allow_empty_description),
+                }
+            ],
+            affected_sources=[],
+            risks=[
+                "description is presentation metadata; category_id and path must remain unchanged",
+            ],
+            blockers=blockers,
+            warnings=warnings,
+            requires_snapshot=True,
+            requires_confirmation=True,
+            reversible=True,
+            rollback_plan=[
+                f"Restore {category_id}.description to {old_description!r} in config/categories.yaml.",
+            ],
+            validation_commands=[
+                "python scripts/kb.py category-summary",
+                f"python scripts/kb.py category-summary --category {category_id}",
+                "python scripts/kb.py audit",
+                "python scripts/kb.py secret-scan",
+            ],
+            actions=[
+                {
+                    "action": "plan_update_config_field",
+                    "status": "blocked" if blockers else "planned_not_executed",
+                    "path": "config/categories.yaml",
+                    "field": f"{category_id}.description",
+                    "from": old_description,
+                    "to": new_description,
+                },
+                {
+                    "action": "plan_preserve_category_identity",
+                    "status": "planned_not_executed",
+                    "fields": ["category_id", "display_name", "path", "slug"],
+                },
+                {
+                    "action": "plan_no_markdown_changes",
+                    "status": "planned_not_executed",
+                    "reason": "description does not affect category_id, path, or frontmatter",
+                },
+            ],
+            elapsed_ms=elapsed_ms(start),
+        )
+
     def archive_category_plan(self, category_id: str) -> PlanResult:
         start = time.perf_counter()
         categories = load_categories_for_workspace(self.workspace_path)

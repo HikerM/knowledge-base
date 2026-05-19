@@ -43,10 +43,13 @@ Plan-only mutation services：
 - `actions` 是计划动作，不是已执行动作；`validation_commands` 必须始终存在，供未来 GUI 直接展示和执行前确认。
 - v1.8.0 起点阶段建立 Safe Execute Mutation Framework：所有真实 execute mutation 必须经过 plan + local snapshot + approval + TaskQueue。
 - v1.8.0 只允许一个最低风险执行动作：`category_update_display_name_execute`，并且只能修改 `config/categories.yaml` 中的 `display_name`，不得 path rename，不得改 Markdown，不得改 SQLite schema。
+- v1.8.1 新增第二个低风险 config-only 执行动作：`category_update_description_execute`，并且只能修改 `config/categories.yaml` 中的 `description`。空 description 必须通过 `--allow-empty-description` 明确表示 intentional clear。
+- category identity/path mutation 仍禁止：不得修改 `category_id`、`path`、slug 或由显示字段触发目录迁移。
 - archive、delete、merge、template apply、restore 的真实执行仍是 future work；对应命令只允许 plan 或 unsupported，不得移动文件、删除文件或改写 Markdown。
 - archive、merge、delete、template apply、restore 的未来执行必须先创建 local snapshot / backup；Git 只能作为可选高级同步，不是恢复前置条件。
 - CLI wrappers：`category-update-display-name-plan`、`category-archive-plan`、`category-merge-plan`、`category-delete-plan`、`template-apply-plan`、`workspace-upgrade-plan`、`workspace-archive-plan`、`workspace-delete-plan`。
 - Safe mutation CLI wrappers：`category-update-display-name-approve` 生成 plan、创建 snapshot 并保存 approval；`category-update-display-name-execute` 创建并运行 TaskQueue task。没有 approval、approval 过期、plan hash 不匹配或 snapshot 缺失时必须拒绝执行。
+- Description safe mutation CLI wrappers：`category-update-description-plan`、`category-update-description-approve`、`category-update-description-execute`。它们遵守同样的 plan hash、snapshot、approval expiry 和 TaskQueue 门禁。
 
 Backup / Snapshot services：
 
@@ -68,7 +71,7 @@ TaskQueue baseline / enhancement：
 - retry 只能针对 failed / cancelled task，并且必须通过 `retry_of` / `retry_root` / `retry_attempt` 保留原 task 链路。
 - cleanup 必须 plan-first；`task-cleanup-plan` 只输出候选清理计划，不删除 `.kb/tasks/` 文件。
 - `future_restore`、`future_archive`、`future_template_apply` 只能创建 task record；执行时必须返回 blocked / unsupported，不得执行真实 destructive mutation。
-- v1.8.0 在 TaskQueue 中只接入 `category_update_display_name_execute`；task input 必须包含 `category_id`、`new_display_name`、`approval_id`，result_summary 必须包含 `MutationResult`。
+- v1.8.x 在 TaskQueue 中只接入 `category_update_display_name_execute` 和 `category_update_description_execute`；task input 必须包含目标 category、新值和 `approval_id`，result_summary 必须包含 `MutationResult`。
 - destructive task 只能在后续阶段接入，并且必须先满足 plan、snapshot / backup、人工确认、TaskQueue、错误详情、日志和可回滚要求。
 - CLI wrappers：`task-create`、`task-run`、`task-status`、`task-list`、`task-cancel`、`task-progress`、`task-log`、`task-retry`、`task-cleanup-plan`。所有输出都是 JSON；`task-create` 只创建 pending task，`task-run` 才执行。
 
@@ -86,14 +89,14 @@ TaskQueue baseline / enhancement：
 - `knowledge_app/services/review_queue_service.py`: Review Queue 的分页 metadata service。
 - `knowledge_app/services/archive_metadata_service.py`: Archive / Deprecated / Quarantine 的分页 metadata service。
 - `knowledge_app/services/document_service.py`: 显式单篇 Markdown open service。
-- `knowledge_app/services/category_plan_service.py`: category display name、archive、merge、delete 的 plan-only service。
+- `knowledge_app/services/category_plan_service.py`: category display name、description、archive、merge、delete 的 plan-only service。
 - `knowledge_app/services/template_plan_service.py`: template list/apply 的 plan-only service。
 - `knowledge_app/services/workspace_plan_service.py`: workspace upgrade、archive、delete 的 plan-only service。
 - `knowledge_app/services/backup_service.py`: 本地 zip backup 创建、列表和校验 service。
 - `knowledge_app/services/snapshot_service.py`: pre-operation snapshot service，复用 backup service。
 - `knowledge_app/services/restore_plan_service.py`: read-only restore plan service。
 - `knowledge_app/services/task_queue_service.py`: 文件系统 TaskQueue baseline，持久化 `.kb/tasks/<task_id>/task.json`、progress events 和 task logs。
-- `knowledge_app/services/safe_mutation_service.py`: v1.8.0 safe execute mutation service，管理 snapshot-backed approval，并只执行 category display_name 更新。
+- `knowledge_app/services/safe_mutation_service.py`: v1.8.x safe execute mutation service，管理 snapshot-backed approval，并只执行 category display_name / description 更新。
 - `knowledge_app/models/workspace_status.py`: `workspace-status` 稳定输出模型。
 - `knowledge_app/models/search_result.py`: service-layer search 输出模型。
 - `knowledge_app/models/operation_result.py`: service 层结构化结果模型。
@@ -643,7 +646,7 @@ GUI 不应直接读写 Markdown 或 SQLite，也不应通过拼接 CLI 命令字
 
 长期任务必须后台化，包括 index、reindex、audit、secret-scan、dedupe、conflicts、benchmark、maintenance、Optional Git Sync、backup/export 和 learning queue generation。任务需要 task_id、status、progress、cancellation、retry、error detail、log path 和 result summary。
 
-v1.7.0 起，后台任务的稳定边界是 `TaskQueueService`。GUI / EXE 应调用 service API 创建、查询、取消和运行任务，UI 主线程不得直接执行 index/audit/backup/restore/archive/template apply。v1.8.0 当前安全执行只接入 `noop`、`workspace_status`、`backup_create`、`audit`、`index` 和最低风险的 `category_update_display_name_execute`；后者必须先有 plan、snapshot、approval，并且只写 `config/categories.yaml`。GUI 可通过 task progress/log API 轮询或订阅任务状态。Task cleanup 必须 plan-first；retry 必须保留 `retry_of` 链路；cancellation 是 cooperative。restore/archive/delete/merge/template apply 等 destructive task 仍是 future work。
+v1.7.0 起，后台任务的稳定边界是 `TaskQueueService`。GUI / EXE 应调用 service API 创建、查询、取消和运行任务，UI 主线程不得直接执行 index/audit/backup/restore/archive/template apply。v1.8.x 当前安全执行只接入 `noop`、`workspace_status`、`backup_create`、`audit`、`index` 以及最低风险的 `category_update_display_name_execute`、`category_update_description_execute`；两者都必须先有 plan、snapshot、approval，并且只写 `config/categories.yaml` 的对应展示字段。GUI 可通过 task progress/log API 轮询或订阅任务状态。Task cleanup 必须 plan-first；retry 必须保留 `retry_of` 链路；cancellation 是 cooperative。restore/archive/delete/merge/template apply 等 destructive task 仍是 future work。
 
 当前不做 GUI、不做 EXE 打包、不做 Tauri/Electron/PySide/WinUI 选型。未来路线建议：
 

@@ -389,6 +389,15 @@ def command_category_update_display_name_plan(args: argparse.Namespace) -> None:
     print_plan_result(plan)
 
 
+def command_category_update_description_plan(args: argparse.Namespace) -> None:
+    plan = CategoryPlanService().update_description_plan(
+        args.category,
+        args.new_description,
+        allow_empty_description=args.allow_empty_description,
+    )
+    print_plan_result(plan)
+
+
 def command_category_update_display_name_approve(args: argparse.Namespace) -> None:
     plan = CategoryPlanService().update_display_name_plan(args.category, args.new_display_name)
     if plan.blocked:
@@ -396,6 +405,48 @@ def command_category_update_display_name_approve(args: argparse.Namespace) -> No
         raise SystemExit(1)
     snapshot = SnapshotService().create_snapshot(
         reason=f"category-update-display-name-{args.category}",
+        include_index=False,
+    )
+    if not snapshot.success:
+        print_json({"success": False, "errors": list(snapshot.errors), "snapshot": snapshot.to_dict(), "plan": plan.to_dict()})
+        raise SystemExit(1)
+    try:
+        approval = SafeMutationService().create_approval(
+            plan_result=plan,
+            approved_by=args.approved_by,
+            snapshot_path=snapshot.backup_path,
+        )
+    except SafeMutationError as exc:
+        print_json(
+            {
+                "success": False,
+                "error": {"code": exc.code, "message": str(exc)},
+                "snapshot": snapshot.to_dict(),
+                "plan": plan.to_dict(),
+            }
+        )
+        raise SystemExit(1)
+    print_json(
+        {
+            "success": True,
+            "approval_id": approval.approval_id,
+            "snapshot_path": approval.snapshot_path,
+            "approval": approval.to_dict(),
+        }
+    )
+
+
+def command_category_update_description_approve(args: argparse.Namespace) -> None:
+    plan = CategoryPlanService().update_description_plan(
+        args.category,
+        args.new_description,
+        allow_empty_description=args.allow_empty_description,
+    )
+    if plan.blocked:
+        print_json({"success": False, "errors": list(plan.blockers), "plan": plan.to_dict()})
+        raise SystemExit(1)
+    snapshot = SnapshotService().create_snapshot(
+        reason=f"category-update-description-{args.category}",
         include_index=False,
     )
     if not snapshot.success:
@@ -437,6 +488,25 @@ def command_category_update_display_name_execute(args: argparse.Namespace) -> No
             "approval_id": args.approval_id,
         },
         description="Safe mutation execute for category display_name only.",
+        cancellable=True,
+    )
+    result = TaskQueueService().run_task(record.task_id)
+    print_json(result.to_dict())
+    if not result.success:
+        raise SystemExit(1)
+
+
+def command_category_update_description_execute(args: argparse.Namespace) -> None:
+    record = TaskQueueService().create_task(
+        task_type=TaskType.CATEGORY_UPDATE_DESCRIPTION_EXECUTE,
+        title=f"Execute category description update: {args.category}",
+        input={
+            "category_id": args.category,
+            "new_description": args.new_description,
+            "approval_id": args.approval_id,
+            "allow_empty_description": bool(args.allow_empty_description),
+        },
+        description="Safe mutation execute for category description only.",
         cancellable=True,
     )
     result = TaskQueueService().run_task(record.task_id)
@@ -938,6 +1008,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_category_update_display_name_plan.add_argument("--display-name", "--new-display-name", dest="display_name", required=True)
     p_category_update_display_name_plan.set_defaults(func=command_category_update_display_name_plan)
 
+    p_category_update_description_plan = sub.add_parser(
+        "category-update-description-plan",
+        help="Plan a category description update without writing config or Markdown.",
+    )
+    p_category_update_description_plan.add_argument("--category", required=True)
+    p_category_update_description_plan.add_argument("--new-description", required=True)
+    p_category_update_description_plan.add_argument(
+        "--allow-empty-description",
+        action="store_true",
+        help="Explicitly allow clearing the description to an empty string.",
+    )
+    p_category_update_description_plan.set_defaults(func=command_category_update_description_plan)
+
     p_category_update_display_name_approve = sub.add_parser(
         "category-update-display-name-approve",
         help="Create a snapshot-backed approval for category display_name execute.",
@@ -947,6 +1030,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_category_update_display_name_approve.add_argument("--approved-by", required=True)
     p_category_update_display_name_approve.set_defaults(func=command_category_update_display_name_approve)
 
+    p_category_update_description_approve = sub.add_parser(
+        "category-update-description-approve",
+        help="Create a snapshot-backed approval for category description execute.",
+    )
+    p_category_update_description_approve.add_argument("--category", required=True)
+    p_category_update_description_approve.add_argument("--new-description", required=True)
+    p_category_update_description_approve.add_argument("--approved-by", required=True)
+    p_category_update_description_approve.add_argument(
+        "--allow-empty-description",
+        action="store_true",
+        help="Explicitly allow clearing the description to an empty string.",
+    )
+    p_category_update_description_approve.set_defaults(func=command_category_update_description_approve)
+
     p_category_update_display_name_execute = sub.add_parser(
         "category-update-display-name-execute",
         help="Create and run a TaskQueue safe mutation task for category display_name.",
@@ -955,6 +1052,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_category_update_display_name_execute.add_argument("--new-display-name", required=True)
     p_category_update_display_name_execute.add_argument("--approval-id", required=True)
     p_category_update_display_name_execute.set_defaults(func=command_category_update_display_name_execute)
+
+    p_category_update_description_execute = sub.add_parser(
+        "category-update-description-execute",
+        help="Create and run a TaskQueue safe mutation task for category description.",
+    )
+    p_category_update_description_execute.add_argument("--category", required=True)
+    p_category_update_description_execute.add_argument("--new-description", required=True)
+    p_category_update_description_execute.add_argument("--approval-id", required=True)
+    p_category_update_description_execute.add_argument(
+        "--allow-empty-description",
+        action="store_true",
+        help="Explicitly allow clearing the description to an empty string.",
+    )
+    p_category_update_description_execute.set_defaults(func=command_category_update_description_execute)
 
     p_category_archive_plan = sub.add_parser(
         "category-archive-plan",

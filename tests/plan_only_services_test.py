@@ -177,12 +177,15 @@ def main() -> int:
         before_direct = hash_tree([project / "knowledge", project / "config"])
         direct_plan = CategoryPlanService(project).update_display_name_plan("frontend", "Frontend Engineering")
         assert_plan_contract(direct_plan.to_dict())
+        direct_description_plan = CategoryPlanService(project).update_description_plan("frontend", "Frontend knowledge")
+        assert_plan_contract(direct_description_plan.to_dict())
         after_direct = hash_tree([project / "knowledge", project / "config"])
         if before_direct != after_direct:
-            raise AssertionError("category display_name plan modified files")
+            raise AssertionError("category display_name/description plan modified files")
 
         commands = [
             ["category-update-display-name-plan", "--category", "frontend", "--display-name", "Frontend Engineering"],
+            ["category-update-description-plan", "--category", "frontend", "--new-description", "Frontend knowledge"],
             ["category-archive-plan", "--category", "ai_agent"],
             ["category-merge-plan", "--source", "ai_agent", "--target", "frontend"],
             ["category-delete-plan", "--category", "ai_agent"],

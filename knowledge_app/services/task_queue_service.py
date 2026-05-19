@@ -35,6 +35,7 @@ SAFE_EXECUTABLE_TASK_TYPES = {
     TaskType.AUDIT.value,
     TaskType.INDEX.value,
     TaskType.CATEGORY_UPDATE_DISPLAY_NAME_EXECUTE.value,
+    TaskType.CATEGORY_UPDATE_DESCRIPTION_EXECUTE.value,
 }
 
 
@@ -406,6 +407,8 @@ class TaskQueueService:
             return self._run_index(record)
         if record.task_type == TaskType.CATEGORY_UPDATE_DISPLAY_NAME_EXECUTE.value:
             return self._run_category_update_display_name_execute(record)
+        if record.task_type == TaskType.CATEGORY_UPDATE_DESCRIPTION_EXECUTE.value:
+            return self._run_category_update_description_execute(record)
         raise UnsupportedTaskTypeError(f"unsupported task type: {record.task_type}", code="unsupported_task_type")
 
     def _run_noop(self, record: TaskRecord) -> Dict[str, Any]:
@@ -522,6 +525,50 @@ class TaskQueueService:
         self._raise_if_cancel_requested(record.task_id)
         self.append_progress(record.task_id, 70, "updating category config", current_step="safe_mutation")
         mutation_result = service.execute_category_display_name_update(category_id, new_display_name, approval_id)
+        self._append_log(record.task_id, "config updated", {"changed_configs": mutation_result.changed_configs})
+
+        self._raise_if_cancel_requested(record.task_id)
+        self.append_progress(record.task_id, 90, "safe mutation complete", current_step="safe_mutation")
+        validation = mutation_result.validation_results[0] if mutation_result.validation_results else {"commands": []}
+        self._append_log(record.task_id, "validation commands recommended", validation)
+        return {
+            "task_type": record.task_type,
+            "mutation_result": mutation_result.to_dict(),
+            "destructive": False,
+            "writes": list(mutation_result.changed_configs),
+        }
+
+    def _run_category_update_description_execute(self, record: TaskRecord) -> Dict[str, Any]:
+        task_input = dict(record.input)
+        category_id = str(task_input.get("category_id") or "").strip()
+        new_description = str(task_input.get("new_description") or "").strip()
+        approval_id = str(task_input.get("approval_id") or "").strip()
+        allow_empty_description = bool(task_input.get("allow_empty_description", False))
+        if not category_id:
+            raise TaskExecutionError("category_id is required")
+        if not approval_id:
+            raise TaskExecutionError("approval_id is required")
+
+        service = SafeMutationService(self.workspace_path)
+        self._raise_if_cancel_requested(record.task_id)
+        self.append_progress(record.task_id, 20, "validating mutation plan", current_step="safe_mutation")
+        approval = service.validate_approval(
+            approval_id,
+            CategoryPlanService(self.workspace_path).update_description_plan(
+                category_id,
+                new_description,
+                allow_empty_description=allow_empty_description,
+            ),
+        )
+        self._append_log(record.task_id, "plan validated", {"approval_id": approval_id, "plan_type": approval.plan_type})
+
+        self._raise_if_cancel_requested(record.task_id)
+        self.append_progress(record.task_id, 40, "verifying snapshot", current_step="safe_mutation")
+        self._append_log(record.task_id, "snapshot verified", {"snapshot_path": approval.snapshot_path})
+
+        self._raise_if_cancel_requested(record.task_id)
+        self.append_progress(record.task_id, 70, "updating category config", current_step="safe_mutation")
+        mutation_result = service.execute_category_description_update(category_id, new_description, approval_id)
         self._append_log(record.task_id, "config updated", {"changed_configs": mutation_result.changed_configs})
 
         self._raise_if_cancel_requested(record.task_id)
