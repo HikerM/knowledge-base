@@ -55,14 +55,18 @@ Backup / Snapshot services：
 - `restore-plan` 只读 backup manifest 和 zip 内容，只生成将创建、覆盖、冲突的文件计划，不恢复、不覆盖、不写目标 workspace。
 - Git 仍然是 Optional Git Sync，不是 backup、snapshot、restore-plan 的前置条件。
 
-TaskQueue baseline：
+TaskQueue baseline / enhancement：
 
 - `TaskQueueService` 是未来 GUI / EXE 的后台长任务边界；GUI 长任务必须通过 TaskQueue，不得在 UI 主线程直接执行 index、audit、backup、restore、archive 或 template apply。
-- 每个任务必须有稳定的 `task_id`、`status`、`progress_percent`、`cancel_requested`、`error`、`log_path`、`result_summary` 和 `elapsed_ms`。
+- 每个任务必须有稳定的 `task_id`、`status`、`progress_percent`、`cancel_requested`、`error`、`log_path`、`result_summary` 和 `elapsed_ms`；progress event 必须有 `schema_version` 和单调 `sequence`。
 - v1.7.0 baseline 只允许执行安全任务：`noop`、`workspace_status`、`backup_create`、`audit`、`index`。其中 `workspace_status` 只读 SQLite/config/cache；`backup_create` 只写 `backups/`；`index` 只写 `.kb/index.sqlite`。
+- GUI 可通过 `task-progress` / `task-log` 或对应 service API 轮询 progress 和日志；任务列表必须使用 `limit` / `offset` 分页。
+- cancellation 是 cooperative：`task-cancel` 对 running task 只设置 `cancel_requested=true`，安全任务在可行检查点停止，不强中断 OS 线程。
+- retry 只能针对 failed / cancelled task，并且必须通过 `retry_of` / `retry_root` / `retry_attempt` 保留原 task 链路。
+- cleanup 必须 plan-first；`task-cleanup-plan` 只输出候选清理计划，不删除 `.kb/tasks/` 文件。
 - `future_restore`、`future_archive`、`future_template_apply` 只能创建 task record；执行时必须返回 blocked / unsupported，不得执行真实 destructive mutation。
-- destructive task 只能在 v1.8+ safe execute mutation 阶段接入，并且必须先满足 plan、snapshot / backup、人工确认和可回滚要求。
-- CLI wrappers：`task-create`、`task-run`、`task-status`、`task-list`、`task-cancel`。所有输出都是 JSON；`task-create` 只创建 pending task，`task-run` 才执行。
+- safe execute mutation 必须等 TaskQueue enhancement 稳定后再接入；destructive task 只能在后续阶段接入，并且必须先满足 plan、snapshot / backup、人工确认和可回滚要求。
+- CLI wrappers：`task-create`、`task-run`、`task-status`、`task-list`、`task-cancel`、`task-progress`、`task-log`、`task-retry`、`task-cleanup-plan`。所有输出都是 JSON；`task-create` 只创建 pending task，`task-run` 才执行。
 
 ## 代码结构
 
@@ -633,7 +637,7 @@ GUI 不应直接读写 Markdown 或 SQLite，也不应通过拼接 CLI 命令字
 
 长期任务必须后台化，包括 index、reindex、audit、secret-scan、dedupe、conflicts、benchmark、maintenance、Optional Git Sync、backup/export 和 learning queue generation。任务需要 task_id、status、progress、cancellation、retry、error detail、log path 和 result summary。
 
-v1.7.0 起，后台任务的稳定边界是 `TaskQueueService`。GUI / EXE 应调用 service API 创建、查询、取消和运行任务，UI 主线程不得直接执行 index/audit/backup/restore/archive/template apply。当前 baseline 只接入 `noop`、`workspace_status`、`backup_create`、`audit`、`index`；restore/archive/template apply 等 destructive task 只能在 v1.8+ safe execute mutation 阶段接入。
+v1.7.0 起，后台任务的稳定边界是 `TaskQueueService`。GUI / EXE 应调用 service API 创建、查询、取消和运行任务，UI 主线程不得直接执行 index/audit/backup/restore/archive/template apply。当前安全执行只接入 `noop`、`workspace_status`、`backup_create`、`audit`、`index`；GUI 可通过 task progress/log API 轮询或订阅任务状态。Task cleanup 必须 plan-first；retry 必须保留 `retry_of` 链路；cancellation 是 cooperative。restore/archive/template apply 等 destructive task 必须等 TaskQueue enhancement 稳定后再进入 safe execute mutation 阶段。
 
 当前不做 GUI、不做 EXE 打包、不做 Tauri/Electron/PySide/WinUI 选型。未来路线建议：
 

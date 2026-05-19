@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 
 
 TASK_RECORD_SCHEMA_VERSION = 1
+TASK_PROGRESS_SCHEMA_VERSION = 1
 TASK_RESULT_SCHEMA_VERSION = 1
 
 
@@ -132,13 +133,17 @@ class ProgressEvent:
     task_id: str
     timestamp: str
     progress_percent: int
+    schema_version: int = TASK_PROGRESS_SCHEMA_VERSION
+    sequence: int = 0
     message: str = ""
     current_step: str = ""
     detail: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "schema_version": self.schema_version,
             "task_id": self.task_id,
+            "sequence": max(0, int(self.sequence)),
             "timestamp": self.timestamp,
             "progress_percent": max(0, min(100, int(self.progress_percent))),
             "message": self.message,
@@ -152,6 +157,8 @@ class ProgressEvent:
             task_id=str(payload.get("task_id") or ""),
             timestamp=str(payload.get("timestamp") or ""),
             progress_percent=int(payload.get("progress_percent") or 0),
+            schema_version=int(payload.get("schema_version") or TASK_PROGRESS_SCHEMA_VERSION),
+            sequence=int(payload.get("sequence") or 0),
             message=str(payload.get("message") or ""),
             current_step=str(payload.get("current_step") or ""),
             detail=dict(payload.get("detail") or {}),

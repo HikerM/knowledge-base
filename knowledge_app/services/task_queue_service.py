@@ -6,7 +6,7 @@ import json
 import time
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
@@ -122,9 +122,10 @@ class TaskQueueService:
             raise TaskQueueError(f"task record must be a JSON object: {task_id}")
         return TaskRecord.from_dict(payload)
 
-    def list_tasks(self, status: str | TaskStatus | None = None, limit: int = 50) -> List[TaskRecord]:
+    def list_tasks(self, status: str | TaskStatus | None = None, limit: int = 50, offset: int = 0) -> List[TaskRecord]:
         status_value = self._status_value(status) if status else None
         limit = max(1, int(limit))
+        offset = max(0, int(offset))
         records: List[TaskRecord] = []
         if not self.tasks_root.exists():
             return []
@@ -137,11 +138,119 @@ class TaskQueueService:
                 continue
             records.append(record)
         records.sort(key=lambda item: item.created_at, reverse=True)
-        return records[:limit]
+        return records[offset : offset + limit]
+
+    def get_task_progress(self, task_id: str, limit: int = 100, offset: int = 0) -> List[ProgressEvent]:
+        self.get_task(task_id)
+        events = self._read_progress_events(task_id)
+        limit = max(1, int(limit))
+        offset = max(0, int(offset))
+        return events[offset : offset + limit]
+
+    def get_task_log(self, task_id: str, tail: int = 200) -> List[Dict[str, Any]]:
+        self.get_task(task_id)
+        tail = max(0, int(tail))
+        path = self._task_dir(task_id) / "task.log"
+        if not path.exists() or tail == 0:
+            return []
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            raise TaskQueueError(f"could not read task log {task_id}: {exc}") from exc
+        entries: List[Dict[str, Any]] = []
+        for line in lines[-tail:]:
+            if not line.strip():
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                payload = {"timestamp": "", "message": line, "detail": {}}
+            if isinstance(payload, dict):
+                entries.append(payload)
+            else:
+                entries.append({"timestamp": "", "message": str(payload), "detail": {}})
+        return entries
+
+    def retry_task(self, task_id: str) -> TaskRecord:
+        original = self.get_task(task_id)
+        if original.status not in {TaskStatus.FAILED.value, TaskStatus.CANCELLED.value}:
+            raise TaskQueueError(f"only failed or cancelled tasks can be retried: {task_id}")
+        retry = self.create_task(
+            task_type=original.task_type,
+            title=f"Retry: {original.title}" if original.title else f"Retry {original.task_id}",
+            input=dict(original.input),
+            description=original.description,
+            cancellable=original.cancellable,
+        )
+        retry_root = str(original.metadata.get("retry_root") or original.task_id)
+        retry_attempt = int(original.metadata.get("retry_attempt") or 0) + 1
+        retry.metadata.update(
+            {
+                "retry_of": original.task_id,
+                "retry_root": retry_root,
+                "retry_attempt": retry_attempt,
+                "safe_executable": retry.task_type in SAFE_EXECUTABLE_TASK_TYPES,
+                "git_required": False,
+            }
+        )
+        self._write_task(retry)
+        self._append_log(retry.task_id, "retry created", {"retry_of": original.task_id, "retry_attempt": retry_attempt})
+        self._append_log(original.task_id, "retry requested", {"retry_task_id": retry.task_id})
+        return retry
+
+    def cleanup_tasks(
+        self,
+        status: str | TaskStatus | None = None,
+        older_than_days: int | None = None,
+        dry_run: bool = True,
+    ) -> Dict[str, Any]:
+        status_value = self._status_value(status) if status else None
+        older_than_value = None if older_than_days is None else max(0, int(older_than_days))
+        cutoff = None
+        if older_than_value is not None:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_value)
+
+        candidates: List[Dict[str, Any]] = []
+        for record in self.list_tasks(status=status_value, limit=1_000_000, offset=0):
+            if cutoff is not None:
+                reference = record.finished_at or record.started_at or record.created_at
+                try:
+                    if parse_iso(reference) > cutoff:
+                        continue
+                except ValueError:
+                    continue
+            candidates.append(
+                {
+                    "task_id": record.task_id,
+                    "task_type": record.task_type,
+                    "status": record.status,
+                    "created_at": record.created_at,
+                    "finished_at": record.finished_at,
+                    "path": str(self._task_dir(record.task_id)),
+                    "action": "would_delete",
+                }
+            )
+
+        return {
+            "schema_version": 1,
+            "dry_run": bool(dry_run),
+            "would_modify": False,
+            "blocked": not dry_run,
+            "blockers": [] if dry_run else ["task cleanup execution is not implemented; use plan-only cleanup"],
+            "status": status_value or "",
+            "older_than_days": older_than_value,
+            "candidate_count": len(candidates),
+            "candidates": candidates,
+            "validation_commands": ["python scripts/kb.py task-list --limit 50 --offset 0"],
+        }
 
     def request_cancel(self, task_id: str) -> TaskRecord:
         record = self.get_task(task_id)
         if record.status in {TaskStatus.SUCCEEDED.value, TaskStatus.FAILED.value, TaskStatus.CANCELLED.value}:
+            warning = f"task is already {record.status}; cancellation ignored"
+            if warning not in record.warnings:
+                record.warnings.append(warning)
+            self._append_log(task_id, "cancel ignored", {"status": record.status, "warning": warning})
             return record
         if not record.cancellable:
             record.error = {
@@ -171,6 +280,7 @@ class TaskQueueService:
             task_id=task_id,
             timestamp=now_iso(),
             progress_percent=max(0, min(100, int(percent))),
+            sequence=self._next_progress_sequence(task_id),
             message=message,
             current_step=current_step,
             detail=dict(detail or {}),
@@ -186,6 +296,8 @@ class TaskQueueService:
         record = self.get_task(task_id)
         if record.status != TaskStatus.PENDING.value:
             raise TaskQueueError(f"only pending tasks can be started: {task_id}")
+        if record.cancel_requested:
+            raise TaskCancelledError("task cancellation was requested")
         record.status = TaskStatus.RUNNING.value
         record.started_at = now_iso()
         record.progress_percent = max(record.progress_percent, 1)
@@ -250,19 +362,18 @@ class TaskQueueService:
             cancelled = self.mark_cancelled(task_id)
             return self._task_result(cancelled, success=False, errors=["task cancellation was requested"])
 
-        self.mark_running(task_id)
-        self.append_progress(task_id, 5, "task started", current_step="start")
         try:
+            self.mark_running(task_id)
+            self.append_progress(task_id, 5, "task started", current_step="start")
             running = self.get_task(task_id)
-            if running.cancel_requested:
-                cancelled = self.mark_cancelled(task_id)
-                return self._task_result(cancelled, success=False, errors=["task cancellation was requested"])
+            self._raise_if_cancel_requested(running.task_id)
             result_summary = self._execute_task(running)
-            if self.get_task(task_id).cancel_requested:
-                cancelled = self.mark_cancelled(task_id)
-                return self._task_result(cancelled, success=False, errors=["task cancellation was requested"])
+            self._raise_if_cancel_requested(task_id)
             succeeded = self.mark_succeeded(task_id, result_summary)
             return self._task_result(succeeded, success=True, elapsed_override=elapsed_ms(start))
+        except TaskCancelledError as exc:
+            cancelled = self.mark_cancelled(task_id)
+            return self._task_result(cancelled, success=False, errors=[str(exc)], elapsed_override=elapsed_ms(start))
         except Exception as exc:  # noqa: BLE001 - preserve failures in task record instead of crashing callers.
             failed = self.mark_failed(
                 task_id,
@@ -293,15 +404,20 @@ class TaskQueueService:
         raise UnsupportedTaskTypeError(f"unsupported task type: {record.task_type}", code="unsupported_task_type")
 
     def _run_noop(self, record: TaskRecord) -> Dict[str, Any]:
+        self._raise_if_cancel_requested(record.task_id)
         self.append_progress(record.task_id, 50, "noop task running", current_step="noop")
+        self._raise_if_cancel_requested(record.task_id)
         self.append_progress(record.task_id, 95, "noop task complete", current_step="noop")
         return {"message": "noop completed", "destructive": False}
 
     def _run_workspace_status(self, record: TaskRecord) -> Dict[str, Any]:
+        self._raise_if_cancel_requested(record.task_id)
         self.append_progress(record.task_id, 25, "reading workspace status", current_step="workspace_status")
+        self._raise_if_cancel_requested(record.task_id)
         result = WorkspaceStatusService(self.workspace_path).get_status()
         if result.data is None:
             raise TaskExecutionError("; ".join(result.errors) or "workspace status failed")
+        self._raise_if_cancel_requested(record.task_id)
         self.append_progress(record.task_id, 90, "workspace status complete", current_step="workspace_status")
         return {
             "task_type": record.task_type,
@@ -314,11 +430,14 @@ class TaskQueueService:
         task_input = dict(record.input)
         reason = str(task_input.get("reason") or record.title).strip()
         include_index = bool(task_input.get("include_index", False))
+        self._raise_if_cancel_requested(record.task_id)
         self.append_progress(record.task_id, 20, "creating local backup", current_step="backup_create")
+        self._raise_if_cancel_requested(record.task_id)
         with self._workspace_root():
             result = BackupService(self.workspace_path).create_backup(reason=reason, include_index=include_index)
         if not result.success:
             raise TaskExecutionError("; ".join(result.errors) or "backup create failed")
+        self._raise_if_cancel_requested(record.task_id)
         self.append_progress(record.task_id, 90, "backup created", current_step="backup_create")
         return {
             "task_type": record.task_type,
@@ -332,16 +451,21 @@ class TaskQueueService:
         task_input = dict(record.input)
         days = int(task_input.get("days") or 180)
         limit = int(task_input.get("limit") or 50)
+        self._raise_if_cancel_requested(record.task_id)
         self.append_progress(record.task_id, 25, "loading index metadata", current_step="audit")
+        self._raise_if_cancel_requested(record.task_id)
         with self._workspace_root():
             conn = connect_db(must_exist=True)
             try:
                 ensure_schema(conn)
                 rows = query_documents(conn)
+                self._raise_if_cancel_requested(record.task_id)
                 self.append_progress(record.task_id, 60, "running audit checks", current_step="audit")
+                self._raise_if_cancel_requested(record.task_id)
                 result = quality.audit(conn, rows, days, limit)
             finally:
                 conn.close()
+        self._raise_if_cancel_requested(record.task_id)
         self.append_progress(record.task_id, 90, "audit complete", current_step="audit")
         return {
             "task_type": record.task_type,
@@ -351,9 +475,12 @@ class TaskQueueService:
 
     def _run_index(self, record: TaskRecord) -> Dict[str, Any]:
         force_hash = bool(record.input.get("force_hash", False))
+        self._raise_if_cancel_requested(record.task_id)
         self.append_progress(record.task_id, 20, "indexing Markdown into SQLite", current_step="index")
+        self._raise_if_cancel_requested(record.task_id)
         with self._workspace_root():
             result = perform_index(force_hash=force_hash)
+        self._raise_if_cancel_requested(record.task_id)
         self.append_progress(record.task_id, 90, "index complete", current_step="index")
         return {
             "task_type": record.task_type,
@@ -389,6 +516,42 @@ class TaskQueueService:
         with path.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(event.to_dict(), ensure_ascii=False, sort_keys=True))
             handle.write("\n")
+
+    def _read_progress_events(self, task_id: str) -> List[ProgressEvent]:
+        path = self._task_dir(task_id) / "progress.jsonl"
+        if not path.exists():
+            return []
+        events: List[ProgressEvent] = []
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            raise TaskQueueError(f"could not read task progress {task_id}: {exc}") from exc
+        for index, line in enumerate(lines, start=1):
+            if not line.strip():
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            payload.setdefault("schema_version", 1)
+            payload.setdefault("sequence", index)
+            try:
+                events.append(ProgressEvent.from_dict(payload))
+            except (TypeError, ValueError):
+                continue
+        return events
+
+    def _next_progress_sequence(self, task_id: str) -> int:
+        events = self._read_progress_events(task_id)
+        if not events:
+            return 1
+        return max(event.sequence for event in events) + 1
+
+    def _raise_if_cancel_requested(self, task_id: str) -> None:
+        if self.get_task(task_id).cancel_requested:
+            raise TaskCancelledError("task cancellation was requested")
 
     def _append_log(self, task_id: str, message: str, detail: Dict[str, Any]) -> None:
         path = self._task_dir(task_id) / "task.log"
@@ -447,6 +610,10 @@ class TaskQueueService:
 
 class TaskExecutionError(Exception):
     """Task execution failed but the queue can persist the error safely."""
+
+
+class TaskCancelledError(TaskExecutionError):
+    """Task noticed a cooperative cancellation request."""
 
 
 class UnsupportedTaskTypeError(TaskExecutionError):

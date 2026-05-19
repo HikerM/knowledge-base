@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TaskQueue baseline tests."""
+"""TaskQueue baseline and enhancement tests."""
 
 from __future__ import annotations
 
@@ -45,7 +45,16 @@ TASK_RECORD_KEYS = {
     "metadata",
 }
 
-PROGRESS_EVENT_KEYS = {"task_id", "timestamp", "progress_percent", "message", "current_step", "detail"}
+PROGRESS_EVENT_KEYS = {
+    "schema_version",
+    "task_id",
+    "sequence",
+    "timestamp",
+    "progress_percent",
+    "message",
+    "current_step",
+    "detail",
+}
 
 TASK_RESULT_KEYS = {
     "schema_version",
@@ -162,6 +171,10 @@ def task_log_path(project: Path, task_id: str) -> Path:
     return project / ".kb" / "tasks" / task_id / "task.log"
 
 
+def task_progress_path(project: Path, task_id: str) -> Path:
+    return project / ".kb" / "tasks" / task_id / "progress.jsonl"
+
+
 def main() -> int:
     assert_model_schemas()
     with tempfile.TemporaryDirectory(prefix="pkb-task-queue-") as temp:
@@ -192,6 +205,53 @@ def main() -> int:
         if not task_log_path(project, noop["task_id"]).exists():
             raise AssertionError("noop task log was not created")
 
+        progress_page = run_json(
+            [sys.executable, "scripts/kb.py", "task-progress", "--task-id", noop["task_id"], "--limit", "1", "--offset", "1"],
+            project,
+        )
+        if progress_page["count"] != 1 or progress_page["limit"] != 1 or progress_page["offset"] != 1:
+            raise AssertionError(f"task-progress pagination failed: {progress_page}")
+        progress_event = progress_page["results"][0]
+        if set(progress_event) != PROGRESS_EVENT_KEYS:
+            raise AssertionError(f"ProgressEvent CLI schema changed: {progress_event}")
+        if progress_event["schema_version"] != 1 or progress_event["sequence"] < 1:
+            raise AssertionError(f"ProgressEvent should include schema_version and sequence: {progress_event}")
+
+        all_progress = run_json([sys.executable, "scripts/kb.py", "task-progress", "--task-id", noop["task_id"]], project)
+        sequences = [item["sequence"] for item in all_progress["results"]]
+        if sequences != sorted(sequences) or len(set(sequences)) != len(sequences):
+            raise AssertionError(f"ProgressEvent sequence should be stable and monotonic: {all_progress}")
+
+        log_tail = run_json([sys.executable, "scripts/kb.py", "task-log", "--task-id", noop["task_id"], "--tail", "2"], project)
+        if log_tail["count"] != 2 or log_tail["tail"] != 2:
+            raise AssertionError(f"task-log tail failed: {log_tail}")
+
+        completed_cancel = run_json([sys.executable, "scripts/kb.py", "task-cancel", "--task-id", noop["task_id"]], project)
+        if not completed_cancel["warnings"]:
+            raise AssertionError(f"cancelling completed task should return a warning: {completed_cancel}")
+
+        old_progress = run_json(
+            [sys.executable, "scripts/kb.py", "task-create", "--type", "noop", "--title", "Old progress"],
+            project,
+        )
+        task_progress_path(project, old_progress["task_id"]).write_text(
+            json.dumps(
+                {
+                    "task_id": old_progress["task_id"],
+                    "timestamp": "2026-05-19T00:00:00Z",
+                    "progress_percent": 7,
+                    "message": "old",
+                    "current_step": "compat",
+                    "detail": {},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        compat_events = TaskQueueService(project).get_task_progress(old_progress["task_id"])
+        if compat_events[0].schema_version != 1 or compat_events[0].sequence != 1:
+            raise AssertionError(f"old progress events should be read with defaults: {compat_events[0].to_dict()}")
+
         pending_cancel = run_json(
             [sys.executable, "scripts/kb.py", "task-create", "--type", "noop", "--title", "Cancel pending"],
             project,
@@ -200,7 +260,36 @@ def main() -> int:
         if cancelled["status"] != "cancelled" or cancelled["cancel_requested"] is not True:
             raise AssertionError(f"pending task was not cancelled: {cancelled}")
 
+        retry_cancelled = run_json([sys.executable, "scripts/kb.py", "task-retry", "--task-id", pending_cancel["task_id"]], project)
+        if not retry_cancelled["success"] or retry_cancelled["task"]["metadata"].get("retry_of") != pending_cancel["task_id"]:
+            raise AssertionError(f"retry should create a linked task for cancelled task: {retry_cancelled}")
+
+        retry_pending = run_json([sys.executable, "scripts/kb.py", "task-retry", "--task-id", retry_cancelled["task"]["task_id"]], project)
+        if retry_pending["success"] is not False:
+            raise AssertionError(f"retry should reject pending tasks: {retry_pending}")
+
         service = TaskQueueService(project)
+        running_retry_source = service.create_task(TaskType.NOOP, "Running retry source", {})
+        service.mark_running(running_retry_source.task_id)
+        running_cancel = service.request_cancel(running_retry_source.task_id)
+        if running_cancel.status != "running" or running_cancel.cancel_requested is not True:
+            raise AssertionError(f"running cancel should set cancel_requested without completing: {running_cancel.to_dict()}")
+        retry_running = run_json([sys.executable, "scripts/kb.py", "task-retry", "--task-id", running_retry_source.task_id], project)
+        if retry_running["success"] is not False:
+            raise AssertionError(f"retry should reject running tasks: {retry_running}")
+
+        list_page = run_json([sys.executable, "scripts/kb.py", "task-list", "--limit", "1", "--offset", "1"], project)
+        if list_page["count"] != 1 or list_page["limit"] != 1 or list_page["offset"] != 1:
+            raise AssertionError(f"task-list offset failed: {list_page}")
+
+        cleanup_before = sorted(path.name for path in (project / ".kb" / "tasks").iterdir() if path.is_dir())
+        cleanup_plan = run_json(
+            [sys.executable, "scripts/kb.py", "task-cleanup-plan", "--status", "succeeded", "--older-than-days", "0"],
+            project,
+        )
+        cleanup_after = sorted(path.name for path in (project / ".kb" / "tasks").iterdir() if path.is_dir())
+        if cleanup_plan["dry_run"] is not True or cleanup_plan["would_modify"] is not False or cleanup_before != cleanup_after:
+            raise AssertionError(f"task-cleanup-plan must not delete files: {cleanup_plan}")
 
         def run_workspace_status_task() -> None:
             record = service.create_task(TaskType.WORKSPACE_STATUS, "Workspace status", {})
@@ -269,6 +358,12 @@ def main() -> int:
             raise AssertionError(f"future task error should be unsupported_task_type: {future_status}")
         if before_future_hash != after_future_hash or before_backup_count != after_backup_count:
             raise AssertionError("unsupported future task performed a destructive operation")
+        future_retry = run_json([sys.executable, "scripts/kb.py", "task-retry", "--task-id", future["task_id"]], project)
+        if not future_retry["success"] or future_retry["task"]["task_type"] != "future_archive":
+            raise AssertionError(f"retry should only recreate future task records: {future_retry}")
+        future_retry_run = run_json([sys.executable, "scripts/kb.py", "task-run", "--task-id", future_retry["task"]["task_id"]], project)
+        if future_retry_run["success"] is not False or future_retry_run["status"] != "failed":
+            raise AssertionError(f"retried future task should remain blocked: {future_retry_run}")
 
         for task_id in [noop["task_id"], backup_task["task_id"], audit_task["task_id"], index_task["task_id"], future["task_id"]]:
             if not task_log_path(project, task_id).exists():

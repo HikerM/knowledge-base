@@ -514,13 +514,57 @@ def command_task_status(args: argparse.Namespace) -> None:
 
 
 def command_task_list(args: argparse.Namespace) -> None:
-    records = TaskQueueService().list_tasks(status=args.status, limit=args.limit)
-    print_json({"count": len(records), "results": [record.to_dict() for record in records]})
+    records = TaskQueueService().list_tasks(status=args.status, limit=args.limit, offset=args.offset)
+    print_json(
+        {
+            "count": len(records),
+            "limit": args.limit,
+            "offset": args.offset,
+            "status": args.status or "",
+            "results": [record.to_dict() for record in records],
+        }
+    )
 
 
 def command_task_cancel(args: argparse.Namespace) -> None:
     record = TaskQueueService().request_cancel(args.task_id)
     print_json(record.to_dict())
+
+
+def command_task_progress(args: argparse.Namespace) -> None:
+    events = TaskQueueService().get_task_progress(args.task_id, limit=args.limit, offset=args.offset)
+    print_json(
+        {
+            "task_id": args.task_id,
+            "count": len(events),
+            "limit": args.limit,
+            "offset": args.offset,
+            "results": [event.to_dict() for event in events],
+        }
+    )
+
+
+def command_task_log(args: argparse.Namespace) -> None:
+    entries = TaskQueueService().get_task_log(args.task_id, tail=args.tail)
+    print_json({"task_id": args.task_id, "count": len(entries), "tail": args.tail, "results": entries})
+
+
+def command_task_retry(args: argparse.Namespace) -> None:
+    try:
+        record = TaskQueueService().retry_task(args.task_id)
+    except TaskQueueError as exc:
+        print_json({"success": False, "task_id": args.task_id, "error": {"code": "task_retry_rejected", "message": str(exc)}})
+        return
+    print_json({"success": True, "task": record.to_dict()})
+
+
+def command_task_cleanup_plan(args: argparse.Namespace) -> None:
+    plan = TaskQueueService().cleanup_tasks(
+        status=args.status,
+        older_than_days=args.older_than_days,
+        dry_run=True,
+    )
+    print_json(plan)
 
 
 def resolve_document_path(path_text: Optional[str], document_id: Optional[int]) -> Path:
@@ -986,6 +1030,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_task_list.add_argument("--status", choices=sorted(TASK_STATUS_VALUES))
     p_task_list.add_argument("--limit", type=int, default=50)
+    p_task_list.add_argument("--offset", type=int, default=0)
     p_task_list.set_defaults(func=command_task_list)
 
     p_task_cancel = sub.add_parser(
@@ -994,6 +1039,38 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_task_cancel.add_argument("--task-id", required=True)
     p_task_cancel.set_defaults(func=command_task_cancel)
+
+    p_task_progress = sub.add_parser(
+        "task-progress",
+        help="Read paginated TaskQueue progress events.",
+    )
+    p_task_progress.add_argument("--task-id", required=True)
+    p_task_progress.add_argument("--limit", type=int, default=100)
+    p_task_progress.add_argument("--offset", type=int, default=0)
+    p_task_progress.set_defaults(func=command_task_progress)
+
+    p_task_log = sub.add_parser(
+        "task-log",
+        help="Read tail entries from a TaskQueue task log.",
+    )
+    p_task_log.add_argument("--task-id", required=True)
+    p_task_log.add_argument("--tail", type=int, default=200)
+    p_task_log.set_defaults(func=command_task_log)
+
+    p_task_retry = sub.add_parser(
+        "task-retry",
+        help="Create a retry task for a failed or cancelled TaskQueue record.",
+    )
+    p_task_retry.add_argument("--task-id", required=True)
+    p_task_retry.set_defaults(func=command_task_retry)
+
+    p_task_cleanup = sub.add_parser(
+        "task-cleanup-plan",
+        help="Plan TaskQueue runtime cleanup without deleting task files.",
+    )
+    p_task_cleanup.add_argument("--status", choices=sorted(TASK_STATUS_VALUES))
+    p_task_cleanup.add_argument("--older-than-days", type=int)
+    p_task_cleanup.set_defaults(func=command_task_cleanup_plan)
 
     p_sources = sub.add_parser("sources", help="List configured learning sources without fetching content.")
     p_sources.add_argument("--category", choices=category_choices())
