@@ -81,11 +81,14 @@ from knowledge_core.reports import (
 from knowledge_core.security import run_secret_scan
 from knowledge_core.search import DEFAULT_TOP_K, SearchError, run_search
 from knowledge_app.services.archive_metadata_service import ArchiveMetadataService
+from knowledge_app.services.backup_service import BackupService
 from knowledge_app.services.category_plan_service import CategoryPlanService
 from knowledge_app.services.category_service import CategoryService
 from knowledge_app.services.document_service import DocumentService
 from knowledge_app.services.review_queue_service import ReviewQueueService
+from knowledge_app.services.restore_plan_service import RestorePlanService
 from knowledge_app.services.search_service import SearchService
+from knowledge_app.services.snapshot_service import SnapshotService
 from knowledge_app.services.template_plan_service import TemplatePlanService
 from knowledge_app.services.workspace_plan_service import WorkspacePlanService
 from knowledge_app.services.workspace_status_service import WorkspaceStatusService
@@ -240,6 +243,14 @@ def print_plan_result(plan: Any) -> None:
     if not hasattr(plan, "to_dict"):
         raise KBError("plan command did not construct a serializable plan")
     print_json(plan.to_dict())
+
+
+def print_snapshot_result(result: Any) -> None:
+    if not hasattr(result, "to_dict"):
+        raise KBError("snapshot command did not construct a serializable result")
+    print_json(result.to_dict())
+    if not getattr(result, "success", False):
+        raise SystemExit(1)
 
 
 def die(message: str, code: int = 1) -> None:
@@ -409,6 +420,31 @@ def command_workspace_archive_plan(_: argparse.Namespace) -> None:
 def command_workspace_delete_plan(_: argparse.Namespace) -> None:
     plan = WorkspacePlanService().workspace_delete_plan()
     print_plan_result(plan)
+
+
+def command_backup_create(args: argparse.Namespace) -> None:
+    result = BackupService().create_backup(args.reason, include_index=args.include_index)
+    print_snapshot_result(result)
+
+
+def command_backup_list(_: argparse.Namespace) -> None:
+    result = BackupService().list_backups()
+    print_service_result(result)
+
+
+def command_backup_verify(args: argparse.Namespace) -> None:
+    result = BackupService().verify_backup(args.path)
+    print_service_result(result)
+
+
+def command_snapshot_create(args: argparse.Namespace) -> None:
+    result = SnapshotService().create_snapshot(args.reason, include_index=args.include_index)
+    print_snapshot_result(result)
+
+
+def command_restore_plan(args: argparse.Namespace) -> None:
+    result = RestorePlanService().create_restore_plan(args.backup, args.target)
+    print_service_result(result)
 
 
 def command_review_queue_list(args: argparse.Namespace) -> None:
@@ -793,6 +829,43 @@ def build_parser() -> argparse.ArgumentParser:
         help="Plan empty-workspace delete; blocked for non-empty workspaces.",
     )
     p_workspace_delete_plan.set_defaults(func=command_workspace_delete_plan)
+
+    p_backup_create = sub.add_parser(
+        "backup-create",
+        help="Create a local zip backup under backups/YYYY/MM without requiring Git.",
+    )
+    p_backup_create.add_argument("--reason", required=True)
+    p_backup_create.add_argument("--include-index", action="store_true", help="Include .kb/ derived index files in the backup.")
+    p_backup_create.set_defaults(func=command_backup_create)
+
+    p_backup_list = sub.add_parser(
+        "backup-list",
+        help="List local zip backups from backups/YYYY/MM.",
+    )
+    p_backup_list.set_defaults(func=command_backup_list)
+
+    p_backup_verify = sub.add_parser(
+        "backup-verify",
+        help="Verify a backup zip against backup-manifest.json sha256 metadata.",
+    )
+    p_backup_verify.add_argument("--path", required=True)
+    p_backup_verify.set_defaults(func=command_backup_verify)
+
+    p_snapshot_create = sub.add_parser(
+        "snapshot-create",
+        help="Create a pre-operation snapshot using the backup service.",
+    )
+    p_snapshot_create.add_argument("--reason", required=True)
+    p_snapshot_create.add_argument("--include-index", action="store_true", help="Include .kb/ derived index files in the snapshot.")
+    p_snapshot_create.set_defaults(func=command_snapshot_create)
+
+    p_restore_plan = sub.add_parser(
+        "restore-plan",
+        help="Create a read-only restore plan from a backup zip.",
+    )
+    p_restore_plan.add_argument("--backup", required=True)
+    p_restore_plan.add_argument("--target", required=True)
+    p_restore_plan.set_defaults(func=command_restore_plan)
 
     p_review_queue_list = sub.add_parser(
         "review-queue-list",

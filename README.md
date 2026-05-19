@@ -45,6 +45,16 @@ Plan-only mutation services：
 - archive、merge、delete、template apply 的未来执行必须先创建 local snapshot / backup；Git 只能作为可选高级同步，不是恢复前置条件。
 - CLI wrappers：`category-update-display-name-plan`、`category-archive-plan`、`category-merge-plan`、`category-delete-plan`、`template-apply-plan`、`workspace-upgrade-plan`、`workspace-archive-plan`、`workspace-delete-plan`。
 
+Backup / Snapshot services：
+
+- `backup-create` 在 `backups/YYYY/MM/` 下创建本地 zip，zip 内包含 `backup-manifest.json`。
+- 默认备份 `knowledge/`、`config/`、`templates/`、`reports/`、`docs/`、`README.md`、`AGENTS.md`。
+- 默认不包含 `.kb/index.sqlite`，因为 SQLite 是可重建索引；只有显式 `--include-index` 时才包含 `.kb/`，并在 manifest 中标记 `include_index=true`。
+- `backup-list` 只读取本地 `backups/` metadata；`backup-verify` 用 manifest 中的 `sha256` 校验 zip payload。
+- `snapshot-create` 是危险 mutation 前的安全包装，底层复用 backup service，不依赖 Git。
+- `restore-plan` 只读 backup manifest 和 zip 内容，只生成将创建、覆盖、冲突的文件计划，不恢复、不覆盖、不写目标 workspace。
+- Git 仍然是 Optional Git Sync，不是 backup、snapshot、restore-plan 的前置条件。
+
 ## 代码结构
 
 - `scripts/kb.py`: CLI 入口，保留命令解析、命令处理和索引/搜索/治理流程。
@@ -62,10 +72,14 @@ Plan-only mutation services：
 - `knowledge_app/services/category_plan_service.py`: category display name、archive、merge、delete 的 plan-only service。
 - `knowledge_app/services/template_plan_service.py`: template list/apply 的 plan-only service。
 - `knowledge_app/services/workspace_plan_service.py`: workspace upgrade、archive、delete 的 plan-only service。
+- `knowledge_app/services/backup_service.py`: 本地 zip backup 创建、列表和校验 service。
+- `knowledge_app/services/snapshot_service.py`: pre-operation snapshot service，复用 backup service。
+- `knowledge_app/services/restore_plan_service.py`: read-only restore plan service。
 - `knowledge_app/models/workspace_status.py`: `workspace-status` 稳定输出模型。
 - `knowledge_app/models/search_result.py`: service-layer search 输出模型。
 - `knowledge_app/models/operation_result.py`: service 层结构化结果模型。
 - `knowledge_app/models/plan_result.py`: plan-only mutation 稳定输出模型。
+- `knowledge_app/models/backup_models.py`: `BackupManifest`、`SnapshotResult`、`RestorePlan` 稳定输出模型。
 
 ## 目录结构
 
