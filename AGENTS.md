@@ -99,6 +99,16 @@ python scripts/kb.py research --query "react state" --category frontend
 - 搜索默认行为不得因大规模模式改变：默认仍只查 `rules`、`checklists`、`snippets`，并且只查 SQLite FTS5 / 索引。
 - 100K+ 场景优先考虑 workspace 分片、active/archive 分离和 per-workspace index，而不是把所有历史资料强塞进单个活跃索引。
 
+## 后续核心算法开发规则
+
+- 后续搜索功能必须遵守 Layer-aware Hybrid Retrieval。
+- 后续向量检索不得绕过 `layer`、`status`、`source_type`、`confidence` 过滤。
+- 后续知识状态变更必须遵守 Content-addressed Lifecycle State Machine。
+- `raw` / `distilled` 不得自动进入正式层。
+- `organize` / `archive` 功能默认只能生成 plan，不能自动移动或删除。
+- `archive` / `restore` / `deprecate` / `quarantine` 必须有人工确认。
+- 后续 GUI 必须在 Search、Review、Archive 页面体现 `layer`、`status`、`source_type`、`confidence`、`review_required`、`archive_status` 等状态。
+
 ## 学习雷达边界
 
 - Codex 可以帮助生成 learning queue。

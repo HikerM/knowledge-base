@@ -22,6 +22,56 @@
 
 大规模模式不是改变知识治理规则。`rules`、`checklists`、`snippets` 仍是默认正式层；`raw`、`distilled`、`deprecated` 的默认搜索策略不变。
 
+### 1.1 核心算法在大规模模式中的职责
+
+Layer-aware Hybrid Retrieval 用于约束大规模搜索路径：SQLite FTS5 / BM25 仍是默认入口，`layer`、`status`、`source_type`、`confidence` 等 metadata 必须先作为 hard filter 收缩候选集，再进行排序、分页、explain 或未来 rerank。即使后续加入向量检索，向量候选也只能进入已过滤的正式层候选池，不能绕过默认正式层搜索边界。
+
+Content-addressed Lifecycle State Machine 用于支撑增量 index：通过 `card_id`、`topic_id`、`canonical_id`、`source_hash`、`content_hash` 和生命周期状态，帮助识别新文件、内容变化、重复来源、被替代内容、quarantine 内容和 restore 候选。索引仍以 Markdown 为事实来源，状态机只提供可审计的变化线索，不把 SQLite 变成事实来源。
+
+Topic-aware Generational Archive Planner 用于减少 active working set：按 `topic_id`、`layer`、`status`、review 状态、访问频率、重复程度和过期程度生成 organize-plan 或 archive-plan，让 active `rules`、`checklists`、`snippets` 保持少而准。默认只生成计划，不自动移动、删除或修改文件。
+
+10W+ 场景下，active / archive / workspace 分片应一起设计：active workspace 保存当前高价值正式层和近期资料；archive workspace 保存历史 raw、deprecated、低频 supporting files；每个 workspace 使用独立 `.kb/index.sqlite`。跨 workspace search 是后续增强，不应成为 10W+ 首版的前提。
+
+## 1.2 10K baseline 与本阶段结果
+
+2026-05-18 的 10K smoke baseline：
+
+- `document_count=10000`
+- `chunk_count=20000`
+- `first_index_elapsed_ms=87373`
+- `second_index_elapsed_ms=2085`
+- `search_elapsed_ms=19`
+- `skipped=10000`
+- `hashed=0`
+- `index_size_bytes=19808256`
+
+性能剖析结论：首次全量 index 的主要瓶颈不是 SQLite 写入，而是 10,000 个小 Markdown 文件的串行读取和解码。优化前后的剖析显示，document/chunk/FTS 写入与 commit 只占低个位数秒，串行文件读取可占 60s+。
+
+本阶段低风险优化目标：
+
+- changed files 只读取一次，读取结果同时用于 sha256、frontmatter/body 解析和 chunking。
+- 新增可选 profile hook，默认 CLI 输出不变。
+- 首次 index 使用 bounded concurrent read，但 SQLite 写入仍保持单 writer 串行。
+- 每 1000 文件提交一次事务；已提交批次在 crash 后保留，下一次 index 可继续补齐。
+- 缓存分类配置和 workspace root，减少每个文件的重复配置读取与路径解析。
+
+10K 当前目标：
+
+- 10K first index：尽量 `< 60s`。
+- 10K second index：保持 `< 5s`。
+- 10K search：保持 `< 300ms`。
+
+本阶段优化后的 smoke 结果：
+
+- `first_index_elapsed_ms=10590`
+- `second_index_elapsed_ms=1345`
+- `search_elapsed_ms=18`
+- `skipped=10000`
+- `hashed=0`
+- `index_size_bytes=19820544`
+
+100K+ 首次 index 仍必须后台化、可取消、可恢复，并且不得作为 app startup 的阻塞流程。首次 index 不应在应用启动时自动执行；startup 只能读取轻量 workspace 配置、index 状态、统计摘要和最近任务状态。
+
 ## 2. 启动性能策略
 
 启动阶段只允许读取轻量元数据：

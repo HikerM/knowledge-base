@@ -92,6 +92,14 @@ audit / stale / conflicts / deprecate
 - `review_required=true` 的内容不得作为正式决策依据。
 - `quarantine` 用来隔离来源不明、质量低或疑似污染的内容。
 
+## Core Algorithms Roadmap
+
+后续路线使用三套核心算法固定搜索、数据生命周期和整理归档方向，详见 [docs/algorithm-strategy.md](D:/AI/personal-knowledge-base/docs/algorithm-strategy.md) 和 [docs/roadmap.md](D:/AI/personal-knowledge-base/docs/roadmap.md)。
+
+- Layer-aware Hybrid Retrieval（分层感知混合检索算法）：负责搜索。SQLite FTS5 / BM25 仍是默认精确搜索入口，后续向量检索只能作为增强，并且必须尊重 `layer`、`status`、`source_type`、`confidence` hard filter。
+- Content-addressed Lifecycle State Machine（内容寻址生命周期状态机）：负责数据生命周期。用 `card_id`、`topic_id`、`canonical_id`、`source_hash`、`content_hash` 等身份字段管理 raw -> distilled -> formal -> deprecated/archive 的状态流转，promote 必须人工审核。
+- Topic-aware Generational Archive Planner（主题感知分代归档算法）：负责整理归档。按主题、层级、状态、复查和访问情况生成 organize-plan / archive-plan，默认只给计划，不自动移动或删除数据。
+
 ## 常用流程
 
 初始化：

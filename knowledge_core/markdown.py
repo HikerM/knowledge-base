@@ -23,6 +23,10 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def sha256_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
 def sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -33,6 +37,10 @@ def normalized_hash_text(value: str) -> str:
 
 def read_single_markdown(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def markdown_text_from_bytes(value: bytes) -> str:
+    return value.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
 
 
 def first_heading(body: str) -> Optional[str]:
