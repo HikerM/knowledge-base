@@ -128,12 +128,15 @@ python scripts/kb.py research --query "react state" --category frontend
 ## 长期运维与 GUI / EXE 边界
 
 - GUI 开发必须先遵守 `docs/gui-product-ui-architecture.md` 中的 Product UI Architecture Contract。
+- GUI Phase 1 必须遵守 `docs/gui-phase-1-read-only-mvp-contract.md` 中的 Read-only MVP Screen Contract。
 - GUI 顶部栏不得作为主导航；顶部栏只保留 workspace switch、global search / command search、index status indicator、task status indicator、backup status indicator、settings/user entry。
 - GUI 左侧栏是唯一主导航；只保留：首页、搜索、知识库、审核、任务中心、维护、设置。
 - 归档、整理中心、备份与同步、审计中心 必须归入「维护」；模板管理、来源管理、分类设置 必须归入「设置」。
 - Raw Inbox、Distilled Review 必须归入「审核」子视图；Rules / Checklists / Snippets 必须归入「知识库」子视图。
-- GUI Phase 1 只能做 read-only MVP：首页、搜索、知识库、document open、task status read path。
+- GUI Phase 1 只能做 read-only MVP：工作区入口、首页、搜索、知识库、文档预览、任务中心摘要、设置入口。
+- GUI Phase 1 不得提前实现写操作，不得显示可编辑配置表单，不得接入真实 mutation UI。
 - GUI Phase 1 不得暴露 category `display_name` / `description` execute。
+- GUI Phase 1 不得暴露 archive/delete/merge/template apply/restore execute，不得暴露 RSS 或 vector search。
 - GUI 不得提前接入 destructive execute；archive、delete、merge、template apply、restore execute 在 service 明确支持前必须 disabled 或 plan-only。
 - 后续 GUI 任务必须先设计 service boundary，再实现界面。
 - GUI 不得直接读写 Markdown 或 SQLite；必须通过 service/core API 访问。

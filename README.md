@@ -38,11 +38,12 @@ CLI 仍然是自动化、调试和验收入口，例如 `search-service`、`cate
 GUI Design Contract：
 
 - 未来 Windows GUI 的 Product UI Architecture Contract 见 [docs/gui-product-ui-architecture.md](D:/AI/personal-knowledge-base/docs/gui-product-ui-architecture.md)。
+- GUI Phase 1 Read-only MVP Screen Contract 见 [docs/gui-phase-1-read-only-mvp-contract.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-read-only-mvp-contract.md)。
 - 当前文档只是 GUI Phase 0 架构合同，不是 GUI 实现，不包含 EXE 打包，也不做 Tauri / Electron / PySide / WinUI 等实现选型。
 - GUI 顶部栏不是主导航，只保留 workspace switch、global search / command search、index/task/backup status indicator 和 settings/user entry。
 - GUI 左侧栏是唯一主导航，只保留：首页、搜索、知识库、审核、任务中心、维护、设置。
-- GUI Phase 1 只能做 read-only MVP：首页、搜索、知识库、document open、task status read path。
-- GUI Phase 1 不暴露 category `display_name` / `description` execute，不接入 destructive execute。
+- GUI Phase 1 只能做 read-only MVP：工作区入口、首页、搜索、知识库、文档预览、任务中心摘要、设置入口。
+- GUI Phase 1 不暴露 category `display_name` / `description` execute，不暴露 archive/delete/merge/template apply/restore execute，不暴露 RSS/vector search，不做真实 mutation UI。
 
 Plan-only mutation services：
 
