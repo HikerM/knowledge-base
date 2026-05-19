@@ -27,7 +27,7 @@ workspace-root/
 - `workspace.yaml` 是 workspace 级元数据入口，用于创建、打开、升级、备份、恢复和未来 GUI/EXE 的 workspace 切换。
 - 不同 workspace 可以使用不同模板。例如开发者知识库、设计知识库、产品知识库、研究知识库或自定义知识库。
 
-未来 GUI/EXE 支持打开、创建、切换 workspace，但必须通过 service/core API；GUI 不得直接读写 Markdown 或 SQLite。workspace 切换只应打开目标 workspace 的 `workspace.yaml` 和 `.kb/index.sqlite` 元数据，不扫描其他 workspace。
+未来 GUI/EXE 支持打开、创建、切换 workspace，但必须通过 service/core API；GUI 不得直接读写 Markdown 或 SQLite。workspace 切换只应打开目标 workspace 的 `workspace.yaml`、轻量配置/cache 和 `.kb/index.sqlite` 元数据，不扫描其他 workspace，不读取 Markdown，不自动触发 index。
 
 ## 2. Workspace Metadata
 
@@ -266,7 +266,7 @@ categories:
 - workspace B 的搜索只打开 workspace B 的 `.kb/index.sqlite`。
 - workspace 切换时关闭当前 index connection，再打开目标 workspace 的 index metadata。
 - startup 只读取当前 workspace 的 `workspace.yaml` 和 `.kb/index.sqlite` 元数据。
-- startup 不扫描其他 workspace，不全量读取 Markdown，不自动全量 index。
+- startup 不扫描其他 workspace，不扫描当前 `knowledge/`，不全量读取 Markdown，不自动触发 index。
 - `.kb/index.sqlite` 可删除重建，不能手工编辑，不能当作事实来源。
 - cross-workspace search 是未来增强，不是本阶段目标。
 - archive workspace 可以单独存在，用于长期历史和低频资料隔离。
@@ -281,7 +281,11 @@ categories:
 
 ### Open Workspace
 
-读取 `workspace.yaml` 和 index metadata。若 index missing/stale，只提示状态，不阻塞打开，不扫描全库。
+读取 `workspace.yaml`、轻量 config/cache 和 index metadata。若 `.kb/index.sqlite` missing，只返回 `index_status=missing`、受限能力和后台构建索引入口；不得扫描 `knowledge/`、不得读取 Markdown、不得自动 index。若 index stale，只提示状态，不阻塞打开，不扫描全库。
+
+### Workspace Status
+
+`workspace-status` 是轻量只读命令。它只读取 SQLite metadata、workspace config、cached stats 和最近任务摘要；不得读取 Markdown、不得 hash、不得运行 index/reindex。它用于回答当前 workspace 是否 ready/missing/stale/error，而不是修复索引或补全统计。
 
 ### Close Workspace
 
@@ -328,7 +332,7 @@ archive workspace 是把整个 workspace 标记为低频或历史，而不是删
 | `workspace-list` | 是 | 否 | 否 | 否 | 已注册 workspace 摘要、路径、模板、index 状态 |
 | `workspace-create` | 否 | 是 | 否 | 是 | 创建计划、目标路径、模板文件清单、结果 summary |
 | `workspace-open` | 是 | 否 | 否 | 否 | workspace metadata、index metadata、stale/missing 提示 |
-| `workspace-status` | 是 | 否 | 否 | 否 | workspace.yaml 摘要、index 状态、最近报告、待处理风险 |
+| `workspace-status` | 是 | 否 | 否 | 否 | 轻量 workspace.yaml/config/cache 摘要、index 状态、最近任务摘要；不读 Markdown、不 hash、不 index |
 | `workspace-export` | 否 | 是 | 建议 | 是 | export manifest、文件数量、大小、是否包含 `.kb` |
 | `workspace-backup` | 否 | 是 | 不适用 | 是 | backup manifest、hash 摘要、secret-scan 提示 |
 | `workspace-restore` | 否 | 是 | 是 | 是 | restore dry-run、冲突、覆盖清单、执行结果 |
@@ -366,7 +370,7 @@ GUI 约束：
 - GUI 不通过拼接 CLI 命令字符串作为主要集成方式。
 - 长任务必须后台化，提供 task_id、status、progress、cancellation、error detail、log path 和 result summary。
 - UI 主线程不得执行 index、audit、secret-scan、reindex、dedupe、conflicts、benchmark、maintenance、Optional Git Sync 或 backup/export。
-- Workspace startup 只读当前 workspace metadata / index metadata，不扫描所有 workspace。
+- Workspace startup 和 `workspace-status` 只读当前 workspace metadata / config / cache / index metadata，不扫描所有 workspace，不扫描 `knowledge/`，不读取 Markdown，不自动 index。
 - 危险操作必须 plan-first，并优先创建 local snapshot / backup。
 
 ## 11. Acceptance Boundary

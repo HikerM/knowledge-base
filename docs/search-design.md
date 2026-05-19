@@ -1,6 +1,6 @@
 # Search Design
 
-搜索默认使用 SQLite FTS5。除非显式使用 `--slow-scan`，否则不允许回退到全量文件扫描。
+搜索默认使用 SQLite FTS5 + `documents` metadata filter。除非显式使用 `--slow-scan`，否则不允许回退到全量文件扫描；Search View 也不得读取 Markdown 正文来补充结果。
 
 ## FTS5 检索流程
 
@@ -9,8 +9,9 @@
 3. 检查 SQLite 是否支持 FTS5。
 4. 使用 `chunks_fts MATCH ?` 查询命中 chunk。
 5. join `chunks` 和 `documents` 获取元数据。
-6. 计算综合 score。
-7. 返回 Top-K 片段和 elapsed_ms。
+6. 用 `documents` metadata 做 layer/status/category/source_type/confidence hard filter。
+7. 计算综合 score。
+8. 返回 Top-K 片段和 elapsed_ms。
 
 搜索只返回命中 chunk，不返回整篇文档。
 

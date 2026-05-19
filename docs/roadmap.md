@@ -58,7 +58,7 @@ v1.2.0 已完成的设计基线包括 long-term operations、large-scale readine
 
 目标：
 
-- 保证启动不全量扫描、不全量读取 Markdown、不自动全量 index。
+- 保证启动不全量扫描、不全量读取 Markdown、不自动触发 index/reindex。
 - 搜索保持 SQLite FTS5 / 索引路径。
 - 后台化 index/audit/secret-scan/reindex/dedupe/conflicts/benchmark/maintenance。
 - 10W+ 时优先 active/archive/workspace 分片和 per-workspace index。
