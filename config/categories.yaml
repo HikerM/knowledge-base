@@ -31,5 +31,6 @@ security:
   description: 鉴权、授权、输入校验、XSS、SQL 注入、依赖漏洞、密钥管理
 
 ai_agent:
+  display_name: "AI Agent"
   path: knowledge/09-ai-agent
   description: Codex、Skill、AGENTS.md、RAG、工具调用、上下文管理、Agent 工作流

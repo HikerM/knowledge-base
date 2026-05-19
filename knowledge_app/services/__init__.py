@@ -9,6 +9,7 @@ from .index_metadata_service import IndexMetadataService
 from .review_queue_service import ReviewQueueService
 from .restore_plan_service import RestorePlanService
 from .search_service import SearchService
+from .safe_mutation_service import SafeMutationService
 from .snapshot_service import SnapshotService
 from .task_queue_service import TaskQueueService
 from .template_plan_service import TemplatePlanService
@@ -25,6 +26,7 @@ __all__ = [
     "ReviewQueueService",
     "RestorePlanService",
     "SearchService",
+    "SafeMutationService",
     "SnapshotService",
     "TaskQueueService",
     "TemplatePlanService",

@@ -87,6 +87,7 @@ from knowledge_app.services.category_service import CategoryService
 from knowledge_app.services.document_service import DocumentService
 from knowledge_app.services.review_queue_service import ReviewQueueService
 from knowledge_app.services.restore_plan_service import RestorePlanService
+from knowledge_app.services.safe_mutation_service import SafeMutationError, SafeMutationService
 from knowledge_app.services.search_service import SearchService
 from knowledge_app.services.snapshot_service import SnapshotService
 from knowledge_app.services.task_queue_service import TaskQueueError, TaskQueueService
@@ -386,6 +387,62 @@ def command_category_summary(args: argparse.Namespace) -> None:
 def command_category_update_display_name_plan(args: argparse.Namespace) -> None:
     plan = CategoryPlanService().update_display_name_plan(args.category, args.display_name)
     print_plan_result(plan)
+
+
+def command_category_update_display_name_approve(args: argparse.Namespace) -> None:
+    plan = CategoryPlanService().update_display_name_plan(args.category, args.new_display_name)
+    if plan.blocked:
+        print_json({"success": False, "errors": list(plan.blockers), "plan": plan.to_dict()})
+        raise SystemExit(1)
+    snapshot = SnapshotService().create_snapshot(
+        reason=f"category-update-display-name-{args.category}",
+        include_index=False,
+    )
+    if not snapshot.success:
+        print_json({"success": False, "errors": list(snapshot.errors), "snapshot": snapshot.to_dict(), "plan": plan.to_dict()})
+        raise SystemExit(1)
+    try:
+        approval = SafeMutationService().create_approval(
+            plan_result=plan,
+            approved_by=args.approved_by,
+            snapshot_path=snapshot.backup_path,
+        )
+    except SafeMutationError as exc:
+        print_json(
+            {
+                "success": False,
+                "error": {"code": exc.code, "message": str(exc)},
+                "snapshot": snapshot.to_dict(),
+                "plan": plan.to_dict(),
+            }
+        )
+        raise SystemExit(1)
+    print_json(
+        {
+            "success": True,
+            "approval_id": approval.approval_id,
+            "snapshot_path": approval.snapshot_path,
+            "approval": approval.to_dict(),
+        }
+    )
+
+
+def command_category_update_display_name_execute(args: argparse.Namespace) -> None:
+    record = TaskQueueService().create_task(
+        task_type=TaskType.CATEGORY_UPDATE_DISPLAY_NAME_EXECUTE,
+        title=f"Execute category display_name update: {args.category}",
+        input={
+            "category_id": args.category,
+            "new_display_name": args.new_display_name,
+            "approval_id": args.approval_id,
+        },
+        description="Safe mutation execute for category display_name only.",
+        cancellable=True,
+    )
+    result = TaskQueueService().run_task(record.task_id)
+    print_json(result.to_dict())
+    if not result.success:
+        raise SystemExit(1)
 
 
 def command_category_archive_plan(args: argparse.Namespace) -> None:
@@ -878,8 +935,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Plan a category display_name update without writing config or Markdown.",
     )
     p_category_update_display_name_plan.add_argument("--category", required=True)
-    p_category_update_display_name_plan.add_argument("--display-name", required=True)
+    p_category_update_display_name_plan.add_argument("--display-name", "--new-display-name", dest="display_name", required=True)
     p_category_update_display_name_plan.set_defaults(func=command_category_update_display_name_plan)
+
+    p_category_update_display_name_approve = sub.add_parser(
+        "category-update-display-name-approve",
+        help="Create a snapshot-backed approval for category display_name execute.",
+    )
+    p_category_update_display_name_approve.add_argument("--category", required=True)
+    p_category_update_display_name_approve.add_argument("--new-display-name", required=True)
+    p_category_update_display_name_approve.add_argument("--approved-by", required=True)
+    p_category_update_display_name_approve.set_defaults(func=command_category_update_display_name_approve)
+
+    p_category_update_display_name_execute = sub.add_parser(
+        "category-update-display-name-execute",
+        help="Create and run a TaskQueue safe mutation task for category display_name.",
+    )
+    p_category_update_display_name_execute.add_argument("--category", required=True)
+    p_category_update_display_name_execute.add_argument("--new-display-name", required=True)
+    p_category_update_display_name_execute.add_argument("--approval-id", required=True)
+    p_category_update_display_name_execute.set_defaults(func=command_category_update_display_name_execute)
 
     p_category_archive_plan = sub.add_parser(
         "category-archive-plan",
@@ -1214,6 +1289,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     except TaskQueueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    except SafeMutationError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     except sqlite3.Error as exc:

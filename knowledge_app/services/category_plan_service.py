@@ -35,6 +35,8 @@ class CategoryPlanService:
             category = {}
         if not new_display_name.strip():
             blockers.append("new_display_name must not be empty")
+        if "\n" in new_display_name or "\r" in new_display_name:
+            blockers.append("new_display_name must be a single line")
 
         old_display_name = str(category.get("display_name") or category_id)
         if category and old_display_name == new_display_name:
@@ -79,7 +81,7 @@ class CategoryPlanService:
             ],
             blockers=blockers,
             warnings=warnings,
-            requires_snapshot=False,
+            requires_snapshot=True,
             requires_confirmation=True,
             reversible=True,
             rollback_plan=[
@@ -88,6 +90,8 @@ class CategoryPlanService:
             validation_commands=[
                 "python scripts/kb.py category-summary",
                 f"python scripts/kb.py category-summary --category {category_id}",
+                "python scripts/kb.py audit",
+                "python scripts/kb.py secret-scan",
             ],
             actions=[
                 {
