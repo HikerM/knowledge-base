@@ -24,7 +24,7 @@
 
 ## Phase 2：Markdown Storage Design
 
-状态：待创建 `docs/markdown-storage-design.md`。当前仓库尚无该文件，本阶段仅在路线图中固定待规划字段，不实际修改现有知识卡片。
+状态：已完成 `docs/markdown-storage-design.md`，并纳入 v1.2.0 候选基线。本阶段固定 Markdown storage、schema、目录分片、migration 和 GUI/EXE 写入边界，不实际修改现有知识卡片。
 
 未来必须支持的字段规划：
 
@@ -196,6 +196,6 @@
 
 ## 版本建议
 
-- v1.2.0：适合纳入核心算法策略、路线图、长期运维和大规模性能设计基线。
-- v1.3.0：适合纳入 Markdown Storage Design、Lifecycle State Machine 细化和 plan-only Archive Design 的实现准备。
+- v1.2.0：适合纳入 Markdown Storage Design、核心算法策略、路线图、长期运维、大规模性能、organize/archive 和 backup/snapshot 设计基线。
+- v1.3.0：适合纳入 Lifecycle State Machine 细化、plan-only Archive API 和 Generic Workspace / Template System 的实现准备。
 - Vector / Hybrid Search 建议晚于 v1.3.0，等 metadata hard filter、service layer 和 GUI contract 稳定后再实现。
