@@ -169,7 +169,7 @@ Markdown 保存事实和治理字段；SQLite FTS5 保存可重建索引、chunk
 - raw 可以增长，但必须可归档、可恢复、可显式搜索。
 - deprecated/rejected/quarantine 历史应保留原因，不应因归档被抹除。
 - 100K+ 优先 active/archive 分离和 per-workspace index，而不是扩大单一活跃索引。
-- 真实移动前应有 Git snapshot、backup 或 dry-run 报告。
+- 真实移动前应有 local snapshot / backup 或 dry-run 报告；Git snapshot 只能作为可选补充。
 
 ### 适用阶段
 

@@ -87,7 +87,7 @@
 
 - 设计 organize-plan、archive-plan、restore-plan。
 - 默认只生成计划，不自动移动、不删除、不修改知识卡片。
-- 真实 archive/restore 必须人工确认，并优先有 Git snapshot 或 backup。
+- 真实 archive/restore 必须人工确认，并优先有 local snapshot / backup；Git snapshot 只能作为可选补充。
 
 使用算法：
 
@@ -142,7 +142,7 @@
 目标：
 
 - 实现最小可用 Search、Review、Archive 工作流。
-- UI 主线程不得跑 index、audit、secret-scan、reindex、dedupe、conflicts、benchmark、maintenance、Git sync 或 backup/export。
+- UI 主线程不得跑 index、audit、secret-scan、reindex、dedupe、conflicts、benchmark、maintenance、Optional Git Sync 或 backup/export。
 - 搜索结果分页或虚拟滚动，不一次渲染所有结果。
 
 使用算法：

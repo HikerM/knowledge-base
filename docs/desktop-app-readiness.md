@@ -2,6 +2,8 @@
 
 本文件为未来 Windows EXE / GUI 软件化提供设计边界。当前阶段只做架构准备，不实现 GUI，不选择最终技术栈，不打包 EXE。
 
+桌面软件的默认模式是 Local Only mode。普通用户没有 Git、没有 GitHub 账号、没有命令行经验时，也必须能完整创建、检索、审核、promote、archive、restore 和维护知识库。Git is optional, not required.
+
 ## 1. 未来架构
 
 正确架构：
@@ -13,7 +15,9 @@ Service Layer
   ↓
 knowledge_core
   ↓
-Markdown + SQLite + Git
+Markdown + SQLite + Local Backup/Snapshot
+  ↓
+Optional Git Sync
 ```
 
 错误架构：
@@ -38,6 +42,15 @@ Desktop GUI
 - GUI 直接写 SQLite 会把可重建索引误当事实来源。
 - 拼接 CLI 字符串难以做结构化错误处理、取消、进度、并发互斥和输入安全。
 - service/core API 可以复用 CLI 能力，同时给 GUI 提供稳定的数据模型。
+- Local Backup/Snapshot 是默认回滚机制；Optional Git Sync 只能作为额外同步和版本方式。
+
+Local Only mode 要求：
+
+- Git 不是 EXE 软件的必需依赖。
+- 用户没有 Git 或 GitHub 账号时，仍能完整使用知识库。
+- GUI 不得把 `commit`、`push`、`pull` 作为 promote、audit、index、archive、restore 的必需步骤。
+- promote、audit、index、archive、restore 默认只依赖本地 workspace、Markdown、SQLite 索引和本地 snapshot/backup。
+- Git Sync 是高级用户可选功能，用于跨设备同步、远端备份或开发者版本管理。
 
 CLI 可以继续保留为：
 
@@ -61,7 +74,10 @@ knowledge_app/
     index_service.py
     audit_service.py
     source_service.py
-    git_service.py
+    backup_service.py
+    snapshot_service.py
+    versioning_service.py
+    optional_git_service.py
     maintenance_service.py
   tasks/
     task_queue.py
@@ -111,11 +127,33 @@ knowledge_app/
 - 不抓取不可控全网内容。
 - 学习结果进入 raw 前必须保留来源。
 
-`git_service.py`
+`backup_service.py`
+
+- 负责手动备份、定时备份、备份 manifest、备份校验和备份保留策略。
+- 默认生成本地 zip 备份，覆盖 Markdown、config、templates、reports、docs 和必要的根目录文档。
+- 默认不要求 Git，不要求 GitHub，不调用命令行 Git。
+- 备份前应运行 secret-scan 或给出敏感数据提醒。
+
+`snapshot_service.py`
+
+- 负责 promote、archive、restore、bulk import、schema migration、destructive maintenance、workspace upgrade 前的操作前快照。
+- 快照是短期、低摩擦回滚点，默认保存在本地。
+- 快照创建失败时，高风险写操作应停止或要求用户显式确认继续。
+
+`versioning_service.py`
+
+- 负责统一呈现当前 workspace 的版本和恢复状态。
+- 默认使用 BackupService 和 SnapshotService。
+- 当 OptionalGitService 可用且用户启用时，可展示 Git commit、branch、tag 和 remote sync 状态。
+- 不把 Git 状态作为普通用户工作流的硬性前置条件。
+
+`optional_git_service.py`
 
 - 负责 status、diff、commit、tag、sync、rollback 指引。
 - public repo 发布前必须检查 secret-scan 状态。
 - 不应自动丢弃用户未提交修改。
+- 只能作为高级用户可选模块。没有 Git 时必须优雅降级，不影响 Local Only mode。
+- 不得被 promote、audit、index、archive、restore 的核心流程强依赖。
 
 `maintenance_service.py`
 
@@ -168,7 +206,9 @@ knowledge_app/
 - `knowledge/`、`config/`、`templates/`、`reports/`、`.kb/` 属于 workspace。
 - GUI 设置放 AppData。
 - GUI logs 放 AppData。
-- backup/export 路径可配置。
+- backup/export/snapshot 路径可配置。
+- Local Only mode 默认启用本地 backup/snapshot。
+- Git remote、GitHub 账号和 Git executable 都是可选能力。
 - 未来支持多 workspace。
 
 建议 Windows 路径：
@@ -281,14 +321,15 @@ Workspace 打开流程：
 - progress/error states：显示任务状态、进度、失败阶段、报告路径。
 - destructive confirmations：vacuum、reindex、cleanup、restore 需要确认。
 
-### Git Sync
+### Backup & Sync
 
-- purpose：显示 Git status、commit、tag、push、pull 和恢复指引。
-- service dependencies：`git_service`、`audit_service`。
-- read/write behavior：执行 Git 操作前显示 diff 和影响范围。
-- long-running tasks：pull、push、backup before sync。
-- progress/error states：显示冲突、未提交文件、远端错误。
-- destructive confirmations：reset、checkout、clean、restore 必须二次确认。
+- purpose：管理本地 backup、操作前 snapshot、恢复演练、导出，以及高级用户可选 Git Sync。
+- service dependencies：`backup_service`、`snapshot_service`、`versioning_service`、`optional_git_service`、`audit_service`。
+- read/write behavior：默认执行本地 zip backup 和 snapshot；Git 操作只有用户启用 Optional Git Sync 后才出现。
+- long-running tasks：backup、restore dry-run、restore、pull、push、backup before optional sync。
+- progress/error states：显示 snapshot 路径、backup manifest、恢复校验、Git 冲突、远端错误。
+- destructive confirmations：restore、删除旧备份、reset、checkout、clean 必须二次确认。
+- no-git behavior：Git 不存在或未配置时，页面仍提供完整 Backup/Snapshot 能力，并提示 Git Sync 是可选高级功能。
 
 ### Settings
 
@@ -309,6 +350,8 @@ Workspace 打开流程：
 - 崩溃后可重新 index。
 - Markdown 源数据优先保护。
 - SQLite 索引可重建。
+- Git 不得成为启动、写入、回滚或恢复的硬依赖。
+- 本地 snapshot/backup 是默认恢复路径。
 - 不把所有文档常驻内存。
 - 不把 GUI 写成单文件巨型 `App.tsx` 或 `main.py`。
 - service API 必须提供结构化结果，不依赖解析终端文本。
@@ -394,4 +437,4 @@ Workspace 打开流程：
 - 最大化复用 Python 优先：PySide6。
 - Windows 原生生态优先：WinUI/.NET。
 
-无论选择哪条路线，都必须先实现 service boundary、task queue、workspace protection 和结构化 result model。
+无论选择哪条路线，都必须先实现 service boundary、task queue、workspace protection、backup/snapshot 和结构化 result model。

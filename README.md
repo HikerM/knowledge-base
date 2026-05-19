@@ -109,7 +109,7 @@ audit / stale / conflicts / deprecate
 - archive is not delete。归档用于降低 active working set 和默认搜索噪音，同时保留历史、来源链路和恢复能力。
 - archive 默认不进入普通 `search`。普通 `search` 仍默认只查 active `rules`、`checklists`、`snippets`，不因 archive 设计改变默认行为。
 - organize-plan before archive。整理、合并、canonical 修正和归档默认都必须先生成 plan；真实 archive/restore/deprecate/quarantine 需要人工确认。
-- archive 前建议 Git snapshot、tag、backup/export 或等价快照。
+- archive 前建议创建 local snapshot / backup；Git snapshot、tag 只能作为高级用户可选补充。
 - archive 不得破坏 `source_url`、`source_file`、`promoted_from`、`supersedes`、`superseded_by` 等来源链路。
 - `rules`、`checklists`、`snippets` 必须少而准，优先保持 canonical；raw 可以多，但必须可整理、可归档、可恢复。
 
@@ -411,6 +411,22 @@ python scripts/kb.py monthly-maintenance
 
 长期运维设计见 [docs/long-term-operations.md](D:/AI/personal-knowledge-base/docs/long-term-operations.md)。未来桌面软件化设计见 [docs/desktop-app-readiness.md](D:/AI/personal-knowledge-base/docs/desktop-app-readiness.md)。
 
+## Local Only, Backup & Optional Git Sync
+
+Git is optional, not required. 未来 Windows EXE 默认应使用 Local Only mode：普通用户没有 Git、没有 GitHub 账号、没有命令行经验时，也能完整创建、检索、审核、promote、archive、restore 和维护知识库。
+
+默认恢复机制是 Backup & Snapshot：
+
+- Local snapshot / backup 是普通用户默认回滚方式。
+- promote、archive、restore、bulk import、schema migration、destructive maintenance 和 workspace upgrade 前应创建 snapshot。
+- 本地 zip backup 应覆盖 Markdown、config、templates、reports、docs、README 和 AGENTS。
+- `.kb/index.sqlite` 是可重建索引，默认不作为备份核心；可选包含以加快恢复。
+- 备份前应运行 `secret-scan` 或明确提示 secret/privacy 风险。
+
+Optional Git Sync 是高级用户可选功能，用于跨设备同步、远端备份或开发者版本管理。GUI 不得把 commit/push 作为 promote、audit、index、archive 或 restore 的必需步骤。未来 GUI 页面应叫 Backup & Sync，而不是只叫 Git Sync。
+
+备份和快照设计见 [docs/backup-snapshot-design.md](D:/AI/personal-knowledge-base/docs/backup-snapshot-design.md)。
+
 ## Maintenance workflow
 
 `monthly-maintenance` 保持现有月度治理快照，不破坏历史行为：
@@ -481,12 +497,14 @@ Service Layer
   ↓
 knowledge_core
   ↓
-Markdown + SQLite + Git
+Markdown + SQLite + Local Backup/Snapshot
+  ↓
+Optional Git Sync
 ```
 
 GUI 不应直接读写 Markdown 或 SQLite，也不应通过拼接 CLI 命令字符串作为主要集成方式。CLI 继续保留给 CI、自动化、调试和高级用户；GUI 应调用 service/core API。
 
-长期任务必须后台化，包括 index、reindex、audit、secret-scan、dedupe、conflicts、benchmark、maintenance、Git sync、backup/export 和 learning queue generation。任务需要 task_id、status、progress、cancellation、retry、error detail、log path 和 result summary。
+长期任务必须后台化，包括 index、reindex、audit、secret-scan、dedupe、conflicts、benchmark、maintenance、Optional Git Sync、backup/export 和 learning queue generation。任务需要 task_id、status、progress、cancellation、retry、error detail、log path 和 result summary。
 
 当前不做 GUI、不做 EXE 打包、不做 Tauri/Electron/PySide/WinUI 选型。未来路线建议：
 
@@ -506,16 +524,15 @@ GUI 不应直接读写 Markdown 或 SQLite，也不应通过拼接 CLI 命令字
 - `docs/`
 - `README.md`
 - `AGENTS.md`
-- Git commit、branch、tag
 
-`.kb/index.sqlite` 是可重建索引，不作为核心备份。恢复流程优先依赖 Git：
+`.kb/index.sqlite` 是可重建索引，不作为核心备份。恢复流程默认依赖本地 backup/snapshot，不依赖 Git：
 
 ```bash
-git log --oneline --decorate
-git checkout <tag-or-commit>
 python scripts/kb.py index
 python scripts/kb.py doctor
 ```
+
+Git commit、branch、tag 是开发者或高级用户的可选版本同步机制，不是普通用户知识库回滚的唯一机制。EXE 默认应使用本地 backup/snapshot 作为恢复机制。
 
 如索引损坏，可删除 `.kb` 后重建：
 
@@ -533,7 +550,7 @@ python scripts/kb.py secret-scan
 
 ## Why Markdown remains the source of truth
 
-Markdown 保持为事实来源，因为它可读、可 diff、可 review、可 Git 回滚，也能长期跨工具保存。知识治理所需的来源、状态、confidence、review、valid_for、verification_method 和生命周期历史都必须保存在 Markdown/frontmatter 中。
+Markdown 保持为事实来源，因为它可读、可 review、可通过本地 backup/snapshot 恢复，也可以被高级用户用 Git 做可选版本管理，还能长期跨工具保存。知识治理所需的来源、状态、confidence、review、valid_for、verification_method 和生命周期历史都必须保存在 Markdown/frontmatter 中。
 
 SQLite 不能替代 Markdown。SQLite 只是为了检索、统计和治理报告服务的索引层。
 
@@ -547,7 +564,7 @@ SQLite 不能替代 Markdown。SQLite 只是为了检索、统计和治理报告
 
 Markdown 长期存储设计见 [docs/markdown-storage-design.md](D:/AI/personal-knowledge-base/docs/markdown-storage-design.md)，frontmatter schema 见 [docs/markdown-schema.md](D:/AI/personal-knowledge-base/docs/markdown-schema.md)。
 
-Markdown 是 source of truth，因为它可读、可 diff、可 review、可 Git 回滚，也能长期跨工具迁移。知识治理所需的 `source_url`、`source_file`、`status`、`confidence`、`reviewed_by`、`verification_method`、`promoted_from`、`supersedes`、`superseded_by`、`topic_id` 和 `canonical_id` 必须保存在 Markdown/frontmatter 中。
+Markdown 是 source of truth，因为它可读、可 diff、可 review、可通过本地 backup/snapshot 恢复，也能被高级用户用 Git 做可选版本管理，并能长期跨工具迁移。知识治理所需的 `source_url`、`source_file`、`status`、`confidence`、`reviewed_by`、`verification_method`、`promoted_from`、`supersedes`、`superseded_by`、`topic_id` 和 `canonical_id` 必须保存在 Markdown/frontmatter 中。
 
 SQLite 不是事实来源。`.kb/index.sqlite` 只是从 Markdown 派生出的 FTS5 索引和元数据快照，用于搜索、统计和治理报告。删除或损坏索引时，应从 Markdown 重建，而不是手工修 SQLite：
 

@@ -15,7 +15,7 @@
 - 长时间运行稳定性：未来 GUI 中 index、audit、dedupe、benchmark 等任务必须后台化。
 - SQLite 并发与写锁：读任务可并发，写任务互斥，写事务短。
 - 日志与报告归档：报告和日志需要按时间归档、可追溯、可轮转。
-- 备份恢复：Markdown、config、templates、reports 和 Git history 是主要资产，SQLite 索引可重建。
+- 备份恢复：Markdown、config、templates、reports 是主要数据资产，本地 snapshot/backup 是默认回滚机制，Git 只是开发者或高级用户的可选同步机制，SQLite 索引可重建。
 - schema/version migration：frontmatter 和 SQLite schema 的演进必须可审计、可回滚、向后兼容。
 - release/tag 策略：每个稳定治理阶段都要有可复现的验收命令和 tag。
 - EXE/GUI 常驻运行准备：GUI 只能通过 service/core API 访问知识库，不直接改 Markdown 或 SQLite。
@@ -253,7 +253,7 @@ python scripts/kb.py conflicts
 - `conflicts`
 - `benchmark`
 - `maintenance`
-- Git sync
+- Optional Git Sync
 - backup/export
 - learning queue generation
 
@@ -324,30 +324,39 @@ result_summary
 - `README.md`
 - `AGENTS.md`
 - `docs/`
-- Git history、branch、tag
 
-`.kb/index.sqlite` 是可重建索引，不作为核心备份。可提交规则应保持它在 Git 外或作为本地生成物处理。
+Markdown、config、templates、reports 和核心文档是主要数据资产。`.kb/index.sqlite` 是可重建索引，不作为备份核心；它可以在备份中作为可选加速恢复内容，但不能替代 Markdown。
 
-### Git 回滚
+### 默认回滚机制
 
-Git commit 和 tag 是主要回滚机制：
+Local snapshot / backup 是默认回滚机制。普通用户不需要 Git、GitHub 账号或命令行，也应能完整备份、恢复和继续使用知识库。
+
+升级、promote、archive、bulk import、schema migration、destructive maintenance 和 workspace upgrade 前应创建 snapshot。恢复时优先从本地 backup/snapshot 恢复，再重建索引。
+
+推荐恢复后运行：
 
 ```bash
-git log --oneline --decorate
-git checkout <tag-or-commit>
+python scripts/kb.py index
+python scripts/kb.py doctor
 ```
 
-需要恢复到某个稳定版本时，优先 checkout 对应 tag 或 branch，再重新 index。
+### Optional Git Sync
 
-### 从 Git 恢复后重建索引
+Git 是开发者或高级用户的可选版本同步机制，可用于跨设备同步、远端备份、代码审查和软件项目自身 release 管理。Git 不得成为 EXE 软件的必需依赖，也不得成为 promote、audit、index、archive、restore 的前置条件。
 
-```bash
+Git tag 主要用于软件项目自身 release，不应是普通用户知识库回滚的唯一机制。即使启用 Git Sync，本地 snapshot/backup 仍是恢复前的默认安全网。
+
+### 索引重建
+
+如索引损坏或恢复后需要刷新，可删除 `.kb` 后重建：
+
+```powershell
 Remove-Item -Recurse -Force .kb
 python scripts/kb.py index
 python scripts/kb.py doctor
 ```
 
-在非 PowerShell 环境中删除 `.kb` 后运行同样的 `index` 和 `doctor`。
+在非 PowerShell 环境中删除 `.kb` 后运行同样的 `index` 和 `doctor`。删除 `.kb` 不应影响 Markdown 源数据。
 
 ### public repo 安全
 
@@ -370,10 +379,12 @@ python scripts/kb.py secret-scan
 
 - 默认导出 Markdown、config、templates、docs、reports，不要求导出 `.kb/index.sqlite`。
 - 支持包含或排除 reports。
+- 支持可选包含 `.kb/index.sqlite` 以加快恢复。
 - 支持导出 manifest，记录文件数量、hash、创建时间和工具版本。
 - 支持导入前 dry-run。
 - 支持恢复后自动 `index` 和 `doctor`。
 - 私有 workspace 导出必须提醒 secret-scan 和敏感数据风险。
+- public repo 不等于 backup。公开仓库不能替代本地备份，也不能保证包含用户全部私有 workspace 数据。
 
 ## 8. Schema / version migration
 
@@ -468,6 +479,8 @@ tag 前必须确认：
 - perf smoke passed。
 - monthly-maintenance 或 maintenance 报告已生成并检查。
 - 没有未解释的 dirty worktree。
+
+Git tag 属于软件项目自身 release 管理。普通用户知识库回滚不得只依赖 Git tag；EXE 默认应提供本地 backup/snapshot 恢复路径。
 
 ## 10. 维护频率建议
 

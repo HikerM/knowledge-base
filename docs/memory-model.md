@@ -41,7 +41,7 @@
 
 ## Task memory
 
-长任务包括 index、reindex、audit、secret-scan、dedupe、conflicts、benchmark、maintenance、backup/export 和 Git sync。任务内存规则：
+长任务包括 index、reindex、audit、secret-scan、dedupe、conflicts、benchmark、maintenance、backup/export 和 Optional Git Sync。任务内存规则：
 
 - 任务在后台 worker 执行。
 - UI 主线程只接收 progress event 和 result summary。
