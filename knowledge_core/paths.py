@@ -10,6 +10,7 @@ from typing import Dict, Mapping, Optional, Tuple
 
 
 ROOT = Path(__file__).resolve().parents[1]
+ROOT_RESOLVED = ROOT.resolve()
 KNOWLEDGE_DIR = ROOT / "knowledge"
 CONFIG_DIR = ROOT / "config"
 TEMPLATES_DIR = ROOT / "templates"
@@ -34,8 +35,9 @@ def configure_root(root: Path) -> None:
     knowledge base root.
     """
 
-    global ROOT, KNOWLEDGE_DIR, CONFIG_DIR, TEMPLATES_DIR, REPORTS_DIR, KB_DIR, DB_PATH
+    global ROOT, ROOT_RESOLVED, KNOWLEDGE_DIR, CONFIG_DIR, TEMPLATES_DIR, REPORTS_DIR, KB_DIR, DB_PATH
     ROOT = Path(root).resolve()
+    ROOT_RESOLVED = ROOT.resolve()
     KNOWLEDGE_DIR = ROOT / "knowledge"
     CONFIG_DIR = ROOT / "config"
     TEMPLATES_DIR = ROOT / "templates"
@@ -99,7 +101,7 @@ def unique_path(directory: Path, filename: str) -> Path:
 
 
 def to_relative_posix(path: Path) -> str:
-    return path.resolve().relative_to(ROOT.resolve()).as_posix()
+    return path.resolve().relative_to(ROOT_RESOLVED).as_posix()
 
 
 def resolve_user_path(path_text: str) -> Path:
@@ -115,7 +117,7 @@ def infer_category_layer(path: Path, categories: Optional[Mapping[str, Mapping[s
 
         categories = load_categories()
 
-    rel_parts = path.resolve().relative_to(ROOT.resolve()).parts
+    rel_parts = path.resolve().relative_to(ROOT_RESOLVED).parts
     if len(rel_parts) < 4 or rel_parts[0] != "knowledge":
         return "unknown", "unknown"
 
