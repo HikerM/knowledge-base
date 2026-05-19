@@ -16,6 +16,14 @@ SQLite-hot / Markdown-source runtime model：
 - Markdown 只作为 source of truth；只有 `open` / `edit` / `index` / `reindex` / `doctor` / `promote` / `archive` / `restore` / `backup` 等明确操作才读取 Markdown。
 - `.kb/index.sqlite` 缺失时只显示 `index_status=missing`，并提示用户后台构建索引；不得在 App startup 自动构建索引。
 
+启动状态检查：
+
+```bash
+python scripts/kb.py workspace-status
+```
+
+`workspace-status` 是未来 Windows EXE / GUI 的稳定启动路径。CLI 只调用 `WorkspaceStatusService`；未来 GUI 也应调用同一 service，而不是拼接 CLI 命令字符串。该路径只读 SQLite metadata / workspace status，不扫描 `knowledge/`，不读取 Markdown，不计算 hash，不运行 index。App startup != first index；first index 必须是用户显式触发的后台任务。
+
 ## 代码结构
 
 - `scripts/kb.py`: CLI 入口，保留命令解析、命令处理和索引/搜索/治理流程。
@@ -23,6 +31,10 @@ SQLite-hot / Markdown-source runtime model：
 - `knowledge_core/config.py`: categories、sources、learning-radar、extract-rules 配置加载。
 - `knowledge_core/frontmatter.py`: frontmatter 解析、渲染和 schema 枚举。
 - `knowledge_core/security.py`: secret-scan 的扫描规则、路径排除和脱敏逻辑。
+- `knowledge_app/services/workspace_status_service.py`: 长期稳定 startup status service，供 CLI 和未来 GUI/EXE 复用。
+- `knowledge_app/services/index_metadata_service.py`: 只读 SQLite metadata service，不创建索引、不扫描 Markdown、不 hash。
+- `knowledge_app/models/workspace_status.py`: `workspace-status` 稳定输出模型。
+- `knowledge_app/models/operation_result.py`: service 层结构化结果模型。
 
 ## 目录结构
 

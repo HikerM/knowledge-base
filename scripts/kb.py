@@ -84,6 +84,7 @@ from knowledge_core.reports import (
 )
 from knowledge_core.security import run_secret_scan
 from knowledge_core.search import DEFAULT_TOP_K, SearchError, run_search
+from knowledge_app.services.workspace_status_service import WorkspaceStatusService
 
 
 def configure_core_root(root: Path) -> None:
@@ -315,6 +316,14 @@ def command_list(args: argparse.Namespace) -> None:
     ensure_schema(conn)
     rows = [dict(row) for row in list_documents(conn, args.category, args.layer, args.limit)]
     print_json({"elapsed_ms": elapsed_ms(start), "count": len(rows), "results": rows})
+
+
+def command_workspace_status(_: argparse.Namespace) -> None:
+    result = WorkspaceStatusService().get_status()
+    if result.data is None:
+        print_json(result.to_dict())
+        return
+    print_json(result.data.to_dict())
 
 
 def resolve_document_path(path_text: Optional[str], document_id: Optional[int]) -> Path:
@@ -590,6 +599,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_list.add_argument("--layer", choices=LAYERS)
     p_list.add_argument("--limit", type=int, default=50)
     p_list.set_defaults(func=command_list)
+
+    p_workspace_status = sub.add_parser(
+        "workspace-status",
+        help="Show startup-safe workspace/index status from SQLite metadata only.",
+    )
+    p_workspace_status.set_defaults(func=command_workspace_status)
 
     p_sources = sub.add_parser("sources", help="List configured learning sources without fetching content.")
     p_sources.add_argument("--category", choices=category_choices())

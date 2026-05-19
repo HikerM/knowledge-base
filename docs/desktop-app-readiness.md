@@ -74,11 +74,13 @@ CLI 可以继续保留为：
 
 ## 2. 未来 service layer 规划
 
-未来可以新增应用层模块：
+当前已开始新增应用层模块，启动路径必须优先复用这些 service：
 
 ```text
 knowledge_app/
   services/
+    workspace_status_service.py
+    index_metadata_service.py
     knowledge_service.py
     search_service.py
     review_service.py
@@ -95,6 +97,7 @@ knowledge_app/
     task_status.py
     progress.py
   models/
+    workspace_status.py
     operation_result.py
     search_result.py
     audit_result.py
@@ -102,6 +105,19 @@ knowledge_app/
 ```
 
 ### services
+
+`workspace_status_service.py`
+
+- 负责 Windows EXE / GUI 的稳定启动状态路径。
+- 只组合 workspace path、index path 和 `IndexMetadataService` 的只读统计。
+- 不扫描 `knowledge/`，不读取 Markdown，不 hash，不 index。
+- `.kb/index.sqlite` missing 时返回 `index_status=missing`，只提示后台构建索引。
+
+`index_metadata_service.py`
+
+- 负责以只读 SQLite 连接读取 `documents` / `chunks` / FTS metadata。
+- 不调用 `ensure_schema`，不创建 `.kb/index.sqlite`，不修改 SQLite schema。
+- SQLite 损坏或缺关键表时返回 `failed` / `partial` 状态和结构化 errors/warnings。
 
 `knowledge_service.py`
 
@@ -130,6 +146,7 @@ knowledge_app/
 - `index`、`reindex`、`vacuum` 是写任务，必须进入后台队列。
 - `vacuum` 必须显式确认。
 - index missing/stale 时提供后台任务入口，不在 app startup 自动运行 index/reindex。
+- App startup 不调用 `index_service` 的 index/reindex/doctor；这些只能由用户显式触发或后台任务入口触发。
 
 `audit_service.py`
 
@@ -249,7 +266,7 @@ Workspace 打开流程：
 
 1. 用户选择目录。
 2. GUI 检查是否存在 `knowledge/`、`config/`、`scripts/kb.py` 或未来 workspace manifest。
-3. service 读取 workspace status、SQLite index status、cached stats 和最近任务摘要。
+3. GUI 调用 `WorkspaceStatusService` 读取 workspace status、SQLite index status、cached stats 和最近任务摘要。
 4. 启动时不扫描 `knowledge/`、不读取所有 Markdown、不自动触发 index/reindex。
 5. 如果 `.kb/index.sqlite` 不存在，只显示 `index_status=missing` 和后台构建索引入口；如果 stale，提示可通过后台 index/reindex 从 Markdown 重建索引。
 6. 不在安装目录创建或迁移用户知识文件。
@@ -383,6 +400,7 @@ Workspace 打开流程：
 - 日志轮转。
 - 启动只读 SQLite metadata、workspace status、cached stats 和最近任务摘要。
 - 启动不扫描 `knowledge/`、不读取所有 Markdown、不自动触发 index/reindex。
+- App startup != first index；first index 必须作为后台任务显式触发。
 - 崩溃后可重新 index。
 - Markdown 源数据优先保护。
 - SQLite 是 runtime hot index，索引可删除重建。

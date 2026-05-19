@@ -115,12 +115,14 @@ python scripts/kb.py research --query "react state" --category frontend
 - 后续 GUI 任务必须先设计 service boundary，再实现界面。
 - GUI 不得直接读写 Markdown 或 SQLite；必须通过 service/core API 访问。
 - GUI 不得通过拼接 CLI 命令字符串作为主要集成方式。
+- CLI 入口也必须复用 service/core API；不得把长期 GUI/EXE 启动逻辑只写在 `scripts/kb.py`。
 - App startup、Dashboard、Category View、Search View、Review Queue、Archive / Trash View 默认只读取 SQLite metadata / FTS index，不得读取 Markdown 正文。
 - App startup 不得扫描 `knowledge/`、不得读取所有 Markdown、不得自动触发 index。
 - Dashboard 只读 workspace status、index status、cached stats 和最近任务摘要。
 - Category View 必须从 SQLite `documents` metadata 聚合统计和分页查询；Search View 必须从 SQLite FTS5 查询，并用 `documents` metadata 做 hard filter。
 - Review Queue 必须从 SQLite metadata 查询；Archive / Trash / Quarantine 页面必须从 SQLite metadata 分页查询。
 - `workspace-status` 必须是轻量命令，只读 SQLite/config/cache；不得读 Markdown、不得 hash、不得 index。
+- App startup 的稳定路径是 `WorkspaceStatusService` / `workspace-status`；App startup != first index，不能调用 index、doctor、audit 或 secret-scan。
 - Markdown 只作为 source of truth；只有 open/edit/index/reindex/doctor/promote/archive/restore/backup/secret-scan/schema migration 等明确操作才读取 Markdown。
 - `.kb/index.sqlite` missing 时，GUI / service 只能显示 `index_status=missing`，并提示用户启动后台 index/reindex；不得在 startup 自动构建索引。
 - 长任务必须后台化，提供 task_id、status、progress、cancellation、error detail、log path 和 result summary。

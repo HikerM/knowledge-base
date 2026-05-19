@@ -92,6 +92,15 @@ Topic-aware Generational Archive Planner 用于减少 active working set：按 `
 
 `workspace-status` 必须保持轻量：只读取 workspace config、SQLite metadata 和 cache/task summary；不得调用 `iter_markdown_files()`，不得读取 Markdown 正文，不得计算 hash，不得运行 index/reindex。它的职责是报告当前 hot index 状态，而不是修复状态。
 
+当前稳定启动切片已经落在 service layer：
+
+- `knowledge_app.services.workspace_status_service.WorkspaceStatusService`
+- `knowledge_app.services.index_metadata_service.IndexMetadataService`
+- `knowledge_app.models.workspace_status.WorkspaceStatus`
+- `knowledge_app.models.operation_result.OperationResult`
+
+CLI 的 `python scripts/kb.py workspace-status` 只是这个 service 的薄封装。未来 Windows EXE / GUI 必须调用同一 service，不得拼接 CLI 命令，也不得在启动路径调用 `index`、`doctor`、`audit` 或 `secret-scan`。App startup != first index；first index 是后台任务。
+
 ## 2.1 SQLite-hot 页面读取策略
 
 未来 EXE / GUI 的默认页面读取路径必须先查 SQLite metadata，不得为了渲染页面扫描或读取 Markdown：

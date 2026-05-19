@@ -375,6 +375,8 @@ Markdown -> parser -> SQLite index -> search/audit/report
 - `.kb/index.sqlite` missing 时，GUI / service 只显示 `index_status=missing` 和受限能力，并提供后台 index/reindex 任务；不得扫描 Markdown 来补全统计。
 - 后台 index/reindex 可以读取 Markdown 并重建 `.kb/index.sqlite`，但不得把 SQLite 当作事实来源修改 Markdown。
 
+稳定启动路径由 `knowledge_app.services.workspace_status_service.WorkspaceStatusService` 提供。CLI 的 `workspace-status` 只能调用该 service；未来 GUI / EXE 也必须调用同一 service/core API，不能拼接 CLI 命令字符串。App startup != first index；启动缺索引时只报告 missing，first index 必须由用户显式触发为后台任务。
+
 删除或损坏 `.kb/index.sqlite` 后，可以从 Markdown 重建：
 
 ```powershell
