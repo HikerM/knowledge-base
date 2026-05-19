@@ -128,20 +128,24 @@ python scripts/kb.py research --query "react state" --category frontend
 ## 长期运维与 GUI / EXE 边界
 
 - GUI 开发必须先遵守 `docs/gui-product-ui-architecture.md` 中的 Product UI Architecture Contract。
-- GUI Phase 1 只能做 read-only MVP：startup、search、category/library、document open、task status read path。
+- GUI 顶部栏不得作为主导航；顶部栏只保留 workspace switch、global search / command search、index status indicator、task status indicator、backup status indicator、settings/user entry。
+- GUI 左侧栏是唯一主导航；只保留：首页、搜索、知识库、审核、任务中心、维护、设置。
+- 归档、整理中心、备份与同步、审计中心 必须归入「维护」；模板管理、来源管理、分类设置 必须归入「设置」。
+- Raw Inbox、Distilled Review 必须归入「审核」子视图；Rules / Checklists / Snippets 必须归入「知识库」子视图。
+- GUI Phase 1 只能做 read-only MVP：首页、搜索、知识库、document open、task status read path。
 - GUI Phase 1 不得暴露 category `display_name` / `description` execute。
 - GUI 不得提前接入 destructive execute；archive、delete、merge、template apply、restore execute 在 service 明确支持前必须 disabled 或 plan-only。
 - 后续 GUI 任务必须先设计 service boundary，再实现界面。
 - GUI 不得直接读写 Markdown 或 SQLite；必须通过 service/core API 访问。
 - GUI 不得通过拼接 CLI 命令字符串作为主要集成方式。
 - CLI 入口也必须复用 service/core API；不得把长期 GUI/EXE 启动逻辑只写在 `scripts/kb.py`。
-- App startup、Dashboard、Category View、Search View、Review Queue、Archive / Trash View 默认只读取 SQLite metadata / FTS index，不得读取 Markdown 正文。
+- App startup、首页、搜索、知识库、审核、维护中的 metadata 列表默认只读取 SQLite metadata / FTS index，不得读取 Markdown 正文。
 - App startup 不得扫描 `knowledge/`、不得读取所有 Markdown、不得自动触发 index。
-- Dashboard 只读 workspace status、index status、cached stats 和最近任务摘要。
-- GUI Dashboard/Search/Category/Review/Archive 页面必须调用 `knowledge_app.services` 中的 service；CLI 只作为自动化、调试和验收入口。
-- Search View 必须调用 `SearchService`；Category View 必须调用 `CategoryService`；Review Queue 必须调用 `ReviewQueueService`；Archive / Trash / Quarantine View 必须调用 `ArchiveMetadataService`。
-- Category View 必须从 SQLite `documents` metadata 聚合统计和分页查询；Search View 必须从 SQLite FTS5 查询，并用 `documents` metadata 做 hard filter。
-- Review Queue 必须从 SQLite metadata 查询；Archive / Trash / Quarantine 页面必须从 SQLite metadata 分页查询。
+- 首页只保留索引状态、待审核数量、备份状态、任务状态、最近任务、推荐操作和快速入口，不得铺满所有功能入口。
+- GUI 首页、搜索、知识库、审核、任务中心、维护、设置页面必须调用 `knowledge_app.services` 中的 service；CLI 只作为自动化、调试和验收入口。
+- 搜索必须调用 `SearchService`；知识库必须调用 `CategoryService`；审核必须调用 `ReviewQueueService`；维护 > 归档 子视图必须调用 `ArchiveMetadataService`。
+- 知识库必须从 SQLite `documents` metadata 聚合统计和分页查询；搜索必须从 SQLite FTS5 查询，并用 `documents` metadata 做 hard filter。
+- 审核必须从 SQLite metadata 查询；维护 > 归档 子视图必须从 SQLite metadata 分页查询。
 - `workspace-status` 必须是轻量命令，只读 SQLite/config/cache；不得读 Markdown、不得 hash、不得 index。
 - App startup 的稳定路径是 `WorkspaceStatusService` / `workspace-status`；App startup != first index，不能调用 index、doctor、audit 或 secret-scan。
 - Markdown 正文只能通过 `DocumentService.open_document` 在用户明确打开单篇文档时读取；不得为了列表、搜索、分类、review queue 或 archive 页面批量读取 Markdown。
@@ -168,14 +172,14 @@ python scripts/kb.py research --query "react state" --category frontend
 - promote、audit、index、archive、restore 不得依赖 Git。
 - Git 相关功能必须位于 `OptionalGitService` 或等价可选模块。
 - 普通用户默认使用 Backup/Snapshot 作为恢复机制。
-- GUI 页面应叫 Backup & Sync，而不是只叫 Git Sync。
+- GUI 备份入口应位于「维护 > 备份与同步」，不得把 Git Sync 作为主导航。
 
 ## 大规模性能与内存规则
 
 - 不得实现启动时全量扫描知识库。
 - 不得实现启动时全量读取 Markdown。
 - 不得实现启动时自动触发 index/reindex。
-- 启动、Dashboard、分类、搜索、review queue、archive/trash/quarantine 列表必须走 SQLite metadata / FTS5 热路径。
+- 启动、首页、搜索、知识库、审核、维护中的 metadata 列表必须走 SQLite metadata / FTS5 热路径。
 - Markdown 只在 open/edit/index/reindex/doctor/promote/archive/restore/backup/secret-scan/schema migration 等明确需要源文件的操作中读取。
 - 不得让 GUI 一次渲染所有搜索结果。
 - 不得在 UI 主线程跑 index、audit、secret-scan、reindex、dedupe、conflicts、benchmark、maintenance、Optional Git Sync 或 backup/export。
@@ -192,7 +196,7 @@ python scripts/kb.py research --query "react state" --category frontend
 - `raw` / `distilled` 不得自动进入正式层。
 - `organize` / `archive` 功能默认只能生成 plan，不能自动移动或删除。
 - `archive` / `restore` / `deprecate` / `quarantine` 必须有人工确认。
-- 后续 GUI 必须在 Search、Review、Archive 页面体现 `layer`、`status`、`source_type`、`confidence`、`review_required`、`archive_status` 等状态。
+- 后续 GUI 必须在 搜索、知识库、审核、维护 > 归档 子视图体现 `layer`、`status`、`source_type`、`confidence`、`review_required`、`archive_status` 等状态。
 
 ## 学习雷达边界
 
