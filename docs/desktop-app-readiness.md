@@ -61,6 +61,17 @@ CLI 可以继续保留为：
 
 未来 GUI 应调用 service/core API，不应把 CLI stdout 当主要集成协议。
 
+### SQLite-hot / Markdown-source runtime model
+
+未来 EXE / GUI 的运行时默认模型是 SQLite-hot / Markdown-source：
+
+- SQLite 是 runtime hot index，用于启动后的 metadata、FTS5 搜索、分类统计、审核队列和归档类列表。
+- Markdown 是 source of truth，用于 open/edit、index/reindex、doctor、schema migration、secret-scan 和人工审查等明确操作。
+- App startup 只读 workspace status、SQLite metadata、index status、cached stats 和最近任务摘要。
+- App startup 不扫描 `knowledge/`，不读取所有 Markdown，不自动全量 index。
+- `.kb/index.sqlite` missing/stale 时，GUI 显示 index status、受限能力、最近错误和后台 index/reindex 入口。
+- 删除 `.kb/index.sqlite` 后，可以通过后台 reindex 从 Markdown 重建；重建不应修改 `knowledge/**/*.md`。
+
 ## 2. 未来 service layer 规划
 
 未来可以新增应用层模块：
@@ -94,19 +105,21 @@ knowledge_app/
 
 `knowledge_service.py`
 
-- 负责 workspace 初始化、路径校验、单篇 open、文档元数据读取。
+- 负责 workspace 初始化、路径校验、单篇 open/edit、文档元数据读取。
+- 分类页和文档列表默认从 SQLite `documents` metadata 读取；只在 open/edit 时根据 `documents.path` 读取单篇 Markdown。
 - 不直接绕过 lifecycle 规则写正式层。
 - 写入操作返回结构化 `OperationResult`。
 
 `search_service.py`
 
-- 负责 FTS5 搜索、过滤、Top-K、分页和 search explain。
+- 负责 SQLite FTS5 搜索、过滤、Top-K、分页和 search explain。
 - 默认只查正式层。
 - 不读取全部 Markdown 正文。
 
 `review_service.py`
 
 - 负责 review queue、promote、deprecate、quarantine、rejected 相关工作流。
+- review queue 默认从 SQLite metadata 查询，不扫描 distilled/raw Markdown。
 - 所有 promote 必须带人工审核信息。
 - 不自动 promote。
 
@@ -115,6 +128,7 @@ knowledge_app/
 - 负责 index、reindex、doctor、stats、vacuum。
 - `index`、`reindex`、`vacuum` 是写任务，必须进入后台队列。
 - `vacuum` 必须显式确认。
+- index missing/stale 时提供后台任务入口，不在 app startup 自动运行全量 index。
 
 `audit_service.py`
 
@@ -234,9 +248,10 @@ Workspace 打开流程：
 
 1. 用户选择目录。
 2. GUI 检查是否存在 `knowledge/`、`config/`、`scripts/kb.py` 或未来 workspace manifest。
-3. service 执行 doctor。
-4. 如果 `.kb/index.sqlite` 不存在，提示可重建索引。
-5. 不在安装目录创建或迁移用户知识文件。
+3. service 读取 workspace status、SQLite index status、cached stats 和最近任务摘要。
+4. 启动时不扫描 `knowledge/`、不读取所有 Markdown、不自动全量 index。
+5. 如果 `.kb/index.sqlite` 不存在或 stale，提示可通过后台 index/reindex 从 Markdown 重建索引。
+6. 不在安装目录创建或迁移用户知识文件。
 
 ## 4. GUI 页面规划
 
@@ -244,16 +259,25 @@ Workspace 打开流程：
 
 - purpose：显示 workspace 状态、最近报告、索引状态、待审核数量、secret-scan 状态和维护建议。
 - service dependencies：`knowledge_service`、`index_service`、`audit_service`、`maintenance_service`。
-- read/write behavior：默认只读元数据和摘要。
+- read/write behavior：默认只读 workspace status、SQLite metadata、cached stats 和任务摘要。
 - long-running tasks：doctor、stats、maintenance。
 - progress/error states：显示后台任务状态、最近错误、log_path。
 - destructive confirmations：无默认破坏性动作，reindex 和 vacuum 需要确认。
+
+### Category View
+
+- purpose：按 category、layer、status、confidence、review_required 浏览知识分布和文档列表。
+- service dependencies：`knowledge_service`、`index_service`。
+- read/write behavior：从 SQLite `documents` metadata 聚合统计并分页查询列表；不扫描 `knowledge/`，不读取 Markdown 正文。
+- long-running tasks：默认无；index missing/stale 时提供后台 index/reindex 入口。
+- progress/error states：显示 index status、stale 提醒、空分类、分页加载错误。
+- destructive confirmations：无。
 
 ### Search
 
 - purpose：正式知识检索、研究性检索、结果分页和单篇 open。
 - service dependencies：`search_service`、`knowledge_service`。
-- read/write behavior：搜索只读索引，open 按需读单篇 Markdown。
+- read/write behavior：搜索只读 SQLite FTS5 和 `documents` metadata，open/edit 按 `documents.path` 读取单篇 Markdown。
 - long-running tasks：默认无，复杂 explain 或大查询可后台化。
 - progress/error states：显示搜索耗时、无结果、索引缺失、查询错误。
 - destructive confirmations：无。
@@ -271,7 +295,7 @@ Workspace 打开流程：
 
 - purpose：人工审核 distilled，决定 promote、reject、quarantine 或继续修改。
 - service dependencies：`review_service`、`audit_service`、`knowledge_service`。
-- read/write behavior：可写 distilled 审核字段，可通过 promote 进入正式层。
+- read/write behavior：review queue 从 SQLite metadata 查询；打开或编辑候选项时才按 `documents.path` 读取单篇 Markdown；可写 distilled 审核字段，可通过 promote 进入正式层。
 - long-running tasks：review-queue、audit。
 - progress/error states：显示缺少审核字段、缺少 source_url、promote 门禁失败。
 - destructive confirmations：promote、reject、quarantine 需要确认并填写原因。
@@ -280,10 +304,19 @@ Workspace 打开流程：
 
 - purpose：浏览正式知识层、查看 canonical rule、检查 stale 和 deprecated 关系。
 - service dependencies：`knowledge_service`、`search_service`、`audit_service`、`review_service`。
-- read/write behavior：默认只读，修改必须经过结构化 service。
+- read/write behavior：默认从 SQLite metadata 分页读取列表和统计，修改必须经过结构化 service，打开或编辑时才读取单篇 Markdown。
 - long-running tasks：stale、canonical-report、conflicts。
 - progress/error states：显示 stale、冲突、缺少审核字段。
 - destructive confirmations：deprecate 或移动正式层文件需要确认。
+
+### Archive / Trash / Quarantine
+
+- purpose：浏览已归档、待删除审查、隔离和历史状态内容，并支持 restore/deprecate/quarantine 的人工确认流程。
+- service dependencies：`knowledge_service`、`review_service`、`audit_service`、`index_service`。
+- read/write behavior：从 SQLite `documents` metadata 按 layer/status/path/归档状态分页查询；列表和计数不读取 Markdown 正文。
+- long-running tasks：archive-plan、restore dry-run、audit、reindex。
+- progress/error states：显示 index missing/stale、分页加载、来源链路缺失、restore 风险。
+- destructive confirmations：restore、trash cleanup、deprecate、quarantine 必须人工确认；archive 不是 delete。
 
 ### Sources
 
@@ -347,9 +380,11 @@ Workspace 打开流程：
 - 任务错误可恢复。
 - 写任务互斥。
 - 日志轮转。
+- 启动只读 SQLite metadata、workspace status、cached stats 和最近任务摘要。
+- 启动不扫描 `knowledge/`、不读取所有 Markdown、不自动全量 index。
 - 崩溃后可重新 index。
 - Markdown 源数据优先保护。
-- SQLite 索引可重建。
+- SQLite 是 runtime hot index，索引可删除重建。
 - Git 不得成为启动、写入、回滚或恢复的硬依赖。
 - 本地 snapshot/backup 是默认恢复路径。
 - 不把所有文档常驻内存。

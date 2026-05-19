@@ -2,7 +2,19 @@
 
 `personal-knowledge-base` 是 Markdown-first 的本地个人开发知识库，用来长期沉淀前端、后端、UI/UX、产品、算法、数据库、性能、安全、AI Agent 等领域的工程知识。
 
-Markdown 是事实来源；SQLite + FTS5 是本地索引层。搜索默认只查索引，不全量读取 Markdown，也不在 `knowledge/` 中做字符串扫描。
+Markdown 是事实来源；SQLite + FTS5 是本地索引层和未来 GUI / EXE 的 runtime hot index。搜索默认只查索引，不全量读取 Markdown，也不在 `knowledge/` 中做字符串扫描。
+
+SQLite-hot / Markdown-source runtime model：
+
+- App startup 只读 SQLite metadata、workspace status、index status、cached stats 和最近任务摘要。
+- App startup 不扫描 `knowledge/`，不读取所有 Markdown，不自动全量 index。
+- Category view 从 SQLite `documents` metadata 聚合统计。
+- Search view 从 SQLite FTS5 查询，并用 `documents` metadata 做过滤。
+- Review queue 从 SQLite metadata 查询。
+- Archive / Trash / Quarantine 页面从 SQLite metadata 分页查询。
+- 用户点击 `open` / `edit` 时，才根据 `documents.path` 读取单篇 Markdown。
+- SQLite missing/stale 时，GUI 显示 index status，并提供后台 index/reindex 任务。
+- `.kb/index.sqlite` 删除或损坏后，可以通过后台 reindex 从 Markdown 重建。
 
 ## 代码结构
 
@@ -457,10 +469,15 @@ python scripts/kb.py maintenance --vacuum
 
 ## Memory and performance principles
 
-- 启动时不加载全部 Markdown。
+- 启动只读 SQLite metadata、workspace status、index status、cached stats 和最近任务摘要。
+- 启动时不扫描 `knowledge/`，不加载全部 Markdown，不自动全量 index。
+- Category view 从 SQLite `documents` metadata 聚合统计。
 - `search` 默认只走 SQLite FTS5，不全量扫描 `knowledge/`。
+- Review queue 从 SQLite metadata 查询。
+- Archive / Trash / Quarantine 页面从 SQLite metadata 分页查询。
 - 搜索只返回 Top-K chunk 和元数据。
-- `open` 才读取完整单篇文档。
+- `open` / `edit` 才根据 `documents.path` 读取完整单篇 Markdown。
+- SQLite missing/stale 时，GUI 显示 index status，并提供后台 index/reindex 任务。
 - 大列表必须分页，未来 GUI 必须使用分页或虚拟滚动。
 - 缓存必须有上限，不能无限保存全文。
 - 后台任务完成后释放文件句柄、DB connection 和大型结果对象。
@@ -478,7 +495,7 @@ python scripts/kb.py maintenance --vacuum
 - 30,000 - 50,000 docs：优化后可稳定使用，需要更严格的批处理、后台任务、分页和内存上限。
 - 100,000+ docs：进入 large-scale mode，需要后台索引、分层优先、checkpoint/resume 和 workspace 分片。
 
-首次全量 `index` 可能较久，因为它必须读取 Markdown、解析 frontmatter、切 chunk、写入 `documents/chunks/chunks_fts`。这可以接受，但必须后台执行。软件启动不能等待首次全量 `index`，只能读取 workspace 配置、index 状态、统计信息和最近任务状态；index missing/stale 时只提示，不阻塞 UI。
+首次全量 `index` 可能较久，因为它必须读取 Markdown、解析 frontmatter、切 chunk、写入 `documents/chunks/chunks_fts`。这可以接受，但必须后台执行。软件启动不能等待首次全量 `index`，只能读取 SQLite metadata、workspace status、index status、cached stats 和最近任务状态；index missing/stale 时只提示，不阻塞 UI。
 
 日常使用依赖增量 `index`。未变化文件通过 `path + mtime + size` 直接 skipped，不计算 sha256；只有新文件、mtime/size 变化文件或显式 `--force-hash` 才 hash。搜索仍只查 SQLite FTS5 / 索引，不读取 Markdown 全文；点击结果或 `open` 单篇时才读取完整 Markdown。
 
@@ -503,6 +520,8 @@ Optional Git Sync
 ```
 
 GUI 不应直接读写 Markdown 或 SQLite，也不应通过拼接 CLI 命令字符串作为主要集成方式。CLI 继续保留给 CI、自动化、调试和高级用户；GUI 应调用 service/core API。
+
+未来 EXE / GUI 的默认读取路径是 SQLite-hot：启动、分类页、搜索页、review queue、Archive / Trash / Quarantine 列表都读取 SQLite metadata / FTS5；Markdown 只在 open/edit、index/reindex、doctor、schema migration、secret-scan 等明确操作中读取。
 
 长期任务必须后台化，包括 index、reindex、audit、secret-scan、dedupe、conflicts、benchmark、maintenance、Optional Git Sync、backup/export 和 learning queue generation。任务需要 task_id、status、progress、cancellation、retry、error detail、log path 和 result summary。
 
@@ -534,10 +553,10 @@ python scripts/kb.py doctor
 
 Git commit、branch、tag 是开发者或高级用户的可选版本同步机制，不是普通用户知识库回滚的唯一机制。EXE 默认应使用本地 backup/snapshot 作为恢复机制。
 
-如索引损坏，可删除 `.kb` 后重建：
+如索引损坏，可删除 `.kb/index.sqlite` 后重建：
 
 ```powershell
-Remove-Item -Recurse -Force .kb
+Remove-Item -Force .kb/index.sqlite
 python scripts/kb.py index
 python scripts/kb.py doctor
 ```
@@ -556,7 +575,7 @@ SQLite 不能替代 Markdown。SQLite 只是为了检索、统计和治理报告
 
 ## Why SQLite index is rebuildable
 
-`.kb/index.sqlite` 保存的是从 Markdown 解析出的索引、chunk、FTS5 和元数据快照。它可以删除后通过 `python scripts/kb.py index` 重建。
+`.kb/index.sqlite` 保存的是从 Markdown 解析出的索引、chunk、FTS5 和元数据快照。它可以删除后通过 `python scripts/kb.py index` 重建；未来 GUI 应把重建作为后台 index/reindex 任务执行。
 
 这条边界让系统在索引损坏、schema migration、性能调优或未来 GUI 崩溃后仍可恢复：保护 Markdown 源数据优先，索引失败可重建。
 
@@ -566,10 +585,10 @@ Markdown 长期存储设计见 [docs/markdown-storage-design.md](D:/AI/personal-
 
 Markdown 是 source of truth，因为它可读、可 diff、可 review、可通过本地 backup/snapshot 恢复，也能被高级用户用 Git 做可选版本管理，并能长期跨工具迁移。知识治理所需的 `source_url`、`source_file`、`status`、`confidence`、`reviewed_by`、`verification_method`、`promoted_from`、`supersedes`、`superseded_by`、`topic_id` 和 `canonical_id` 必须保存在 Markdown/frontmatter 中。
 
-SQLite 不是事实来源。`.kb/index.sqlite` 只是从 Markdown 派生出的 FTS5 索引和元数据快照，用于搜索、统计和治理报告。删除或损坏索引时，应从 Markdown 重建，而不是手工修 SQLite：
+SQLite 不是事实来源。`.kb/index.sqlite` 只是从 Markdown 派生出的 FTS5 索引和元数据快照，用于搜索、统计、分类、review queue 和归档类列表。删除或损坏索引时，应从 Markdown 重建，而不是手工修 SQLite：
 
 ```powershell
-Remove-Item -Recurse -Force .kb
+Remove-Item -Force .kb/index.sqlite
 python scripts/kb.py index
 python scripts/kb.py doctor
 python scripts/kb.py stats
@@ -636,10 +655,14 @@ knowledge/09-ai-agent/snippets/codex/agent-task-template.md
 
 ## 性能保证
 
+- App startup 只读 SQLite metadata、workspace status、cached stats 和最近任务摘要。
+- App startup 不扫描 `knowledge/`，不读取所有 Markdown，不自动全量 index。
+- `category view` 从 SQLite `documents` metadata 聚合统计。
 - `search` 默认走 SQLite FTS5，不全量读取 Markdown。
 - `search` 不全量扫描 `knowledge/`。
-- `list`、`audit`、`review-queue`、`stale` 尽量基于索引元数据。
-- `open` 才读取完整单篇 Markdown。
+- `review-queue` 从 SQLite metadata 查询。
+- Archive / Trash / Quarantine 页面从 SQLite metadata 分页查询。
+- `open` / `edit` 才根据 `documents.path` 读取完整单篇 Markdown。
 - 搜索只返回命中 chunk，不返回整篇文档。
 - 默认 Top-K 为 10，超过 50 需要 `--force`。
 - 增量索引用 `path + mtime + size + sha256` 判断变化。
