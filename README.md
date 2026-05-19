@@ -100,6 +100,19 @@ audit / stale / conflicts / deprecate
 - Content-addressed Lifecycle State Machine（内容寻址生命周期状态机）：负责数据生命周期。用 `card_id`、`topic_id`、`canonical_id`、`source_hash`、`content_hash` 等身份字段管理 raw -> distilled -> formal -> deprecated/archive 的状态流转，promote 必须人工审核。
 - Topic-aware Generational Archive Planner（主题感知分代归档算法）：负责整理归档。按主题、层级、状态、复查和访问情况生成 organize-plan / archive-plan，默认只给计划，不自动移动或删除数据。
 
+## Organize & Archive
+
+整理归档设计见 [docs/organize-archive-design.md](D:/AI/personal-knowledge-base/docs/organize-archive-design.md)。它补齐长期增长后的 active/archive 分层、canonical、restore、archive score 和未来命令规划。
+
+核心原则：
+
+- archive is not delete。归档用于降低 active working set 和默认搜索噪音，同时保留历史、来源链路和恢复能力。
+- archive 默认不进入普通 `search`。普通 `search` 仍默认只查 active `rules`、`checklists`、`snippets`，不因 archive 设计改变默认行为。
+- organize-plan before archive。整理、合并、canonical 修正和归档默认都必须先生成 plan；真实 archive/restore/deprecate/quarantine 需要人工确认。
+- archive 前建议 Git snapshot、tag、backup/export 或等价快照。
+- archive 不得破坏 `source_url`、`source_file`、`promoted_from`、`supersedes`、`superseded_by` 等来源链路。
+- `rules`、`checklists`、`snippets` 必须少而准，优先保持 canonical；raw 可以多，但必须可整理、可归档、可恢复。
+
 ## 常用流程
 
 初始化：
