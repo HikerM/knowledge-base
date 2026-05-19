@@ -8,6 +8,8 @@
 - Content-addressed Lifecycle State Machine：内容寻址生命周期状态机，负责数据生命周期。
 - Topic-aware Generational Archive Planner：主题感知分代归档算法，负责整理归档。
 
+v1.2.0 已完成的设计基线包括 long-term operations、large-scale readiness、Markdown storage design、SQLite-hot / Markdown-source model、backup/snapshot design、organize/archive design、10K performance smoke 和 core algorithm roadmap。下一阶段固定为 Phase 5：Generic Workspace / Template System。GUI/EXE 仍然后置。
+
 ## Phase 1：内容治理闭环收尾
 
 目标：
@@ -81,69 +83,68 @@
 - Content-addressed Lifecycle State Machine：重点使用。
 - Topic-aware Generational Archive Planner：使用，归档和恢复动作必须服从生命周期状态。
 
-## Phase 5：Organize & Archive Design
+## Phase 5：Generic Workspace / Template System
 
 目标：
 
-- 设计 organize-plan、archive-plan、restore-plan。
-- 默认只生成计划，不自动移动、不删除、不修改知识卡片。
-- 真实 archive/restore 必须人工确认，并优先有 local snapshot / backup；Git snapshot 只能作为可选补充。
+- 建立 workspace model，把单一开发者知识库升级为通用知识库引擎。
+- 设计 template catalog，支持 Developer、Designer、Product、Research、AI Agent 和 Custom Knowledge Base。
+- 建立 category management 模型，区分稳定 `category_id`、可编辑 `display_name` 和可迁移 `path`。
+- 支持 custom sources、extract-rules、quality-rules、review cycles 和 Markdown templates，但不得绕过治理闭环。
+- 固定 per-workspace index，每个 workspace 独立 `.kb/index.sqlite`、独立配置、独立 reports。
+- 规划 workspace backup/restore/export/upgrade/archive/delete 生命周期。
+- 规划 category rename/archive/merge/delete plan，危险操作默认 plan-first。
+
+边界：
+
+- 本阶段只做设计文档、README、AGENTS 规则和未来命令规划。
+- 不做 GUI、EXE、RSS、向量检索、MCP、Codex Skill。
+- 不修改 `knowledge/**/*.md`。
+- 不改变现有 search/index/audit 行为。
 
 使用算法：
 
-- Layer-aware Hybrid Retrieval：使用，archive 后的搜索必须显式区分 active/archive。
-- Content-addressed Lifecycle State Machine：使用，archive/deprecate/quarantine/restore 是状态变更。
-- Topic-aware Generational Archive Planner：重点使用。
+- Layer-aware Hybrid Retrieval：使用，workspace/search 仍需 hard filter，未来跨 workspace 搜索不得绕过正式层边界。
+- Content-addressed Lifecycle State Machine：重点使用，workspace/template/category 变更不得破坏 raw -> distilled -> review -> formal。
+- Topic-aware Generational Archive Planner：使用，workspace 分片和分类归档必须保留恢复能力和来源链路。
 
-## Phase 6：Generic Workspace / Template System
-
-目标：
-
-- 支持更通用的 workspace 模板、分类、治理配置和未来分片。
-- 保持每个 workspace 的 Markdown-first 和 per-workspace index。
-- 不把所有历史资料强塞进单个活跃 workspace。
-
-使用算法：
-
-- Layer-aware Hybrid Retrieval：使用，跨 workspace 搜索仍需 hard filter。
-- Content-addressed Lifecycle State Machine：使用，身份字段必须在 workspace 间稳定。
-- Topic-aware Generational Archive Planner：重点使用，规划 active/archive/workspace 分片。
-
-## Phase 7：Service Layer
+## Phase 6：Service Layer
 
 目标：
 
 - GUI 和未来 EXE 只能通过 service/core API 访问知识库。
 - GUI 不直接读写 Markdown 或 SQLite，不拼接 CLI 命令字符串作为主要集成方式。
 - 长任务提供 task_id、status、progress、cancellation、error detail、log path 和 result summary。
+- Workspace/template/category 的 plan/apply 边界在 service 层固定。
 
 使用算法：
 
 - Layer-aware Hybrid Retrieval：重点使用，提供 search API 和 explain/filter contract。
 - Content-addressed Lifecycle State Machine：重点使用，提供 review/promote/deprecate/quarantine/restore API contract。
-- Topic-aware Generational Archive Planner：使用，提供 plan-only organize/archive API。
+- Topic-aware Generational Archive Planner：使用，提供 plan-only organize/archive/category API。
 
-## Phase 8：GUI Design Contract
+## Phase 7：GUI Design Contract
 
 目标：
 
-- 先设计 Search、Review、Archive 页面契约，再实现界面。
+- 先设计 Search、Review、Archive、Workspace Selector、Template Picker、Workspace Settings、Category Settings、Source Settings、Template Manager、Backup & Restore 页面契约，再实现界面。
 - 明确分页、虚拟滚动、后台任务、错误展示和确认弹窗。
-- GUI 必须体现 layer、status、source_type、confidence、review_required、archive_status 等状态。
+- GUI 必须体现 workspace、template、category、layer、status、source_type、confidence、review_required、archive_status 等状态。
 
 使用算法：
 
 - Layer-aware Hybrid Retrieval：重点使用，Search 页面必须遵守。
-- Content-addressed Lifecycle State Machine：重点使用，Review 页面必须体现。
-- Topic-aware Generational Archive Planner：重点使用，Archive 页面必须体现。
+- Content-addressed Lifecycle State Machine：重点使用，Review 页面和 Category Settings 必须体现。
+- Topic-aware Generational Archive Planner：重点使用，Archive 和 workspace 分片必须体现。
 
-## Phase 9：GUI MVP
+## Phase 8：GUI MVP
 
 目标：
 
-- 实现最小可用 Search、Review、Archive 工作流。
+- 实现最小可用 Search、Review、Archive、Workspace Selector 和 Category Settings 工作流。
 - UI 主线程不得跑 index、audit、secret-scan、reindex、dedupe、conflicts、benchmark、maintenance、Optional Git Sync 或 backup/export。
 - 搜索结果分页或虚拟滚动，不一次渲染所有结果。
+- Workspace startup 只读当前 workspace metadata / index metadata，不扫描所有 workspace。
 
 使用算法：
 
@@ -151,13 +152,14 @@
 - Content-addressed Lifecycle State Machine：重点使用。
 - Topic-aware Generational Archive Planner：使用，仍以 plan-only 为默认。
 
-## Phase 10：Windows EXE 打包
+## Phase 9：Windows EXE 打包
 
 目标：
 
 - 打包前保护 workspace 数据，软件安装目录不存用户知识数据。
 - Markdown 始终优先保护，SQLite index 可删除重建。
-- maintenance、reindex、vacuum、restore 等操作必须显式触发并确认。
+- maintenance、reindex、vacuum、restore、workspace delete 等操作必须显式触发并确认。
+- Git optional 规则继续适用，普通用户默认依赖 Backup/Snapshot。
 
 使用算法：
 
@@ -165,7 +167,7 @@
 - Content-addressed Lifecycle State Machine：使用，确保状态变更可审计。
 - Topic-aware Generational Archive Planner：使用，确保 archive/restore 有确认和备份边界。
 
-## Phase 11：RSS 受控来源采集
+## Phase 10：RSS 受控来源采集
 
 目标：
 
@@ -180,7 +182,7 @@
 - Content-addressed Lifecycle State Machine：重点使用，确保 raw/distilled/promote 边界。
 - Topic-aware Generational Archive Planner：使用，长期 raw 增长后进入归档计划。
 
-## Phase 12：Vector / Hybrid Search
+## Phase 11：Vector / Hybrid Search
 
 目标：
 
@@ -192,10 +194,11 @@
 
 - Layer-aware Hybrid Retrieval：重点使用，是本阶段准入条件。
 - Content-addressed Lifecycle State Machine：使用，向量索引必须尊重 lifecycle metadata。
-- Topic-aware Generational Archive Planner：使用，active/archive 分片会影响向量索引范围。
+- Topic-aware Generational Archive Planner：使用，active/archive/workspace 分片会影响向量索引范围。
 
 ## 版本建议
 
 - v1.2.0：适合纳入 Markdown Storage Design、核心算法策略、路线图、长期运维、大规模性能、organize/archive 和 backup/snapshot 设计基线。
-- v1.3.0：适合纳入 Lifecycle State Machine 细化、plan-only Archive API 和 Generic Workspace / Template System 的实现准备。
-- Vector / Hybrid Search 建议晚于 v1.3.0，等 metadata hard filter、service layer 和 GUI contract 稳定后再实现。
+- v1.3.0：适合纳入 Generic Workspace / Template System、Category Management Design、workspace/template/category plan-only command contract 和后续 Service Layer 准备。
+- GUI/EXE 仍然后置，必须等 workspace/template/category/service contract 稳定后再进入实现。
+- RSS、Vector / Hybrid Search、MCP 和 Codex Skill 建议晚于 v1.3.0，等 metadata hard filter、service layer 和 GUI contract 稳定后再实现。
