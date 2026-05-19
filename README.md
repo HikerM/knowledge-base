@@ -35,6 +35,16 @@ Service-layer read paths：
 
 CLI 仍然是自动化、调试和验收入口，例如 `search-service`、`category-summary`、`review-queue-list`、`archive-list`、`document-open`。未来 GUI / EXE 必须直接调用 service layer，不能拼接 CLI 命令字符串作为集成方式。
 
+Plan-only mutation services：
+
+- 所有会修改 Markdown、config、workspace、category、template 的操作必须 plan-first。
+- v1.5.0 起点阶段只提供 `CategoryPlanService`、`TemplatePlanService`、`WorkspacePlanService` 和对应 CLI wrappers；它们只生成 JSON plan，不执行写操作。
+- plan-only services 固定 `dry_run=true`、`would_modify=false`；`blocked` 只表示未来执行被阻塞，blocked plan 仍是可消费的 JSON 输出。
+- `actions` 是计划动作，不是已执行动作；`validation_commands` 必须始终存在，供未来 GUI 直接展示和执行前确认。
+- 真正 execute/apply/archive/restore/merge/delete/template apply 是未来工作；本阶段不得移动文件、删除文件、改写 Markdown、改写 config 或修改 SQLite schema。
+- archive、merge、delete、template apply 的未来执行必须先创建 local snapshot / backup；Git 只能作为可选高级同步，不是恢复前置条件。
+- CLI wrappers：`category-update-display-name-plan`、`category-archive-plan`、`category-merge-plan`、`category-delete-plan`、`template-apply-plan`、`workspace-upgrade-plan`、`workspace-archive-plan`、`workspace-delete-plan`。
+
 ## 代码结构
 
 - `scripts/kb.py`: CLI 入口，保留命令解析、命令处理和索引/搜索/治理流程。
@@ -49,9 +59,13 @@ CLI 仍然是自动化、调试和验收入口，例如 `search-service`、`cate
 - `knowledge_app/services/review_queue_service.py`: Review Queue 的分页 metadata service。
 - `knowledge_app/services/archive_metadata_service.py`: Archive / Deprecated / Quarantine 的分页 metadata service。
 - `knowledge_app/services/document_service.py`: 显式单篇 Markdown open service。
+- `knowledge_app/services/category_plan_service.py`: category display name、archive、merge、delete 的 plan-only service。
+- `knowledge_app/services/template_plan_service.py`: template list/apply 的 plan-only service。
+- `knowledge_app/services/workspace_plan_service.py`: workspace upgrade、archive、delete 的 plan-only service。
 - `knowledge_app/models/workspace_status.py`: `workspace-status` 稳定输出模型。
 - `knowledge_app/models/search_result.py`: service-layer search 输出模型。
 - `knowledge_app/models/operation_result.py`: service 层结构化结果模型。
+- `knowledge_app/models/plan_result.py`: plan-only mutation 稳定输出模型。
 
 ## 目录结构
 

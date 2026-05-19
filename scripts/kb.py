@@ -81,10 +81,13 @@ from knowledge_core.reports import (
 from knowledge_core.security import run_secret_scan
 from knowledge_core.search import DEFAULT_TOP_K, SearchError, run_search
 from knowledge_app.services.archive_metadata_service import ArchiveMetadataService
+from knowledge_app.services.category_plan_service import CategoryPlanService
 from knowledge_app.services.category_service import CategoryService
 from knowledge_app.services.document_service import DocumentService
 from knowledge_app.services.review_queue_service import ReviewQueueService
 from knowledge_app.services.search_service import SearchService
+from knowledge_app.services.template_plan_service import TemplatePlanService
+from knowledge_app.services.workspace_plan_service import WorkspacePlanService
 from knowledge_app.services.workspace_status_service import WorkspaceStatusService
 
 
@@ -207,6 +210,14 @@ class KBError(Exception):
     """Controlled CLI error."""
 
 
+class KBArgumentParser(argparse.ArgumentParser):
+    """Use exit code 1 for parse failures so JSON plan callers can distinguish them from blocked plans."""
+
+    def error(self, message: str) -> None:
+        self.print_usage(sys.stderr)
+        self.exit(1, f"{self.prog}: error: {message}\n")
+
+
 def elapsed_ms(start: float) -> int:
     return int((time.perf_counter() - start) * 1000)
 
@@ -223,6 +234,12 @@ def print_service_result(result: Any) -> None:
         print_json(result.to_dict())
     if not getattr(result, "success", False):
         raise SystemExit(1)
+
+
+def print_plan_result(plan: Any) -> None:
+    if not hasattr(plan, "to_dict"):
+        raise KBError("plan command did not construct a serializable plan")
+    print_json(plan.to_dict())
 
 
 def die(message: str, code: int = 1) -> None:
@@ -351,6 +368,47 @@ def command_category_summary(args: argparse.Namespace) -> None:
     service = CategoryService()
     result = service.get_category_summary(args.category) if args.category else service.list_categories()
     print_service_result(result)
+
+
+def command_category_update_display_name_plan(args: argparse.Namespace) -> None:
+    plan = CategoryPlanService().update_display_name_plan(args.category, args.display_name)
+    print_plan_result(plan)
+
+
+def command_category_archive_plan(args: argparse.Namespace) -> None:
+    plan = CategoryPlanService().archive_category_plan(args.category)
+    print_plan_result(plan)
+
+
+def command_category_merge_plan(args: argparse.Namespace) -> None:
+    plan = CategoryPlanService().merge_category_plan(args.source, args.target)
+    print_plan_result(plan)
+
+
+def command_category_delete_plan(args: argparse.Namespace) -> None:
+    plan = CategoryPlanService().delete_category_plan(args.category)
+    print_plan_result(plan)
+
+
+def command_template_apply_plan(args: argparse.Namespace) -> None:
+    workspace_path = Path(args.workspace).resolve() if args.workspace else None
+    plan = TemplatePlanService(workspace_path).apply_template_plan(args.template, workspace_path)
+    print_plan_result(plan)
+
+
+def command_workspace_upgrade_plan(_: argparse.Namespace) -> None:
+    plan = WorkspacePlanService().workspace_upgrade_plan()
+    print_plan_result(plan)
+
+
+def command_workspace_archive_plan(_: argparse.Namespace) -> None:
+    plan = WorkspacePlanService().workspace_archive_plan()
+    print_plan_result(plan)
+
+
+def command_workspace_delete_plan(_: argparse.Namespace) -> None:
+    plan = WorkspacePlanService().workspace_delete_plan()
+    print_plan_result(plan)
 
 
 def command_review_queue_list(args: argparse.Namespace) -> None:
@@ -578,7 +636,7 @@ def command_maintenance(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = KBArgumentParser(
         prog="kb.py",
         description="Markdown-first personal development knowledge base with SQLite FTS5 indexing.",
     )
@@ -679,6 +737,62 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_category_summary.add_argument("--category", choices=category_choices())
     p_category_summary.set_defaults(func=command_category_summary)
+
+    p_category_update_display_name_plan = sub.add_parser(
+        "category-update-display-name-plan",
+        help="Plan a category display_name update without writing config or Markdown.",
+    )
+    p_category_update_display_name_plan.add_argument("--category", required=True)
+    p_category_update_display_name_plan.add_argument("--display-name", required=True)
+    p_category_update_display_name_plan.set_defaults(func=command_category_update_display_name_plan)
+
+    p_category_archive_plan = sub.add_parser(
+        "category-archive-plan",
+        help="Plan category archive impact without moving files or writing config.",
+    )
+    p_category_archive_plan.add_argument("--category", required=True)
+    p_category_archive_plan.set_defaults(func=command_category_archive_plan)
+
+    p_category_merge_plan = sub.add_parser(
+        "category-merge-plan",
+        help="Plan category merge impact without moving files, editing Markdown, or writing config.",
+    )
+    p_category_merge_plan.add_argument("--source", required=True)
+    p_category_merge_plan.add_argument("--target", required=True)
+    p_category_merge_plan.set_defaults(func=command_category_merge_plan)
+
+    p_category_delete_plan = sub.add_parser(
+        "category-delete-plan",
+        help="Plan advanced empty-category delete; blocked for non-empty or referenced categories.",
+    )
+    p_category_delete_plan.add_argument("--category", required=True)
+    p_category_delete_plan.set_defaults(func=command_category_delete_plan)
+
+    p_template_apply_plan = sub.add_parser(
+        "template-apply-plan",
+        help="Plan applying a workspace template without writing config or templates.",
+    )
+    p_template_apply_plan.add_argument("--template", required=True)
+    p_template_apply_plan.add_argument("--workspace", help="Workspace path. Defaults to the current repository workspace.")
+    p_template_apply_plan.set_defaults(func=command_template_apply_plan)
+
+    p_workspace_upgrade_plan = sub.add_parser(
+        "workspace-upgrade-plan",
+        help="Plan future workspace metadata/schema upgrade without writing files.",
+    )
+    p_workspace_upgrade_plan.set_defaults(func=command_workspace_upgrade_plan)
+
+    p_workspace_archive_plan = sub.add_parser(
+        "workspace-archive-plan",
+        help="Plan workspace archive impact without moving or writing files.",
+    )
+    p_workspace_archive_plan.set_defaults(func=command_workspace_archive_plan)
+
+    p_workspace_delete_plan = sub.add_parser(
+        "workspace-delete-plan",
+        help="Plan empty-workspace delete; blocked for non-empty workspaces.",
+    )
+    p_workspace_delete_plan.set_defaults(func=command_workspace_delete_plan)
 
     p_review_queue_list = sub.add_parser(
         "review-queue-list",
