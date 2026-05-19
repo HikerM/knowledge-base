@@ -55,6 +55,15 @@ Backup / Snapshot services：
 - `restore-plan` 只读 backup manifest 和 zip 内容，只生成将创建、覆盖、冲突的文件计划，不恢复、不覆盖、不写目标 workspace。
 - Git 仍然是 Optional Git Sync，不是 backup、snapshot、restore-plan 的前置条件。
 
+TaskQueue baseline：
+
+- `TaskQueueService` 是未来 GUI / EXE 的后台长任务边界；GUI 长任务必须通过 TaskQueue，不得在 UI 主线程直接执行 index、audit、backup、restore、archive 或 template apply。
+- 每个任务必须有稳定的 `task_id`、`status`、`progress_percent`、`cancel_requested`、`error`、`log_path`、`result_summary` 和 `elapsed_ms`。
+- v1.7.0 baseline 只允许执行安全任务：`noop`、`workspace_status`、`backup_create`、`audit`、`index`。其中 `workspace_status` 只读 SQLite/config/cache；`backup_create` 只写 `backups/`；`index` 只写 `.kb/index.sqlite`。
+- `future_restore`、`future_archive`、`future_template_apply` 只能创建 task record；执行时必须返回 blocked / unsupported，不得执行真实 destructive mutation。
+- destructive task 只能在 v1.8+ safe execute mutation 阶段接入，并且必须先满足 plan、snapshot / backup、人工确认和可回滚要求。
+- CLI wrappers：`task-create`、`task-run`、`task-status`、`task-list`、`task-cancel`。所有输出都是 JSON；`task-create` 只创建 pending task，`task-run` 才执行。
+
 ## 代码结构
 
 - `scripts/kb.py`: CLI 入口，保留命令解析、命令处理和索引/搜索/治理流程。
@@ -75,11 +84,13 @@ Backup / Snapshot services：
 - `knowledge_app/services/backup_service.py`: 本地 zip backup 创建、列表和校验 service。
 - `knowledge_app/services/snapshot_service.py`: pre-operation snapshot service，复用 backup service。
 - `knowledge_app/services/restore_plan_service.py`: read-only restore plan service。
+- `knowledge_app/services/task_queue_service.py`: 文件系统 TaskQueue baseline，持久化 `.kb/tasks/<task_id>/task.json`、progress events 和 task logs。
 - `knowledge_app/models/workspace_status.py`: `workspace-status` 稳定输出模型。
 - `knowledge_app/models/search_result.py`: service-layer search 输出模型。
 - `knowledge_app/models/operation_result.py`: service 层结构化结果模型。
 - `knowledge_app/models/plan_result.py`: plan-only mutation 稳定输出模型。
 - `knowledge_app/models/backup_models.py`: `BackupManifest`、`SnapshotResult`、`RestorePlan` 稳定输出模型。
+- `knowledge_app/models/task_models.py`: `TaskRecord`、`ProgressEvent`、`TaskResult`、`TaskStatus`、`TaskType` 稳定任务模型。
 
 ## 目录结构
 
@@ -621,6 +632,8 @@ GUI 不应直接读写 Markdown 或 SQLite，也不应通过拼接 CLI 命令字
 未来 EXE / GUI 的默认读取路径是 SQLite-hot：App startup、Dashboard、Category View、Search View、Review Queue、Archive / Trash View 都读取 SQLite metadata / FTS5；Markdown 只作为 source of truth，并且只在 open/edit、index/reindex、doctor、promote、archive、restore、backup、schema migration、secret-scan 等明确操作中读取。
 
 长期任务必须后台化，包括 index、reindex、audit、secret-scan、dedupe、conflicts、benchmark、maintenance、Optional Git Sync、backup/export 和 learning queue generation。任务需要 task_id、status、progress、cancellation、retry、error detail、log path 和 result summary。
+
+v1.7.0 起，后台任务的稳定边界是 `TaskQueueService`。GUI / EXE 应调用 service API 创建、查询、取消和运行任务，UI 主线程不得直接执行 index/audit/backup/restore/archive/template apply。当前 baseline 只接入 `noop`、`workspace_status`、`backup_create`、`audit`、`index`；restore/archive/template apply 等 destructive task 只能在 v1.8+ safe execute mutation 阶段接入。
 
 当前不做 GUI、不做 EXE 打包、不做 Tauri/Electron/PySide/WinUI 选型。未来路线建议：
 

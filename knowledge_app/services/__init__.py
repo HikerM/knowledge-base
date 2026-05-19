@@ -10,6 +10,7 @@ from .review_queue_service import ReviewQueueService
 from .restore_plan_service import RestorePlanService
 from .search_service import SearchService
 from .snapshot_service import SnapshotService
+from .task_queue_service import TaskQueueService
 from .template_plan_service import TemplatePlanService
 from .workspace_plan_service import WorkspacePlanService
 from .workspace_status_service import WorkspaceStatusService
@@ -25,6 +26,7 @@ __all__ = [
     "RestorePlanService",
     "SearchService",
     "SnapshotService",
+    "TaskQueueService",
     "TemplatePlanService",
     "WorkspacePlanService",
     "WorkspaceStatusService",

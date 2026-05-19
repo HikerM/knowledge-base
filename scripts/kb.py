@@ -89,9 +89,11 @@ from knowledge_app.services.review_queue_service import ReviewQueueService
 from knowledge_app.services.restore_plan_service import RestorePlanService
 from knowledge_app.services.search_service import SearchService
 from knowledge_app.services.snapshot_service import SnapshotService
+from knowledge_app.services.task_queue_service import TaskQueueError, TaskQueueService
 from knowledge_app.services.template_plan_service import TemplatePlanService
 from knowledge_app.services.workspace_plan_service import WorkspacePlanService
 from knowledge_app.services.workspace_status_service import WorkspaceStatusService
+from knowledge_app.models.task_models import TASK_STATUS_VALUES, TASK_TYPE_VALUES, TaskType
 
 
 def configure_core_root(root: Path) -> None:
@@ -466,6 +468,59 @@ def command_archive_list(args: argparse.Namespace) -> None:
 def command_document_open(args: argparse.Namespace) -> None:
     result = DocumentService().open_document(document_id=args.id, path=args.path)
     print_service_result(result)
+
+
+def command_task_create(args: argparse.Namespace) -> None:
+    payload: Dict[str, Any] = {}
+    if args.input_json:
+        try:
+            loaded = json.loads(args.input_json)
+        except json.JSONDecodeError as exc:
+            die(f"--input-json must be valid JSON: {exc}")
+        if not isinstance(loaded, dict):
+            die("--input-json must be a JSON object")
+        payload.update(loaded)
+
+    if args.type == TaskType.BACKUP_CREATE.value:
+        payload.setdefault("reason", args.reason or args.title)
+        payload.setdefault("include_index", bool(args.include_index))
+    elif args.reason:
+        payload.setdefault("reason", args.reason)
+
+    if args.type == TaskType.AUDIT.value:
+        payload.setdefault("days", args.days)
+        payload.setdefault("limit", args.limit)
+    if args.type == TaskType.INDEX.value:
+        payload.setdefault("force_hash", bool(args.force_hash))
+
+    record = TaskQueueService().create_task(
+        task_type=args.type,
+        title=args.title,
+        input=payload,
+        description=args.description,
+        cancellable=not args.not_cancellable,
+    )
+    print_json(record.to_dict())
+
+
+def command_task_run(args: argparse.Namespace) -> None:
+    result = TaskQueueService().run_task(args.task_id)
+    print_json(result.to_dict())
+
+
+def command_task_status(args: argparse.Namespace) -> None:
+    record = TaskQueueService().get_task(args.task_id)
+    print_json(record.to_dict())
+
+
+def command_task_list(args: argparse.Namespace) -> None:
+    records = TaskQueueService().list_tasks(status=args.status, limit=args.limit)
+    print_json({"count": len(records), "results": [record.to_dict() for record in records]})
+
+
+def command_task_cancel(args: argparse.Namespace) -> None:
+    record = TaskQueueService().request_cancel(args.task_id)
+    print_json(record.to_dict())
 
 
 def resolve_document_path(path_text: Optional[str], document_id: Optional[int]) -> Path:
@@ -895,6 +950,51 @@ def build_parser() -> argparse.ArgumentParser:
     document_group.add_argument("--id", type=int)
     p_document_open.set_defaults(func=command_document_open)
 
+    p_task_create = sub.add_parser(
+        "task-create",
+        help="Create a pending TaskQueue record without executing it.",
+    )
+    p_task_create.add_argument("--type", required=True, choices=sorted(TASK_TYPE_VALUES))
+    p_task_create.add_argument("--title", required=True)
+    p_task_create.add_argument("--description", default="")
+    p_task_create.add_argument("--input-json", default="", help="Optional JSON object merged into the task input.")
+    p_task_create.add_argument("--reason", default="", help="Reason for backup_create or future mutation tasks.")
+    p_task_create.add_argument("--include-index", action="store_true", help="For backup_create, include .kb/ derived index files.")
+    p_task_create.add_argument("--days", type=int, default=180, help="For audit tasks, stale threshold in days.")
+    p_task_create.add_argument("--limit", type=int, default=50, help="For audit tasks, maximum result count.")
+    p_task_create.add_argument("--force-hash", action="store_true", help="For index tasks, force sha256 recomputation.")
+    p_task_create.add_argument("--not-cancellable", action="store_true")
+    p_task_create.set_defaults(func=command_task_create)
+
+    p_task_run = sub.add_parser(
+        "task-run",
+        help="Run a pending TaskQueue record synchronously.",
+    )
+    p_task_run.add_argument("--task-id", required=True)
+    p_task_run.set_defaults(func=command_task_run)
+
+    p_task_status = sub.add_parser(
+        "task-status",
+        help="Return one TaskQueue record as JSON.",
+    )
+    p_task_status.add_argument("--task-id", required=True)
+    p_task_status.set_defaults(func=command_task_status)
+
+    p_task_list = sub.add_parser(
+        "task-list",
+        help="List TaskQueue records from .kb/tasks.",
+    )
+    p_task_list.add_argument("--status", choices=sorted(TASK_STATUS_VALUES))
+    p_task_list.add_argument("--limit", type=int, default=50)
+    p_task_list.set_defaults(func=command_task_list)
+
+    p_task_cancel = sub.add_parser(
+        "task-cancel",
+        help="Request cancellation for a TaskQueue record.",
+    )
+    p_task_cancel.add_argument("--task-id", required=True)
+    p_task_cancel.set_defaults(func=command_task_cancel)
+
     p_sources = sub.add_parser("sources", help="List configured learning sources without fetching content.")
     p_sources.add_argument("--category", choices=category_choices())
     p_sources.add_argument("--enabled-only", action="store_true")
@@ -1034,6 +1134,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     except SearchError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    except TaskQueueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     except sqlite3.Error as exc:
