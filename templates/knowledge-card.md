@@ -1,4 +1,6 @@
 ---
+schema_version: 1
+card_id: ""
 title: ""
 category: ""
 type: rule
@@ -6,9 +8,12 @@ status: experimental
 confidence: medium
 source_type: ""
 source_url: ""
+source_file: ""
 created_at: ""
 last_reviewed: ""
 reviewed_by: ""
+reviewed_at: ""
+promoted_from: ""
 valid_for: []
 not_valid_for: []
 project_scope: ""
@@ -16,6 +21,8 @@ topic_id: ""
 canonical_id: ""
 source_hash: ""
 content_hash: ""
+archive_status: active
+last_accessed_at: ""
 supersedes: []
 superseded_by: ""
 deprecated_reason: ""
@@ -24,7 +31,8 @@ quarantined_reason: ""
 risk_level: medium
 verification_method: ""
 review_required: true
-review_cycle_days: ""
+review_note: ""
+review_cycle_days: 180
 ---
 
 # 一句话结论
@@ -79,6 +87,10 @@ review_cycle_days: ""
 ## 来源与备注
 
 - source_url:
+- source_file:
 - source_type:
+- promoted_from:
+- topic_id:
+- canonical_id:
 - last_reviewed:
 - reviewer:

@@ -1,4 +1,6 @@
 ---
+schema_version: 1
+card_id: ""
 title: ""
 category: ""
 type: rule
@@ -6,6 +8,7 @@ status: active
 confidence: high
 source_type: ""
 source_url: ""
+source_file: ""
 created_at: ""
 last_reviewed: ""
 reviewed_by: ""
@@ -18,6 +21,8 @@ topic_id: ""
 canonical_id: ""
 source_hash: ""
 content_hash: ""
+archive_status: active
+last_accessed_at: ""
 supersedes: []
 superseded_by: ""
 deprecated_reason: ""
@@ -27,7 +32,7 @@ risk_level: medium
 verification_method: ""
 review_required: false
 review_note: ""
-review_cycle_days: ""
+review_cycle_days: 180
 ---
 
 # 规则
@@ -75,8 +80,13 @@ review_cycle_days: ""
 ## 来源与审核
 
 - source_url:
+- source_file:
 - source_type:
 - reviewed_at:
 - last_reviewed:
 - reviewer:
 - promoted_from:
+- topic_id:
+- canonical_id:
+- supersedes:
+- superseded_by:

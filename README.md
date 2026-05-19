@@ -530,6 +530,46 @@ SQLite 不能替代 Markdown。SQLite 只是为了检索、统计和治理报告
 
 这条边界让系统在索引损坏、schema migration、性能调优或未来 GUI 崩溃后仍可恢复：保护 Markdown 源数据优先，索引失败可重建。
 
+## Markdown Storage Design
+
+Markdown 长期存储设计见 [docs/markdown-storage-design.md](D:/AI/personal-knowledge-base/docs/markdown-storage-design.md)，frontmatter schema 见 [docs/markdown-schema.md](D:/AI/personal-knowledge-base/docs/markdown-schema.md)。
+
+Markdown 是 source of truth，因为它可读、可 diff、可 review、可 Git 回滚，也能长期跨工具迁移。知识治理所需的 `source_url`、`source_file`、`status`、`confidence`、`reviewed_by`、`verification_method`、`promoted_from`、`supersedes`、`superseded_by`、`topic_id` 和 `canonical_id` 必须保存在 Markdown/frontmatter 中。
+
+SQLite 不是事实来源。`.kb/index.sqlite` 只是从 Markdown 派生出的 FTS5 索引和元数据快照，用于搜索、统计和治理报告。删除或损坏索引时，应从 Markdown 重建，而不是手工修 SQLite：
+
+```powershell
+Remove-Item -Recurse -Force .kb
+python scripts/kb.py index
+python scripts/kb.py doctor
+python scripts/kb.py stats
+```
+
+Markdown 文件不是自由笔记，而是结构化知识卡片。新增卡片必须有 frontmatter，并按 `raw_note`、`rule`、`checklist`、`snippet`、`pitfall`、`adr` 或 `changelog` 使用对应正文模板。
+
+文件命名必须稳定可读：
+
+- 使用小写 ASCII、数字和连字符。
+- raw/changelog 可使用 `YYYY-MM-DD-topic-slug.md`。
+- rules/checklists/snippets 优先使用 `topic-slug.md` 或 `topic-slug-checklist.md`。
+- 不得使用 `untitled`、`test`、`final`、`copy`、`new`、`temp` 等无语义名称。
+- 同主题版本关系通过 `topic_id`、`canonical_id`、`supersedes` 和 `superseded_by` 表达，不靠 `final-v2-copy`。
+
+大规模 Markdown 必须分片组织。10W+ 文档时不能把所有文件放进一个目录；单个叶子目录目标不超过 500 个 Markdown 文件，超过 1,000 个文件必须分片。raw 优先按 `year/month` 或 `source/topic` 分片；rules、checklists、snippets 优先按 topic family 分片；archive/raw 历史内容应进入 archive workspace 或 archive 目录。
+
+推荐路径示例：
+
+```text
+knowledge/01-frontend/raw/2026/05/react/2026-05-18-react-managing-state.md
+knowledge/01-frontend/rules/react/state-management.md
+knowledge/01-frontend/checklists/performance/core-web-vitals-release-checklist.md
+knowledge/09-ai-agent/snippets/codex/agent-task-template.md
+```
+
+不要保存网页全文。raw 只保存必要摘录、摘要、关键引用、来源链接、访问时间、待验证问题和自己的理解。网页全文会带来版权风险、噪音、重复、过期内容和索引膨胀。附件、PDF、图片不要直接塞进 Markdown 正文；Markdown 只记录 `source_file`、摘要、页码或截图说明。
+
+未来 GUI/EXE 写入 Markdown 必须通过 service/core API，由 core 负责 schema 校验、目录分片、原子写入、生命周期链路和增量索引调度。GUI 不得直接读写 Markdown 或 SQLite。
+
 ## Recommended maintenance frequency
 
 每批导入后：

@@ -1,14 +1,19 @@
 ---
+schema_version: 1
+card_id: ""
 title: ""
 category: ""
-type: raw
+type: raw_note
 status: experimental
 confidence: low
 source_type: ""
 source_url: ""
+source_file: ""
 created_at: ""
 last_reviewed: ""
 reviewed_by: ""
+reviewed_at: ""
+promoted_from: ""
 valid_for: []
 not_valid_for: []
 project_scope: ""
@@ -16,6 +21,8 @@ topic_id: ""
 canonical_id: ""
 source_hash: ""
 content_hash: ""
+archive_status: active
+last_accessed_at: ""
 supersedes: []
 superseded_by: ""
 deprecated_reason: ""
@@ -24,7 +31,8 @@ quarantined_reason: ""
 risk_level: medium
 verification_method: ""
 review_required: true
-review_cycle_days: ""
+review_note: ""
+review_cycle_days: 180
 ---
 
 # 原始摘录
@@ -34,10 +42,12 @@ review_cycle_days: ""
 ## 来源
 
 - source_url:
+- source_file:
 - source_type:
 - author_or_org:
 - published_at:
 - captured_at:
+- source_hash:
 
 ## 原文摘录或摘要
 
@@ -70,3 +80,6 @@ review_cycle_days: ""
 - confidence: low
 - last_reviewed:
 - reviewer:
+- topic_id:
+- canonical_id:
+- review_cycle_days:
