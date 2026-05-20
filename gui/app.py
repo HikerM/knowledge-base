@@ -1,4 +1,4 @@
-"""Application entry for the PySide6 read-only GUI skeleton."""
+"""Application entry for the PySide6 read-only GUI."""
 
 from __future__ import annotations
 

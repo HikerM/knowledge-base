@@ -9,6 +9,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QFrame, QLabel, QLineEdit, QPushButton, QHBoxLayout
 
 from gui.widgets.badges import StatusBadge, tone_for_status
+from gui.widgets.formatters import status_label
 
 
 class TopBar(QFrame):
@@ -18,12 +19,12 @@ class TopBar(QFrame):
     def __init__(self):
         super().__init__()
         self.setObjectName("topbar")
-        self.workspace_label = QLabel("Workspace")
+        self.workspace_label = QLabel("工作区")
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("搜索正式层规则、清单、片段")
-        self.index_badge = StatusBadge("index: unknown")
-        self.task_badge = StatusBadge("tasks: read-only", "info")
-        self.backup_badge = StatusBadge("backup: read-only", "info")
+        self.index_badge = StatusBadge("索引：未知")
+        self.task_badge = StatusBadge("任务：只读", "info")
+        self.backup_badge = StatusBadge("备份：只读", "info")
         settings_button = QPushButton("设置")
 
         layout = QHBoxLayout(self)
@@ -49,4 +50,4 @@ class TopBar(QFrame):
         workspace_path = str(data.get("workspace_path") or "No workspace")
         self.workspace_label.setText(Path(workspace_path).name or workspace_path)
         index_status = str(data.get("index_status") or "unknown")
-        self.index_badge.set_badge(f"index: {index_status}", tone_for_status(index_status))
+        self.index_badge.set_badge(f"索引：{status_label(index_status)}", tone_for_status(index_status))

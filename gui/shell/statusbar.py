@@ -7,15 +7,17 @@ from typing import Any, Dict
 
 from PySide6.QtWidgets import QFrame, QLabel, QHBoxLayout
 
+from gui.widgets.formatters import status_label
+
 
 class StatusBar(QFrame):
     def __init__(self):
         super().__init__()
         self.setObjectName("statusbar")
-        self.workspace = QLabel("workspace: unknown")
-        self.index = QLabel("index: unknown")
-        self.tasks = QLabel("tasks: read-only")
-        self.backup = QLabel("backup: read-only")
+        self.workspace = QLabel("工作区：未知")
+        self.index = QLabel("索引：未知")
+        self.tasks = QLabel("任务：只读")
+        self.backup = QLabel("备份：只读")
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 4, 12, 4)
         layout.setSpacing(18)
@@ -29,5 +31,5 @@ class StatusBar(QFrame):
     def update_workspace(self, model: Dict[str, Any]) -> None:
         data = model.get("data") or {}
         path = str(data.get("workspace_path") or "unknown")
-        self.workspace.setText(f"workspace: {Path(path).name or path}")
-        self.index.setText(f"index: {data.get('index_status', 'unknown')} | docs: {data.get('document_count', 0)} | chunks: {data.get('chunk_count', 0)}")
+        self.workspace.setText(f"工作区：{Path(path).name or path}")
+        self.index.setText(f"索引：{status_label(data.get('index_status', 'unknown'))} | 文档：{data.get('document_count', 0)} | 分块：{data.get('chunk_count', 0)}")

@@ -9,9 +9,11 @@ from PySide6.QtWidgets import QHBoxLayout, QStackedWidget, QVBoxLayout, QWidget
 from gui.shell.sidebar import Sidebar
 from gui.shell.statusbar import StatusBar
 from gui.shell.topbar import TopBar
+from gui.viewmodels.dashboard_viewmodel import DashboardViewModel
 from gui.viewmodels.document_viewmodel import DocumentViewModel
 from gui.viewmodels.library_viewmodel import LibraryViewModel
 from gui.viewmodels.search_viewmodel import SearchViewModel
+from gui.viewmodels.settings_viewmodel import SettingsViewModel
 from gui.viewmodels.task_viewmodel import TaskViewModel
 from gui.viewmodels.workspace_viewmodel import WorkspaceViewModel
 from gui.views.dashboard_view import DashboardView
@@ -28,21 +30,24 @@ class AppShell(QWidget):
         super().__init__()
         self.adapter = adapter
         self.workspace_vm = WorkspaceViewModel(adapter)
+        self.dashboard_vm = DashboardViewModel(adapter)
         self.search_vm = SearchViewModel(adapter)
         self.library_vm = LibraryViewModel(adapter)
         self.document_vm = DocumentViewModel(adapter)
         self.task_vm = TaskViewModel(adapter)
+        self.settings_vm = SettingsViewModel(adapter)
+        self.loaded_routes: set[str] = set()
 
         self.topbar = TopBar()
         self.sidebar = Sidebar()
         self.statusbar = StatusBar()
         self.stack = QStackedWidget()
 
-        self.dashboard_view = DashboardView(self.task_vm)
+        self.dashboard_view = DashboardView(self.dashboard_vm)
         self.search_view = SearchView(self.search_vm, self.document_vm)
-        self.library_view = LibraryView(self.library_vm)
+        self.library_view = LibraryView(self.library_vm, self.document_vm)
         self.task_view = TaskSummaryView(self.task_vm)
-        self.settings_view = SettingsEntryView(self.workspace_vm)
+        self.settings_view = SettingsEntryView(self.settings_vm)
 
         self.routes = {
             "dashboard": self.dashboard_view,
@@ -75,16 +80,23 @@ class AppShell(QWidget):
         model = self.workspace_vm.load_status()
         self.topbar.update_workspace(model)
         self.statusbar.update_workspace(model)
-        self.dashboard_view.render_status(model)
-        self.settings_view.render_settings(model)
+        self.dashboard_view.load()
+        self.loaded_routes.add("dashboard")
 
     def show_route(self, route: str) -> None:
         widget = self.routes.get(route)
         if widget is None:
             return
         self.stack.setCurrentWidget(widget)
+        if route == "library" and route not in self.loaded_routes:
+            self.library_view.load_summary()
+            self.loaded_routes.add(route)
+        if route == "tasks" and route not in self.loaded_routes:
+            self.task_view.load_tasks()
+            self.loaded_routes.add(route)
         if route == "settings":
-            self.settings_view.render_settings()
+            self.settings_view.load_settings()
+            self.loaded_routes.add(route)
 
     def _run_global_search(self, query: str) -> None:
         self.sidebar.set_active("search")

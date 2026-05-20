@@ -10,6 +10,12 @@ class LibraryViewModel:
         self.adapter = adapter
         self.summary: Dict[str, Any] | None = None
 
-    def load_summary(self, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
-        self.summary = self.adapter.load_library_summary(limit=limit, offset=offset)
+    def load_summary(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        layer: str | None = None,
+        category_id: str | None = None,
+    ) -> Dict[str, Any]:
+        self.summary = self.adapter.load_library_summary(limit=limit, offset=offset, layer=layer, category_id=category_id)
         return self.summary

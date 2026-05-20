@@ -16,7 +16,7 @@ if str(SOURCE_ROOT) not in sys.path:
 def main() -> int:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     try:
-        from PySide6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication, QPushButton
     except Exception as exc:  # noqa: BLE001
         print(f"gui smoke skipped: PySide6 unavailable: {exc}")
         return 0
@@ -30,9 +30,15 @@ def main() -> int:
     window.show()
     app.processEvents()
     assert window.shell.stack.currentWidget() is window.shell.dashboard_view
-    assert adapter.calls == [("load_workspace_status", {})]
+    assert adapter.calls[:2] == [("load_workspace_status", {}), ("load_home_summary", {})]
     assert window.minimumWidth() >= 1100
-    assert "read-only GUI skeleton" in window.windowTitle()
+    assert "v2.0.0-alpha.2" in window.windowTitle()
+    nav_labels = [button.text() for button in window.shell.sidebar._buttons.values()]
+    for label in ["首页", "搜索", "知识库", "审核", "任务中心", "维护", "设置"]:
+        assert label in nav_labels
+    all_button_text = " ".join(button.text().lower() for button in window.findChildren(QPushButton))
+    for forbidden in ["cancel", "retry", "cleanup", "archive", "delete", "merge", "restore"]:
+        assert forbidden not in all_button_text
     window.close()
     app.processEvents()
     print("gui smoke tests passed")

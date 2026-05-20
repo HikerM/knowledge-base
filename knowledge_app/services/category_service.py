@@ -15,6 +15,7 @@ from knowledge_app.models.operation_result import OperationResult
 
 
 REPORTED_LAYERS = ["raw", "distilled", "rules", "checklists", "snippets", "deprecated"]
+FORMAL_LAYERS = ["rules", "checklists", "snippets"]
 
 
 def elapsed_ms(start: float) -> int:
@@ -105,6 +106,53 @@ class CategoryService:
         }
         return OperationResult(success=listed.success, data=payload, warnings=listed.warnings, errors=listed.errors, elapsed_ms=listed.elapsed_ms)
 
+    def list_formal_documents(
+        self,
+        category_id: Optional[str] = None,
+        layer: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> OperationResult:
+        """Page formal document metadata without reading Markdown bodies."""
+
+        start = time.perf_counter()
+        limit = max(1, min(int(limit), 50))
+        offset = max(0, int(offset))
+        if layer and layer not in FORMAL_LAYERS:
+            return OperationResult(
+                success=True,
+                data=self._empty_documents_payload(limit, offset, elapsed_ms(start), [f"unsupported formal layer filter: {layer}"]),
+                warnings=[f"unsupported formal layer filter: {layer}"],
+                elapsed_ms=elapsed_ms(start),
+            )
+        if not self.index_path.exists():
+            payload = self._empty_documents_payload(limit, offset, elapsed_ms(start), ["index.sqlite missing"])
+            return OperationResult(success=True, data=payload, warnings=payload["warnings"], elapsed_ms=payload["elapsed_ms"])
+
+        try:
+            with self._connect_readonly() as conn:
+                total = self._formal_document_count(conn, category_id, layer)
+                rows = [self._formal_document_row(item) for item in self._formal_document_rows(conn, category_id, layer, limit, offset)]
+        except sqlite3.DatabaseError as exc:
+            return OperationResult(success=False, errors=[f"sqlite read failed: {exc}"], elapsed_ms=elapsed_ms(start))
+        except OSError as exc:
+            return OperationResult(success=False, errors=[f"index metadata read failed: {exc}"], elapsed_ms=elapsed_ms(start))
+
+        payload = {
+            "count": len(rows),
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + len(rows) < total,
+            "category_id": category_id or "",
+            "layer": layer or "",
+            "results": rows,
+            "warnings": [],
+            "errors": [],
+            "elapsed_ms": elapsed_ms(start),
+        }
+        return OperationResult(success=True, data=payload, elapsed_ms=payload["elapsed_ms"])
+
     def _connect_readonly(self) -> sqlite3.Connection:
         uri = f"{self.index_path.resolve().as_uri()}?mode=ro"
         conn = sqlite3.connect(uri, uri=True)
@@ -170,6 +218,82 @@ class CategoryService:
             counts[category_id]["review_required_count"] = int(row["count"])
 
         return counts
+
+    def _formal_document_count(self, conn: sqlite3.Connection, category_id: Optional[str], layer: Optional[str]) -> int:
+        where, params = self._formal_document_where(category_id, layer)
+        row = conn.execute(f"SELECT COUNT(*) AS count FROM documents WHERE {where}", params).fetchone()
+        return int(row["count"] if row else 0)
+
+    def _formal_document_rows(
+        self,
+        conn: sqlite3.Connection,
+        category_id: Optional[str],
+        layer: Optional[str],
+        limit: int,
+        offset: int,
+    ) -> List[sqlite3.Row]:
+        where, params = self._formal_document_where(category_id, layer)
+        params.extend([limit, offset])
+        return list(
+            conn.execute(
+                f"""
+                SELECT
+                  id AS document_id, path, title, category AS category_id,
+                  layer, status, confidence, source_type, review_required,
+                  last_reviewed, indexed_at
+                FROM documents
+                WHERE {where}
+                ORDER BY category, layer, title
+                LIMIT ? OFFSET ?
+                """,
+                params,
+            )
+        )
+
+    @staticmethod
+    def _formal_document_where(category_id: Optional[str], layer: Optional[str]) -> tuple[str, List[Any]]:
+        where = ["layer IN ('rules', 'checklists', 'snippets')"]
+        params: List[Any] = []
+        if category_id:
+            where.append("category = ?")
+            params.append(category_id)
+        if layer:
+            where.append("layer = ?")
+            params.append(layer)
+        return " AND ".join(where), params
+
+    @staticmethod
+    def _formal_document_row(row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "document_id": row["document_id"],
+            "path": row["path"],
+            "title": row["title"],
+            "category_id": row["category_id"],
+            "layer": row["layer"],
+            "status": row["status"],
+            "confidence": row["confidence"],
+            "source_type": row["source_type"],
+            "review_required": row["review_required"],
+            "snippet": "",
+            "last_reviewed": row["last_reviewed"],
+            "indexed_at": row["indexed_at"],
+        }
+
+    @staticmethod
+    def _empty_documents_payload(limit: int, offset: int, elapsed: int, warnings: List[str]) -> Dict[str, Any]:
+        return {
+            "count": 0,
+            "total": 0,
+            "limit": limit,
+            "offset": offset,
+            "has_more": False,
+            "category_id": "",
+            "layer": "",
+            "results": [],
+            "warnings": warnings,
+            "errors": [],
+            "elapsed_ms": elapsed,
+        }
 
     def _empty_bucket(self) -> Dict[str, Any]:
         return {

@@ -15,9 +15,11 @@ if str(SOURCE_ROOT) not in sys.path:
 
 from gui.adapters.service_adapter import ServiceAdapter
 from gui.fixtures.fake_service_adapter import FakeServiceAdapter
+from gui.viewmodels.dashboard_viewmodel import DashboardViewModel
 from gui.viewmodels.document_viewmodel import DocumentViewModel
 from gui.viewmodels.library_viewmodel import LibraryViewModel
 from gui.viewmodels.search_viewmodel import SearchViewModel
+from gui.viewmodels.settings_viewmodel import SettingsViewModel
 from gui.viewmodels.task_viewmodel import TaskViewModel
 from gui.viewmodels.workspace_viewmodel import WorkspaceViewModel
 
@@ -29,10 +31,16 @@ def assert_fake_viewmodels() -> None:
     assert status["data"]["startup_guards"]["auto_index_started"] is False
     assert adapter.calls == [("load_workspace_status", {})]
 
+    dashboard = DashboardViewModel(adapter)
+    home = dashboard.load_summary()
+    assert home["data"]["index"]["document_count"] == 12
+    assert len(home["data"]["recommended_actions"]) <= 3
+    assert adapter.calls[-1][0] == "load_home_summary"
+
     search = SearchViewModel(adapter)
     empty = search.search(" ")
     assert empty["source_services"] == []
-    assert adapter.calls == [("load_workspace_status", {})]
+    assert adapter.calls[-1][0] == "load_home_summary"
     results = search.search("fixture")
     assert results["data"]["results"]
     assert adapter.calls[-1][0] == "search"
@@ -45,6 +53,8 @@ def assert_fake_viewmodels() -> None:
     library = LibraryViewModel(adapter)
     summary = library.load_summary()
     assert summary["data"]["categories"][0]["edit_available"] is False
+    assert summary["data"]["page"]["limit"] <= 50
+    assert {item["layer"] for item in summary["data"]["documents"]} <= {"rules", "checklists", "snippets"}
     assert adapter.calls[-1][0] == "load_library_summary"
 
     tasks = TaskViewModel(adapter)
@@ -53,6 +63,15 @@ def assert_fake_viewmodels() -> None:
     assert controls["cancel_task_available"] is False
     assert controls["retry_task_available"] is False
     assert adapter.calls[-1][0] == "load_recent_tasks"
+    detail = tasks.load_task_detail(task_summary["data"]["tasks"][0]["task_id"])
+    assert detail["data"]["log_entries"]
+    assert adapter.calls[-1][0] == "load_task_detail"
+
+    settings = SettingsViewModel(adapter)
+    entry = settings.load_entry()
+    assert entry["data"]["mutation_actions_available"] is False
+    assert all(section["editable"] is False for section in entry["data"]["sections"])
+    assert adapter.calls[-1][0] == "load_settings_entry"
 
     caps = adapter.capabilities()
     assert all(value is False for value in caps.values())
@@ -60,16 +79,14 @@ def assert_fake_viewmodels() -> None:
 
 
 def assert_boundary_imports() -> None:
-    forbidden_in_views = ["knowledge_app.services", "knowledge_core", "sqlite3", "subprocess", "scripts/kb.py", ".read_text(", ".rglob("]
-    for folder in ["gui/views", "gui/viewmodels", "gui/shell"]:
+    forbidden_common = ["knowledge_core", "sqlite3", "subprocess", "scripts/kb.py", ".read_text(", ".rglob("]
+    for folder in ["gui/adapters", "gui/views", "gui/viewmodels", "gui/shell", "gui/widgets"]:
         for path in (SOURCE_ROOT / folder).glob("*.py"):
             text = path.read_text(encoding="utf-8")
-            for token in forbidden_in_views:
+            for token in forbidden_common:
                 assert token not in text, f"{path} contains forbidden boundary token {token!r}"
-
-    adapter_text = (SOURCE_ROOT / "gui/adapters/service_adapter.py").read_text(encoding="utf-8")
-    for token in ["subprocess", "scripts/kb.py", "knowledge_core", "sqlite3", ".read_text(", ".rglob("]:
-        assert token not in adapter_text, f"service adapter contains forbidden token {token!r}"
+            if path.name != "service_adapter.py":
+                assert "knowledge_app.services" not in text, f"{path} bypasses ServiceAdapter service boundary"
 
 
 def assert_service_adapter_startup_guards() -> None:
@@ -101,6 +118,9 @@ def assert_service_adapter_startup_guards() -> None:
         assert result["data"]["startup_guards"]["markdown_scan_performed"] is False
         assert result["data"]["startup_guards"]["markdown_body_read"] is False
         assert result["data"]["startup_guards"]["auto_index_started"] is False
+        home = adapter.load_home_summary()
+        assert home["view_id"] == "home"
+        assert home["data"]["index"]["status"] in {"ready", "missing", "partial", "failed", "stale"}
     finally:
         Path.rglob = original_rglob
         Path.read_text = original_read_text
@@ -108,7 +128,7 @@ def assert_service_adapter_startup_guards() -> None:
 
 
 def assert_viewmodels_do_not_import_services() -> None:
-    modules = [WorkspaceViewModel, SearchViewModel, LibraryViewModel, DocumentViewModel, TaskViewModel]
+    modules = [WorkspaceViewModel, DashboardViewModel, SearchViewModel, LibraryViewModel, DocumentViewModel, TaskViewModel, SettingsViewModel]
     for cls in modules:
         source = inspect.getsource(sys.modules[cls.__module__])
         assert "knowledge_app.services" not in source

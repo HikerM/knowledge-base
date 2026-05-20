@@ -67,7 +67,11 @@ class FakeServiceAdapter:
                 "review_summary": {"pending_count": 2, "raw_count": 1, "distilled_count": 1},
                 "backup_summary": {"status": "recent", "latest_backup_at": "2026-05-20T00:00:00Z", "latest_snapshot_at": None},
                 "task_summary": {"running": 1, "pending": 0, "failed": 1, "recent": self._task_rows()},
-                "recommended_actions": [],
+                "recommended_actions": [
+                    {"action_id": "open_search", "label": "搜索正式知识", "kind": "route", "target": "search", "execute": False, "enabled": True},
+                    {"action_id": "open_library", "label": "浏览知识库", "kind": "route", "target": "library", "execute": False, "enabled": True},
+                    {"action_id": "open_tasks", "label": "查看任务中心", "kind": "route", "target": "tasks", "execute": False, "enabled": True},
+                ],
             },
             ["WorkspaceStatusService", "TaskQueueService"],
         )
@@ -88,8 +92,8 @@ class FakeServiceAdapter:
             ["SearchService"],
         )
 
-    def load_library_summary(self, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
-        self.calls.append(("load_library_summary", {"limit": limit, "offset": offset}))
+    def load_library_summary(self, limit: int = 50, offset: int = 0, layer: str | None = None, category_id: str | None = None) -> Dict[str, Any]:
+        self.calls.append(("load_library_summary", {"limit": limit, "offset": offset, "layer": layer, "category_id": category_id}))
         categories = [
             {
                 "category_id": "frontend",
@@ -103,6 +107,10 @@ class FakeServiceAdapter:
                 "edit_available": False,
             }
         ]
+        documents = [self._search_row("rules"), self._search_row("checklists"), self._search_row("snippets")]
+        if layer:
+            documents = [item for item in documents if item["layer"] == layer]
+        documents = documents[offset : offset + limit]
         return _envelope(
             "library",
             "ready",
@@ -110,9 +118,9 @@ class FakeServiceAdapter:
                 "categories": categories,
                 "formal_layer_totals": {"rules": 3, "checklists": 1, "snippets": 1},
                 "active_category_id": None,
-                "active_view": "all_formal",
-                "documents": [],
-                "page": {"limit": limit, "offset": offset, "count": 1, "total": 1, "has_more": False},
+                "active_view": layer or "all_formal",
+                "documents": documents,
+                "page": {"limit": limit, "offset": offset, "count": len(documents), "total": 3, "has_more": False},
             },
             ["CategoryService"],
         )

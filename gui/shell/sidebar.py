@@ -31,7 +31,7 @@ class Sidebar(QFrame):
             if enabled:
                 button.clicked.connect(lambda checked=False, key=route: self.set_active(key))
             else:
-                button.setToolTip("Phase 1 read-only skeleton 中暂不开放")
+                button.setToolTip("第一阶段只读 MVP 暂不开放")
             self._buttons[route] = button
             layout.addWidget(button)
         layout.addStretch(1)

@@ -2,57 +2,32 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Optional
 
+from knowledge_app.services.backup_service import BackupService
 from knowledge_app.services.category_service import CategoryService
 from knowledge_app.services.document_service import DocumentService
+from knowledge_app.services.review_queue_service import ReviewQueueService
 from knowledge_app.services.search_service import SearchService
 from knowledge_app.services.task_queue_service import TaskQueueService
 from knowledge_app.services.workspace_status_service import WorkspaceStatusService
 
-FORMAL_LAYERS = ["rules", "checklists", "snippets"]
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
-def _env(
-    view_id: str,
-    state: str,
-    data: Optional[Dict[str, Any]],
-    services: Iterable[str],
-    warnings: Optional[list[Dict[str, Any]]] = None,
-    errors: Optional[list[Dict[str, Any]]] = None,
-    elapsed_ms: int = 0,
-) -> Dict[str, Any]:
-    return {
-        "schema_version": 1,
-        "view_id": view_id,
-        "state": state,
-        "data": data,
-        "warnings": list(warnings or []),
-        "errors": list(errors or []),
-        "source_services": list(services),
-        "elapsed_ms": int(elapsed_ms or 0),
-        "generated_at": _now(),
-    }
-
-
-def _error(service: str, message: str, code: str = "service_error") -> Dict[str, Any]:
-    return {"code": code, "message": message, "service": service, "recoverable": True}
-
-
-def _warning(service: str, message: str) -> Dict[str, Any]:
-    return {"code": "service_warning", "message": message, "service": service}
-
-
-def _as_dict(value: Any) -> Dict[str, Any]:
-    if value is None:
-        return {}
-    return dict(value.to_dict() if hasattr(value, "to_dict") else value)
+from gui.adapters.viewmodel_helpers import (
+    FORMAL_LAYERS,
+    as_dict,
+    category_row,
+    document_payload,
+    empty_search,
+    envelope,
+    formal_filters,
+    formal_totals,
+    route_action,
+    search_row,
+    task_row,
+    ui_error,
+    ui_warning,
+)
 
 
 class ServiceAdapter:
@@ -66,11 +41,12 @@ class ServiceAdapter:
         try:
             result = WorkspaceStatusService(self.workspace_path).get_status()
         except Exception as exc:  # noqa: BLE001
-            return _env("workspace_status", "error", None, [service], errors=[_error(service, str(exc))])
+            return envelope("workspace_status", "error", None, [service], errors=[ui_error(service, str(exc))])
         if not result.success or result.data is None:
-            return _env("workspace_status", "error", None, [service], errors=[_error(service, item) for item in result.errors], elapsed_ms=result.elapsed_ms)
+            errors = result.errors or ["workspace status unavailable"]
+            return envelope("workspace_status", "error", None, [service], errors=[ui_error(service, item) for item in errors], elapsed_ms=result.elapsed_ms)
         data = {
-            **_as_dict(result.data),
+            **as_dict(result.data),
             "startup_guards": {
                 "markdown_scan_performed": False,
                 "markdown_body_read": False,
@@ -78,81 +54,130 @@ class ServiceAdapter:
                 "auto_index_started": False,
             },
         }
-        return _env("workspace_status", "ready", data, [service], warnings=[_warning(service, item) for item in result.warnings], elapsed_ms=result.elapsed_ms)
+        warnings = [ui_warning(service, item) for item in result.warnings]
+        return envelope("workspace_status", "ready", data, [service], warnings=warnings, elapsed_ms=result.elapsed_ms)
+
+    def load_home_summary(self) -> Dict[str, Any]:
+        status = self.load_workspace_status()
+        if status.get("state") == "error":
+            return envelope("home", "error", None, status.get("source_services", []), errors=status.get("errors", []))
+
+        status_data = status.get("data") or {}
+        task_model = self.load_recent_tasks(limit=5, offset=0)
+        review_summary, review_state = self._review_summary()
+        backup_summary, backup_state = self._backup_summary()
+        tasks = (task_model.get("data") or {}).get("tasks", [])
+        index_status = str(status_data.get("index_status") or "missing")
+        data = {
+            "workspace": {"path": status_data.get("workspace_path", ""), "health": self._workspace_health(index_status)},
+            "index": {
+                "status": index_status,
+                "document_count": int(status_data.get("document_count") or 0),
+                "chunk_count": int(status_data.get("chunk_count") or 0),
+                "last_indexed_at": status_data.get("last_indexed_at") or "",
+            },
+            "review_summary": review_summary,
+            "backup_summary": backup_summary,
+            "task_summary": {
+                "running": sum(1 for item in tasks if item.get("status") == "running"),
+                "pending": sum(1 for item in tasks if item.get("status") == "pending"),
+                "failed": sum(1 for item in tasks if item.get("status") == "failed"),
+                "recent": tasks[:5],
+            },
+            "recommended_actions": self._recommended_actions(index_status),
+        }
+        services = ["WorkspaceStatusService", "TaskQueueService", "ReviewQueueService", "BackupService"]
+        warnings = list(status.get("warnings", [])) + list(task_model.get("warnings", [])) + review_state["warnings"] + backup_state["warnings"]
+        errors = list(task_model.get("errors", [])) + review_state["errors"] + backup_state["errors"]
+        state = "partial" if errors else "ready"
+        return envelope("home", state, data, services, warnings=warnings, errors=errors, elapsed_ms=status.get("elapsed_ms", 0))
 
     def search(self, query: str, limit: int = 25, offset: int = 0, filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         query = query.strip()
         limit = max(1, min(int(limit), 50))
         offset = max(0, int(offset))
         if not query:
-            return _env("search", "empty", self._empty_search(query, limit, offset), ["SearchService"])
+            return envelope("search", "empty", empty_search(query, limit, offset, "idle"), ["SearchService"])
+        index_status = self._index_status()
+        if index_status in {"missing", "failed"}:
+            warning = ui_warning("WorkspaceStatusService", "索引不可用，搜索结果为空", code="index_unavailable")
+            return envelope("search", "empty", empty_search(query, limit, offset, index_status), ["WorkspaceStatusService", "SearchService"], warnings=[warning])
         try:
-            result = SearchService().search(query, filters=self._formal_filters(filters), top_k=min(limit + offset, 50))
+            result = SearchService().search(query, filters=formal_filters(filters), top_k=min(limit + offset, 50))
         except Exception as exc:  # noqa: BLE001
-            return _env("search", "error", self._empty_search(query, limit, offset), ["SearchService"], errors=[_error("SearchService", str(exc))])
+            return envelope("search", "error", empty_search(query, limit, offset, index_status), ["SearchService"], errors=[ui_error("SearchService", str(exc))])
         if not result.success or result.data is None:
-            return _env(
-                "search",
-                "error",
-                self._empty_search(query, limit, offset),
-                ["SearchService"],
-                errors=[_error("SearchService", item) for item in result.errors],
-                elapsed_ms=result.elapsed_ms,
-            )
-        rows = [self._search_row(item) for item in _as_dict(result.data).get("results", [])]
+            errors = result.errors or ["search service unavailable"]
+            return envelope("search", "error", empty_search(query, limit, offset, index_status), ["SearchService"], errors=[ui_error("SearchService", item) for item in errors], elapsed_ms=result.elapsed_ms)
+        rows = [search_row(item) for item in as_dict(result.data).get("results", [])]
         page_rows = rows[offset : offset + limit]
         data = {
             "query": query,
             "filters": {"layers": FORMAL_LAYERS, "status": ["active"]},
             "page": {"limit": limit, "offset": offset, "count": len(page_rows), "has_more": len(rows) > offset + limit},
             "results": page_rows,
-            "index_status": "service_backed",
+            "index_status": index_status,
         }
-        return _env("search", "ready" if page_rows else "empty", data, ["SearchService"], elapsed_ms=result.elapsed_ms)
+        return envelope("search", "ready" if page_rows else "empty", data, ["SearchService"], elapsed_ms=result.elapsed_ms)
 
-    def load_library_summary(self, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
-        limit = max(1, min(int(limit), 200))
+    def load_library_summary(self, limit: int = 50, offset: int = 0, layer: str | None = None, category_id: str | None = None) -> Dict[str, Any]:
+        limit = max(1, min(int(limit), 50))
         offset = max(0, int(offset))
+        service = "CategoryService"
         try:
-            result = CategoryService(self.workspace_path).list_categories()
+            category_result = CategoryService(self.workspace_path).list_categories()
+            document_result = CategoryService(self.workspace_path).list_formal_documents(category_id=category_id, layer=layer, limit=limit, offset=offset)
         except Exception as exc:  # noqa: BLE001
-            return _env("library", "error", None, ["CategoryService"], errors=[_error("CategoryService", str(exc))])
-        if not result.success or not result.data:
-            return _env("library", "error", None, ["CategoryService"], errors=[_error("CategoryService", item) for item in result.errors])
-        rows = [self._category_row(item) for item in result.data.get("results", [])]
-        page_rows = rows[offset : offset + limit]
+            return envelope("library", "error", None, [service], errors=[ui_error(service, str(exc))])
+        if not category_result.success or not category_result.data:
+            errors = category_result.errors or ["category metadata unavailable"]
+            return envelope("library", "error", None, [service], errors=[ui_error(service, item) for item in errors], elapsed_ms=category_result.elapsed_ms)
+        categories = [category_row(item) for item in category_result.data.get("results", [])]
+        document_data = as_dict(document_result.data)
+        documents = [search_row(item) for item in document_data.get("results", [])] if document_result.success else []
         data = {
-            "categories": page_rows,
-            "formal_layer_totals": self._formal_totals(rows),
-            "active_category_id": None,
-            "active_view": "all_formal",
-            "documents": [],
-            "page": {"limit": limit, "offset": offset, "count": len(page_rows), "total": len(rows), "has_more": len(rows) > offset + limit},
+            "categories": categories,
+            "formal_layer_totals": formal_totals(categories),
+            "active_category_id": category_id,
+            "active_view": layer if layer in FORMAL_LAYERS else "all_formal",
+            "documents": documents,
+            "page": {
+                "limit": limit,
+                "offset": offset,
+                "count": len(documents),
+                "total": int(document_data.get("total") or len(documents)),
+                "has_more": bool(document_data.get("has_more", False)),
+            },
         }
-        return _env("library", "ready" if page_rows else "empty", data, ["CategoryService"], elapsed_ms=result.elapsed_ms)
+        warnings = [ui_warning(service, item) for item in category_result.warnings + document_result.warnings]
+        errors = [ui_error(service, item) for item in document_result.errors]
+        state = "partial" if errors else ("ready" if categories or documents else "empty")
+        return envelope("library", state, data, [service], warnings=warnings, errors=errors, elapsed_ms=max(category_result.elapsed_ms, document_result.elapsed_ms))
 
     def open_document(self, document_id: int | str | None = None, path: str | None = None) -> Dict[str, Any]:
         service = "DocumentService"
         try:
             numeric_id = int(document_id) if document_id not in (None, "") and str(document_id).isdigit() else None
-            result = DocumentService(self.workspace_path).open_document(document_id=numeric_id, path=path)
+            resolved_path = path or (str(document_id) if numeric_id is None and document_id not in (None, "") else None)
+            result = DocumentService(self.workspace_path).open_document(document_id=numeric_id, path=resolved_path)
         except Exception as exc:  # noqa: BLE001
-            return _env("document_preview", "error", None, [service], errors=[_error(service, str(exc))])
+            return envelope("document_preview", "error", None, [service], errors=[ui_error(service, str(exc))])
         if not result.success or not result.data:
-            return _env("document_preview", "error", None, [service], errors=[_error(service, item) for item in result.errors], elapsed_ms=result.elapsed_ms)
-        return _env("document_preview", "ready", self._document_payload(result.data), [service], elapsed_ms=result.elapsed_ms)
+            errors = result.errors or ["document open failed"]
+            return envelope("document_preview", "error", None, [service], errors=[ui_error(service, item) for item in errors], elapsed_ms=result.elapsed_ms)
+        return envelope("document_preview", "ready", document_payload(result.data), [service], elapsed_ms=result.elapsed_ms)
 
     def load_recent_tasks(self, limit: int = 25, offset: int = 0) -> Dict[str, Any]:
-        limit = max(1, min(int(limit), 100))
+        limit = max(1, min(int(limit), 50))
         offset = max(0, int(offset))
         try:
             records = TaskQueueService(self.workspace_path).list_tasks(limit=limit, offset=offset)
         except Exception as exc:  # noqa: BLE001
-            return _env("task_summary", "error", None, ["TaskQueueService"], errors=[_error("TaskQueueService", str(exc))])
-        rows = [self._task_row(record) for record in records]
+            return envelope("task_summary", "error", None, ["TaskQueueService"], errors=[ui_error("TaskQueueService", str(exc))])
+        rows = [task_row(record) for record in records]
         controls = {"create_task_available": False, "run_task_available": False, "cancel_task_available": False, "retry_task_available": False, "cleanup_execute_available": False}
         data = {"tasks": rows, "page": {"limit": limit, "offset": offset, "count": len(rows), "has_more": len(rows) == limit}, "phase_1_controls": controls}
-        return _env("task_summary", "ready" if rows else "empty", data, ["TaskQueueService"])
+        return envelope("task_summary", "ready" if rows else "empty", data, ["TaskQueueService"])
 
     def load_task_detail(self, task_id: str, tail: int = 80) -> Dict[str, Any]:
         service = TaskQueueService(self.workspace_path)
@@ -161,125 +186,85 @@ class ServiceAdapter:
             progress = [item.to_dict() for item in service.get_task_progress(task_id, limit=100, offset=0)]
             logs = service.get_task_log(task_id, tail=tail)
         except Exception as exc:  # noqa: BLE001
-            return _env("task_detail", "error", None, ["TaskQueueService"], errors=[_error("TaskQueueService", str(exc))])
-        return _env("task_detail", "ready", {"task": self._task_row(record), "progress_events": progress, "log_entries": logs}, ["TaskQueueService"])
+            return envelope("task_detail", "error", None, ["TaskQueueService"], errors=[ui_error("TaskQueueService", str(exc))])
+        return envelope("task_detail", "ready", {"task": task_row(record), "progress_events": progress, "log_entries": logs}, ["TaskQueueService"])
+
+    def load_settings_entry(self) -> Dict[str, Any]:
+        status = self.load_workspace_status()
+        data = status.get("data") or {}
+        sections = [
+            {"section_id": "workspace_status", "label": "工作区状态", "phase": "phase_1_read_only", "read_only": True, "editable": False, "execute_available": False},
+            {"section_id": "category_settings", "label": "分类设置", "phase": "future", "read_only": True, "editable": False, "execute_available": False},
+            {"section_id": "template_manager", "label": "模板管理", "phase": "future", "read_only": True, "editable": False, "execute_available": False},
+            {"section_id": "source_manager", "label": "来源管理", "phase": "future", "read_only": True, "editable": False, "execute_available": False},
+        ]
+        payload = {
+            "workspace_path": data.get("workspace_path", ""),
+            "index_status": data.get("index_status", "unknown"),
+            "document_count": int(data.get("document_count") or 0),
+            "chunk_count": int(data.get("chunk_count") or 0),
+            "service_status": "available" if status.get("state") != "error" else "unavailable",
+            "mutation_actions_available": False,
+            "sections": sections,
+        }
+        return envelope("settings_entry", "ready", payload, ["WorkspaceStatusService"], warnings=status.get("warnings", []), errors=status.get("errors", []), elapsed_ms=status.get("elapsed_ms", 0))
 
     def capabilities(self) -> Dict[str, bool]:
         names = ["mutation_ui", "category_execute", "archive_execute", "delete_execute", "merge_execute", "template_apply_execute", "restore_execute", "rss", "vector_search"]
         return {name: False for name in names}
 
-    @staticmethod
-    def _formal_filters(filters: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-        filters = dict(filters or {})
-        layer = filters.get("layer")
-        filters["status"] = filters.get("status") or "active"
-        if layer not in FORMAL_LAYERS:
-            filters.pop("layer", None)
-        return filters
+    def _index_status(self) -> str:
+        model = self.load_workspace_status()
+        return str((model.get("data") or {}).get("index_status") or "failed")
+
+    def _review_summary(self) -> tuple[Dict[str, int], Dict[str, list[Dict[str, Any]]]]:
+        try:
+            result = ReviewQueueService(self.workspace_path).list_review_queue(limit=1, offset=0)
+        except Exception as exc:  # noqa: BLE001
+            return {"pending_count": 0, "raw_count": 0, "distilled_count": 0}, {"warnings": [], "errors": [ui_error("ReviewQueueService", str(exc))]}
+        if not result.success or not result.data:
+            return {"pending_count": 0, "raw_count": 0, "distilled_count": 0}, {"warnings": [], "errors": [ui_error("ReviewQueueService", item) for item in result.errors]}
+        total = int(result.data.get("total") or 0)
+        warnings = [ui_warning("ReviewQueueService", item) for item in result.warnings]
+        return {"pending_count": total, "raw_count": 0, "distilled_count": 0}, {"warnings": warnings, "errors": []}
+
+    def _backup_summary(self) -> tuple[Dict[str, Any], Dict[str, list[Dict[str, Any]]]]:
+        try:
+            result = BackupService(self.workspace_path).list_backups()
+        except Exception as exc:  # noqa: BLE001
+            return self._backup_unavailable(), {"warnings": [], "errors": [ui_error("BackupService", str(exc))]}
+        if not result.success or not result.data:
+            return self._backup_unavailable(), {"warnings": [], "errors": [ui_error("BackupService", item) for item in result.errors]}
+        rows = list(result.data.get("results") or [])
+        rows.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+        latest_backup = next((item for item in rows if not str(item.get("reason") or "").startswith("snapshot-")), None)
+        latest_snapshot = next((item for item in rows if str(item.get("reason") or "").startswith("snapshot-")), None)
+        status = "missing" if not rows else ("failed" if any(item.get("error") for item in rows[:3]) else "recent")
+        warnings = [ui_warning("BackupService", item) for item in result.warnings]
+        return {"status": status, "latest_backup_at": (latest_backup or {}).get("created_at"), "latest_snapshot_at": (latest_snapshot or {}).get("created_at")}, {"warnings": warnings, "errors": []}
 
     @staticmethod
-    def _empty_search(query: str, limit: int, offset: int) -> Dict[str, Any]:
-        return {
-            "query": query,
-            "filters": {"layers": FORMAL_LAYERS, "status": ["active"]},
-            "page": {"limit": limit, "offset": offset, "count": 0, "has_more": False},
-            "results": [],
-            "index_status": "unknown",
-        }
+    def _backup_unavailable() -> Dict[str, Any]:
+        return {"status": "unknown", "latest_backup_at": None, "latest_snapshot_at": None}
 
     @staticmethod
-    def _search_row(item: Dict[str, Any]) -> Dict[str, Any]:
-        path = str(item.get("path") or "")
-        document_id = str(item.get("document_id") or item.get("id") or path)
-        return {
-            "document_id": document_id,
-            "path": path,
-            "title": str(item.get("title") or path or "Untitled"),
-            "category_id": str(item.get("category_id") or item.get("category") or ""),
-            "layer": str(item.get("layer") or ""),
-            "status": str(item.get("status") or ""),
-            "confidence": str(item.get("confidence") or ""),
-            "source_type": str(item.get("source_type") or ""),
-            "review_required": bool(item.get("review_required", False)),
-            "snippet": str(item.get("snippet") or ""),
-            "updated_at": str(item.get("updated_at") or item.get("indexed_at") or "") or None,
-            "open_document_action": {"action_id": "open_document", "label": "Open", "kind": "open_document", "target": path, "execute": False, "enabled": bool(path)},
-        }
+    def _workspace_health(index_status: str) -> str:
+        if index_status == "ready":
+            return "ready"
+        if index_status in {"missing", "stale", "partial"}:
+            return "warning"
+        return "blocked"
 
     @staticmethod
-    def _category_row(item: Dict[str, Any]) -> Dict[str, Any]:
-        layer_counts = dict(item.get("layer_counts") or {})
-        formal_counts = {layer: int(layer_counts.get(layer) or 0) for layer in FORMAL_LAYERS}
-        return {
-            "category_id": str(item.get("category_id") or ""),
-            "display_name": str(item.get("display_name") or item.get("category_id") or ""),
-            "path": str(item.get("path") or ""),
-            "description": str(item.get("description") or ""),
-            "document_count": sum(formal_counts.values()),
-            "layer_counts": formal_counts,
-            "status_counts": dict(item.get("status_counts") or {}),
-            "review_required_count": int(item.get("review_required_count") or 0),
-            "edit_available": False,
-        }
-
-    @staticmethod
-    def _formal_totals(rows: list[Dict[str, Any]]) -> Dict[str, int]:
-        return {layer: sum(int((row.get("layer_counts") or {}).get(layer) or 0) for row in rows) for layer in FORMAL_LAYERS}
-
-    @staticmethod
-    def _document_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-        metadata = dict(payload.get("metadata") or {})
-        frontmatter = dict(payload.get("frontmatter") or {})
-        layer = str(frontmatter.get("layer") or metadata.get("layer") or ServiceAdapter._layer_from_path(payload.get("path", "")))
-        status = str(frontmatter.get("status") or metadata.get("status") or "")
-        review_required = bool(frontmatter.get("review_required") or metadata.get("review_required") in {"true", "1", True})
-        trust_warning = "未经审核，不能作为正式项目规则" if layer in {"raw", "distilled"} or review_required or status in {"quarantine", "rejected"} else None
-        return {
-            "document_id": str(metadata.get("id") or payload.get("path") or ""),
-            "path": str(payload.get("path") or ""),
-            "title": str(frontmatter.get("title") or metadata.get("title") or payload.get("path") or "Untitled"),
-            "category_id": str(frontmatter.get("category") or metadata.get("category") or ""),
-            "layer": layer,
-            "status": status,
-            "confidence": str(frontmatter.get("confidence") or metadata.get("confidence") or ""),
-            "source_type": str(frontmatter.get("source_type") or metadata.get("source_type") or ""),
-            "source_url": frontmatter.get("source_url") or metadata.get("source_url"),
-            "review_required": review_required,
-            "last_reviewed": frontmatter.get("last_reviewed") or metadata.get("last_reviewed"),
-            "frontmatter": frontmatter,
-            "body": str(payload.get("body") or ""),
-            "open_mode": "read_only",
-            "trust_warning": trust_warning,
-            "mutation_actions_available": False,
-        }
-
-    @staticmethod
-    def _task_row(record: Any) -> Dict[str, Any]:
-        payload = record.to_dict() if hasattr(record, "to_dict") else dict(record)
-        meta = dict(payload.get("metadata") or {})
-        return {
-            "task_id": str(payload.get("task_id") or ""),
-            "task_type": str(payload.get("task_type") or ""),
-            "status": str(payload.get("status") or ""),
-            "title": str(payload.get("title") or payload.get("task_type") or ""),
-            "progress_percent": int(payload.get("progress_percent") or 0),
-            "progress_message": str(payload.get("progress_message") or ""),
-            "cancel_requested": bool(payload.get("cancel_requested", False)),
-            "error": dict(payload.get("error") or {}),
-            "log_available": bool(payload.get("log_path")),
-            "result_summary": dict(payload.get("result_summary") or {}),
-            "elapsed_ms": int(payload.get("elapsed_ms") or 0),
-            "created_at": str(payload.get("created_at") or ""),
-            "started_at": str(payload.get("started_at") or ""),
-            "finished_at": str(payload.get("finished_at") or ""),
-            "retry_of": meta.get("retry_of"),
-            "retry_root": meta.get("retry_root"),
-        }
-
-    @staticmethod
-    def _layer_from_path(path: str) -> str:
-        parts = Path(path).parts
-        for layer in ["raw", "distilled", "rules", "checklists", "snippets", "deprecated", "rejected", "quarantine"]:
-            if layer in parts:
-                return layer
-        return ""
+    def _recommended_actions(index_status: str) -> list[Dict[str, Any]]:
+        if index_status == "missing":
+            return [
+                route_action("index_missing", "索引缺失，等待后续维护入口重建", "disabled_future", "index", False, "Phase 1 不自动触发索引"),
+                route_action("open_tasks", "查看任务中心", "route", "tasks", True),
+                route_action("open_settings", "查看只读设置", "route", "settings", True),
+            ]
+        return [
+            route_action("open_search", "搜索正式知识", "route", "search", True),
+            route_action("open_library", "浏览知识库", "route", "library", True),
+            route_action("open_tasks", "查看任务中心", "route", "tasks", True),
+        ]
