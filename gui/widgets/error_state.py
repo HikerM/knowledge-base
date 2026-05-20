@@ -8,12 +8,17 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 class ErrorState(QWidget):
     def __init__(self, title: str = "服务错误", message: str = ""):
         super().__init__()
+        self.setObjectName("softPanel")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
-        title_label = QLabel(title)
-        title_label.setObjectName("errorTitle")
-        body = QLabel(message)
-        body.setWordWrap(True)
-        layout.addWidget(title_label)
-        layout.addWidget(body)
-        self.setStyleSheet("#errorTitle { color: #B91C1C; font-weight: 600; } QLabel { color: #5B6678; }")
+        self.title_label = QLabel(title)
+        self.title_label.setObjectName("errorTitle")
+        self.body = QLabel(message)
+        self.body.setObjectName("mutedText")
+        self.body.setWordWrap(True)
+        layout.addWidget(self.title_label)
+        layout.addWidget(self.body)
+
+    def set_state(self, title: str, message: str = "") -> None:
+        self.title_label.setText(title)
+        self.body.setText(message)

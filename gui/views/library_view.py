@@ -7,8 +7,13 @@ from typing import Any, Dict
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QHeaderView, QLabel, QPushButton, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
+from gui.styles.tokens import SPACING
 from gui.views.document_preview_view import DocumentPreviewView
+from gui.widgets.empty_state import EmptyState
+from gui.widgets.error_state import ErrorState
 from gui.widgets.formatters import confidence_label, layer_label, source_type_label, status_label
+from gui.widgets.section_header import SectionHeader
+from gui.widgets.status_chip import StatusChip, tone_for_status
 
 
 class LibraryView(QWidget):
@@ -21,7 +26,11 @@ class LibraryView(QWidget):
         self.offset = 0
         self.has_more = False
         self.summary = QLabel("进入知识库后读取正式层摘要；列表分页显示。")
+        self.summary.setObjectName("mutedText")
         self.summary.setWordWrap(True)
+        self.empty_state = EmptyState("等待加载", "进入知识库后分页读取正式层列表。")
+        self.error_state = ErrorState("知识库读取失败", "")
+        self.error_state.hide()
         self.layer_filter = QComboBox()
         self.layer_filter.addItem("全部正式层", None)
         self.layer_filter.addItem("规则", "rules")
@@ -43,6 +52,7 @@ class LibraryView(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setAlternatingRowColors(True)
+        self.table.setShowGrid(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
         self.preview = DocumentPreviewView()
@@ -63,9 +73,12 @@ class LibraryView(QWidget):
         paging.addWidget(self.preview_button)
         left = QWidget()
         left_layout = QVBoxLayout(left)
-        left_layout.addWidget(QLabel("知识库"))
+        left_layout.setContentsMargins(0, 0, 12, 0)
+        left_layout.setSpacing(SPACING.gap)
         left_layout.addWidget(self.summary)
         left_layout.addLayout(filters)
+        left_layout.addWidget(self.empty_state)
+        left_layout.addWidget(self.error_state)
         left_layout.addLayout(paging)
         left_layout.addWidget(self.table, 1)
         self.splitter = QSplitter()
@@ -75,7 +88,9 @@ class LibraryView(QWidget):
         self.splitter.setStretchFactor(0, 3)
         self.splitter.setStretchFactor(1, 2)
         root = QVBoxLayout(self)
-        root.setContentsMargins(20, 20, 20, 20)
+        root.setContentsMargins(SPACING.page, SPACING.page, SPACING.page, SPACING.page)
+        root.setSpacing(SPACING.gap)
+        root.addWidget(SectionHeader("知识库", "只浏览规则、清单、片段；列表分页读取，不加载正文。"))
         root.addWidget(self.splitter, 1)
 
         self.layer_filter.currentIndexChanged.connect(self.load_first_page)
@@ -123,11 +138,20 @@ class LibraryView(QWidget):
         page = data.get("page") or {}
         if model.get("errors"):
             self.summary.setText(self._error_text(model))
+            self.error_state.set_state("知识库读取失败", self._error_text(model))
+            self.error_state.show()
+            self.empty_state.hide()
         else:
             self.summary.setText(
                 f"正式层：规则 {totals.get('rules', 0)} / 清单 {totals.get('checklists', 0)} / 片段 {totals.get('snippets', 0)}；"
                 f"本页 {page.get('count', len(docs))} 条，每页最多 {page.get('limit', self.limit)} 条。"
             )
+            self.error_state.hide()
+            if docs:
+                self.empty_state.hide()
+            else:
+                self.empty_state.set_state("没有正式知识", "当前筛选条件下没有规则、清单或片段。")
+                self.empty_state.show()
         self.limit = int(page.get("limit") or self.limit)
         self.offset = int(page.get("offset") or self.offset)
         self.has_more = bool(page.get("has_more"))
@@ -184,6 +208,8 @@ class LibraryView(QWidget):
                 item = QTableWidgetItem(str(value))
                 item.setData(Qt.UserRole, row)
                 self.table.setItem(row_index, col, item)
+            self.table.setCellWidget(row_index, 1, StatusChip(layer_label(row.get("layer")), "info"))
+            self.table.setCellWidget(row_index, 2, StatusChip(status_label(row.get("status")), tone_for_status(row.get("status"))))
 
     @staticmethod
     def _error_text(model: Dict[str, Any]) -> str:

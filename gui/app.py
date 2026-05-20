@@ -12,6 +12,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from gui.main_window import MainWindow
+from gui.styles.theme import apply_light_theme
 
 
 def _default_log_dir() -> Path:
@@ -52,6 +53,7 @@ def main(argv: list[str] | None = None) -> int:
     log_path = _configure_logging()
     logging.getLogger(__name__).info("workspace=%s log=%s", workspace_path, log_path)
     app = QApplication(qt_argv)
+    apply_light_theme(app)
     window = MainWindow(workspace_path=workspace_path)
     window.show()
     auto_close = os.environ.get("PKB_GUI_AUTO_CLOSE_MS")

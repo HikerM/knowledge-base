@@ -20,6 +20,8 @@ class Sidebar(QFrame):
         layout.setSpacing(8)
         for item in NAVIGATION_ROUTES:
             button = QPushButton(item.label)
+            button.setProperty("navButton", True)
+            button.setProperty("routeId", item.route_id)
             button.setAccessibleName(item.label)
             button.setEnabled(item.enabled)
             button.setCheckable(item.enabled)
@@ -31,12 +33,6 @@ class Sidebar(QFrame):
             self._buttons[item.route_id] = button
             layout.addWidget(button)
         layout.addStretch(1)
-        self.setStyleSheet(
-            "#sidebar { background: #FFFFFF; border-right: 1px solid #D8DEE8; } "
-            "QPushButton { text-align: left; padding: 8px 10px; border: 0; border-radius: 8px; color: #1F2937; } "
-            "QPushButton:checked { background: #E7F2FA; color: #0369A1; font-weight: 600; } "
-            "QPushButton:disabled { color: #9CA3AF; }"
-        )
 
     def set_active(self, route: str, *, emit: bool = True) -> bool:
         if route not in self._buttons or not self._buttons[route].isEnabled():

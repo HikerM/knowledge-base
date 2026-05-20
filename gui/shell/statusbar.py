@@ -20,7 +20,7 @@ class StatusBar(QFrame):
         self.backup = QLabel("备份：只读")
         self.notice = QLabel("")
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 4, 12, 4)
+        layout.setContentsMargins(16, 6, 16, 6)
         layout.setSpacing(18)
         layout.addWidget(self.workspace)
         layout.addWidget(self.index)
@@ -28,7 +28,8 @@ class StatusBar(QFrame):
         layout.addWidget(self.backup)
         layout.addWidget(self.notice)
         layout.addStretch(1)
-        self.setStyleSheet("#statusbar { background: #EEF1F5; border-top: 1px solid #D8DEE8; } QLabel { color: #5B6678; font-size: 12px; }")
+        for label in [self.workspace, self.index, self.tasks, self.backup, self.notice]:
+            label.setObjectName("mutedText")
 
     def update_workspace(self, model: Dict[str, Any]) -> None:
         data = model.get("data") or {}

@@ -31,6 +31,7 @@ class AppShell(QWidget):
 
     def __init__(self, adapter: Any):
         super().__init__()
+        self.setObjectName("AppShell")
         self.adapter = adapter
         self.workspace_vm = WorkspaceViewModel(adapter)
         self.dashboard_vm = DashboardViewModel(adapter)
@@ -47,6 +48,7 @@ class AppShell(QWidget):
         self.sidebar = Sidebar()
         self.statusbar = StatusBar()
         self.stack = QStackedWidget()
+        self.stack.setObjectName("contentStack")
 
         self.dashboard_view = DashboardView(self.dashboard_vm)
         self.search_view = SearchView(self.search_vm, self.document_vm)

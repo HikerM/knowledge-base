@@ -8,8 +8,14 @@ from typing import Any, Dict
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QFrame, QLabel, QLineEdit, QPushButton, QHBoxLayout
 
-from gui.widgets.badges import StatusBadge, tone_for_status
 from gui.widgets.formatters import status_label
+from gui.widgets.status_chip import StatusChip, tone_for_status
+
+
+def _compact_path(path: str, max_chars: int = 34) -> str:
+    if len(path) <= max_chars:
+        return path
+    return f"...{path[-max_chars + 3:]}"
 
 
 class TopBar(QFrame):
@@ -20,16 +26,18 @@ class TopBar(QFrame):
         super().__init__()
         self.setObjectName("topbar")
         self.workspace_label = QLabel("工作区")
+        self.workspace_label.setObjectName("mutedText")
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("搜索正式层规则、清单、片段")
-        self.index_badge = StatusBadge("索引：未知")
-        self.task_badge = StatusBadge("任务：只读", "info")
-        self.backup_badge = StatusBadge("备份：只读", "info")
+        self.index_badge = StatusChip("索引：未知")
+        self.task_badge = StatusChip("任务：只读", "info")
+        self.backup_badge = StatusChip("备份：只读", "info")
         settings_button = QPushButton("设置")
+        settings_button.setProperty("buttonRole", "ghost")
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(10)
+        layout.setContentsMargins(16, 10, 16, 10)
+        layout.setSpacing(12)
         layout.addWidget(self.workspace_label)
         layout.addWidget(self.search_input, 1)
         layout.addWidget(self.index_badge)
@@ -39,15 +47,12 @@ class TopBar(QFrame):
 
         self.search_input.returnPressed.connect(lambda: self.search_submitted.emit(self.search_input.text()))
         settings_button.clicked.connect(self.settings_requested.emit)
-        self.setStyleSheet(
-            "#topbar { background: #FFFFFF; border-bottom: 1px solid #D8DEE8; } "
-            "QLineEdit { padding: 7px 10px; border: 1px solid #D8DEE8; border-radius: 8px; } "
-            "QPushButton { padding: 7px 10px; border: 1px solid #D8DEE8; border-radius: 8px; background: #FFFFFF; }"
-        )
 
     def update_workspace(self, model: Dict[str, Any]) -> None:
         data = model.get("data") or {}
         workspace_path = str(data.get("workspace_path") or "未选择工作区")
-        self.workspace_label.setText(Path(workspace_path).name or workspace_path)
+        name = Path(workspace_path).name or workspace_path
+        self.workspace_label.setText(f"工作区：{_compact_path(name)}")
+        self.workspace_label.setToolTip(workspace_path)
         index_status = str(data.get("index_status") or "unknown")
-        self.index_badge.set_badge(f"索引：{status_label(index_status)}", tone_for_status(index_status))
+        self.index_badge.set_chip(f"索引：{status_label(index_status)}", tone_for_status(index_status))

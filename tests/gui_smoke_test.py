@@ -23,13 +23,24 @@ def main() -> int:
 
     from gui.fixtures.fake_service_adapter import FakeServiceAdapter
     from gui.main_window import MainWindow
+    from gui.styles.theme import apply_light_theme
+    from gui.widgets.card import Card
+    from gui.widgets.status_chip import StatusChip
 
     app = QApplication.instance() or QApplication(sys.argv)
+    apply_light_theme(app)
+    assert "QFrame#topbar" in app.styleSheet()
+    chip = StatusChip("索引：就绪", "ready")
+    assert chip.text() == "索引：就绪"
     adapter = FakeServiceAdapter()
     window = MainWindow(adapter=adapter)
     window.show()
     app.processEvents()
     assert window.shell.stack.currentWidget() is window.shell.dashboard_view
+    assert window.shell.sidebar._buttons["dashboard"].isChecked()
+    assert window.shell.sidebar._buttons["dashboard"].property("navButton") is True
+    assert all(isinstance(card, Card) for card in window.shell.dashboard_view.cards.values())
+    assert {"workspace", "index", "documents", "backup", "tasks"} <= set(window.shell.dashboard_view.cards)
     assert adapter.calls == [("load_workspace_status", {})]
     startup_forbidden = {
         "load_recent_tasks",
@@ -47,7 +58,7 @@ def main() -> int:
     for label in ["首页", "搜索", "知识库", "审核", "任务中心", "维护", "设置"]:
         assert label in nav_labels
     all_button_text = " ".join(button.text().lower() for button in window.findChildren(QPushButton))
-    for forbidden in ["cancel", "retry", "cleanup", "archive", "delete", "merge", "restore"]:
+    for forbidden in ["cancel", "retry", "cleanup", "archive", "delete", "merge", "restore", "rss", "vector", "ai", "归档", "删除", "合并", "恢复"]:
         assert forbidden not in all_button_text
     window.close()
     app.processEvents()

@@ -8,7 +8,12 @@ from typing import Any, Dict
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QAbstractItemView, QHBoxLayout, QHeaderView, QLabel, QPushButton, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget
 
+from gui.styles.tokens import SPACING
+from gui.widgets.empty_state import EmptyState
+from gui.widgets.error_state import ErrorState
 from gui.widgets.formatters import elapsed_label, status_label, task_type_label
+from gui.widgets.section_header import SectionHeader
+from gui.widgets.status_chip import StatusChip, tone_for_status
 
 
 class TaskSummaryView(QWidget):
@@ -16,8 +21,13 @@ class TaskSummaryView(QWidget):
         super().__init__()
         self.task_vm = task_vm
         self.summary = QLabel("进入任务中心后读取最近任务；日志摘要需选择任务后显式查看。")
+        self.summary.setObjectName("mutedText")
         self.summary.setWordWrap(True)
+        self.empty_state = EmptyState("等待加载", "进入任务中心后读取最近任务。")
+        self.error_state = ErrorState("任务读取失败", "")
+        self.error_state.hide()
         self.refresh_button = QPushButton("刷新任务")
+        self.refresh_button.setProperty("buttonRole", "primary")
         self.detail_button = QPushButton("查看日志摘要")
         self.detail_button.setEnabled(False)
         self.table = QTableWidget(0, 6)
@@ -26,6 +36,7 @@ class TaskSummaryView(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setAlternatingRowColors(True)
+        self.table.setShowGrid(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
         self.detail = QTextEdit()
@@ -36,12 +47,17 @@ class TaskSummaryView(QWidget):
         controls.addWidget(self.detail_button)
         controls.addStretch(1)
         root = QVBoxLayout(self)
-        root.setContentsMargins(20, 20, 20, 20)
-        root.addWidget(QLabel("任务中心"))
+        root.setContentsMargins(SPACING.page, SPACING.page, SPACING.page, SPACING.page)
+        root.setSpacing(SPACING.gap)
+        root.addWidget(SectionHeader("任务中心", "只读查看最近任务；日志摘要需要手动打开。"))
         root.addWidget(self.summary)
         root.addLayout(controls)
+        root.addWidget(self.empty_state)
+        root.addWidget(self.error_state)
         root.addWidget(self.table, 1)
-        root.addWidget(QLabel("只读日志摘要"))
+        detail_title = QLabel("只读日志摘要")
+        detail_title.setObjectName("cardValue")
+        root.addWidget(detail_title)
         root.addWidget(self.detail, 1)
         self.refresh_button.clicked.connect(self.load_tasks)
         self.detail_button.clicked.connect(self.open_selected_task)
@@ -60,10 +76,18 @@ class TaskSummaryView(QWidget):
         rows = (model.get("data") or {}).get("tasks", [])
         if model.get("errors"):
             self.summary.setText(self._error_text(model))
+            self.error_state.set_state("任务读取失败", self._error_text(model))
+            self.error_state.show()
+            self.empty_state.hide()
         elif not rows:
             self.summary.setText("没有任务记录。")
+            self.empty_state.set_state("没有任务记录", "当前工作区还没有可显示的任务摘要。")
+            self.empty_state.show()
+            self.error_state.hide()
         else:
             self.summary.setText(f"最近任务 {len(rows)} 条；操作按钮在第一阶段隐藏。")
+            self.empty_state.hide()
+            self.error_state.hide()
         self.table.setRowCount(len(rows))
         for row_index, row in enumerate(rows):
             values = [
@@ -78,6 +102,7 @@ class TaskSummaryView(QWidget):
                 item = QTableWidgetItem(str(value))
                 item.setData(Qt.UserRole, row)
                 self.table.setItem(row_index, col, item)
+            self.table.setCellWidget(row_index, 2, StatusChip(status_label(row.get("status")), tone_for_status(row.get("status"))))
         self.update_selection_state()
 
     def update_selection_state(self) -> None:

@@ -7,8 +7,12 @@ from typing import Any, Dict
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QAbstractItemView, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QSplitter, QVBoxLayout, QWidget
 
+from gui.styles.tokens import SPACING
 from gui.views.document_preview_view import DocumentPreviewView
+from gui.widgets.empty_state import EmptyState
+from gui.widgets.error_state import ErrorState
 from gui.widgets.formatters import confidence_label, layer_label, source_type_label, status_label
+from gui.widgets.section_header import SectionHeader
 
 
 class SearchView(QWidget):
@@ -29,13 +33,20 @@ class SearchView(QWidget):
         self.results = QListWidget()
         self.results.setSelectionMode(QAbstractItemView.SingleSelection)
         self.results.setWordWrap(True)
+        self.results.setObjectName("resultList")
         self.preview = DocumentPreviewView()
         self.summary = QLabel("输入查询词后搜索正式层索引。")
+        self.summary.setObjectName("mutedText")
         self.summary.setWordWrap(True)
+        self.empty_state = EmptyState("等待搜索", "输入查询词后，只查询正式层索引。")
+        self.error_state = ErrorState("搜索失败", "")
+        self.error_state.hide()
         self.page_label = QLabel("第 1 页")
+        self.page_label.setObjectName("mutedText")
         self.open_button.setEnabled(False)
         self.prev_button.setEnabled(False)
         self.next_button.setEnabled(False)
+        self.button.setProperty("buttonRole", "primary")
 
         controls = QHBoxLayout()
         controls.addWidget(self.query, 1)
@@ -49,8 +60,12 @@ class SearchView(QWidget):
         paging.addWidget(self.preview_button)
         left = QWidget()
         left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 12, 0)
+        left_layout.setSpacing(SPACING.gap)
         left_layout.addLayout(controls)
         left_layout.addWidget(self.summary)
+        left_layout.addWidget(self.empty_state)
+        left_layout.addWidget(self.error_state)
         left_layout.addLayout(paging)
         left_layout.addWidget(self.results, 1)
         self.splitter = QSplitter()
@@ -60,8 +75,9 @@ class SearchView(QWidget):
         self.splitter.setStretchFactor(0, 3)
         self.splitter.setStretchFactor(1, 2)
         root = QVBoxLayout(self)
-        root.setContentsMargins(20, 20, 20, 20)
-        root.addWidget(QLabel("搜索"))
+        root.setContentsMargins(SPACING.page, SPACING.page, SPACING.page, SPACING.page)
+        root.setSpacing(SPACING.gap)
+        root.addWidget(SectionHeader("搜索", "检索规则、清单、片段。结果打开时才读取单篇文档。"))
         root.addWidget(self.splitter, 1)
 
         self.button.clicked.connect(self.run_search)
@@ -100,6 +116,8 @@ class SearchView(QWidget):
 
     def _load_page(self) -> None:
         self.summary.setText("正在搜索正式层索引...")
+        self.empty_state.hide()
+        self.error_state.hide()
         self.open_button.setEnabled(False)
         self.render_results(self.search_vm.search(self.query.text(), limit=self.limit, offset=self.offset))
 
@@ -111,15 +129,25 @@ class SearchView(QWidget):
         index_status = str(data.get("index_status") or "")
         if not str(data.get("query") or "").strip():
             self.summary.setText("请输入查询词；空查询不会访问搜索服务。")
+            self.empty_state.set_state("等待搜索", "输入查询词后，只查询正式层索引。")
+            self.empty_state.show()
         elif index_status == "missing":
             self.summary.setText("索引缺失，当前没有可搜索结果。")
+            self.empty_state.set_state("索引缺失", "当前工作区没有可用索引。界面不会自动创建索引。")
+            self.empty_state.show()
         elif model.get("errors"):
             self.summary.setText(self._error_text(model))
+            self.error_state.set_state("搜索失败", self._error_text(model))
+            self.error_state.show()
         elif not rows:
             self.summary.setText("没有搜索结果。")
+            self.empty_state.set_state("没有匹配结果", "请换一个查询词，或检查当前工作区索引状态。")
+            self.empty_state.show()
         else:
             page = data.get("page") or {}
             self.summary.setText(f"状态：{status_label(state)}；本页 {page.get('count', len(rows))} 条；仅搜索正式层。")
+            self.empty_state.hide()
+            self.error_state.hide()
         page = data.get("page") or {}
         self.limit = int(page.get("limit") or self.limit)
         self.offset = int(page.get("offset") or self.offset)
