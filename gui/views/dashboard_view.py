@@ -6,10 +6,11 @@ from typing import Any, Dict
 
 from pathlib import Path
 
-from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QListWidget, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QListWidget, QVBoxLayout, QWidget
 
 from gui.styles.tokens import SPACING
 from gui.widgets.card import Card
+from gui.widgets.controls import secondary_button
 from gui.widgets.formatters import status_label
 from gui.widgets.section_header import SectionHeader
 from gui.widgets.status_chip import StatusChip, tone_for_status
@@ -31,8 +32,7 @@ class DashboardView(QWidget):
         self.state = QLabel("首页摘要尚未加载，点击刷新查看最近任务和推荐操作。")
         self.state.setObjectName("mutedText")
         self.state.setWordWrap(True)
-        self.refresh_button = QPushButton("刷新首页摘要")
-        self.refresh_button.setProperty("buttonRole", "primary")
+        self.refresh_button = secondary_button("刷新首页摘要")
         self.index_chip = StatusChip("索引：未知")
 
         root = QVBoxLayout(self)

@@ -6,14 +6,17 @@ import json
 from typing import Any, Dict
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QAbstractItemView, QHBoxLayout, QHeaderView, QLabel, QPushButton, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QHeaderView, QLabel, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget
 
 from gui.styles.tokens import SPACING
+from gui.widgets.card import Card
+from gui.widgets.controls import secondary_button
 from gui.widgets.empty_state import EmptyState
 from gui.widgets.error_state import ErrorState
 from gui.widgets.formatters import elapsed_label, status_label, task_type_label
 from gui.widgets.section_header import SectionHeader
 from gui.widgets.status_chip import StatusChip, tone_for_status
+from gui.widgets.table import DataTable
 
 
 class TaskSummaryView(QWidget):
@@ -26,22 +29,18 @@ class TaskSummaryView(QWidget):
         self.empty_state = EmptyState("等待加载", "进入任务中心后读取最近任务。")
         self.error_state = ErrorState("任务读取失败", "")
         self.error_state.hide()
-        self.refresh_button = QPushButton("刷新任务")
-        self.refresh_button.setProperty("buttonRole", "primary")
-        self.detail_button = QPushButton("查看日志摘要")
+        self.refresh_button = secondary_button("刷新任务")
+        self.detail_button = secondary_button("查看日志摘要")
         self.detail_button.setEnabled(False)
-        self.table = QTableWidget(0, 6)
+        self.table = DataTable(0, 6)
         self.table.setHorizontalHeaderLabels(["任务", "类型", "状态", "进度", "耗时", "错误摘要"])
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.table.setAlternatingRowColors(True)
-        self.table.setShowGrid(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
+        self.detail_card = Card("只读日志摘要", "未选择任务", "日志摘要必须显式点击查看")
         self.detail = QTextEdit()
         self.detail.setReadOnly(True)
         self.detail.setPlainText("选择一条任务后点击“查看日志摘要”。")
+        self.detail_card.add_body_widget(self.detail)
         controls = QHBoxLayout()
         controls.addWidget(self.refresh_button)
         controls.addWidget(self.detail_button)
@@ -55,10 +54,7 @@ class TaskSummaryView(QWidget):
         root.addWidget(self.empty_state)
         root.addWidget(self.error_state)
         root.addWidget(self.table, 1)
-        detail_title = QLabel("只读日志摘要")
-        detail_title.setObjectName("cardValue")
-        root.addWidget(detail_title)
-        root.addWidget(self.detail, 1)
+        root.addWidget(self.detail_card, 1)
         self.refresh_button.clicked.connect(self.load_tasks)
         self.detail_button.clicked.connect(self.open_selected_task)
         self.table.itemSelectionChanged.connect(self.update_selection_state)
@@ -119,6 +115,7 @@ class TaskSummaryView(QWidget):
         model = self.task_vm.load_task_detail(task_id)
         if model.get("state") == "error":
             self.detail.setPlainText(self._error_text(model))
+            self.detail_card.set_content("只读日志摘要", "读取失败", "请重新选择任务")
             return
         data = model.get("data") or {}
         task = data.get("task") or {}
@@ -137,6 +134,7 @@ class TaskSummaryView(QWidget):
         lines.append("日志：")
         lines.extend(f"{entry.get('timestamp', '')} {entry.get('message', '')}" for entry in logs[:80])
         self.detail.setPlainText("\n".join(lines) if logs or events else "没有可用日志。")
+        self.detail_card.set_content("只读日志摘要", task.get("title", "任务详情"), "只显示日志尾部摘要，不执行任务操作")
 
     @staticmethod
     def _error_text(model: Dict[str, Any]) -> str:

@@ -6,9 +6,10 @@ from pathlib import Path
 from typing import Any, Dict
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QFrame, QLabel, QLineEdit, QPushButton, QHBoxLayout
+from PySide6.QtWidgets import QFrame, QLabel, QHBoxLayout
 
 from gui.widgets.formatters import status_label
+from gui.widgets.controls import SearchInput, ghost_button
 from gui.widgets.status_chip import StatusChip, tone_for_status
 
 
@@ -27,13 +28,11 @@ class TopBar(QFrame):
         self.setObjectName("topbar")
         self.workspace_label = QLabel("工作区")
         self.workspace_label.setObjectName("mutedText")
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("搜索正式层规则、清单、片段")
+        self.search_input = SearchInput("搜索正式层规则、清单、片段")
         self.index_badge = StatusChip("索引：未知")
         self.task_badge = StatusChip("任务：只读", "info")
         self.backup_badge = StatusChip("备份：只读", "info")
-        settings_button = QPushButton("设置")
-        settings_button.setProperty("buttonRole", "ghost")
+        settings_button = ghost_button("设置")
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 10, 16, 10)

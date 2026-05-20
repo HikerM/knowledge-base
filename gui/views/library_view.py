@@ -5,15 +5,22 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QHeaderView, QLabel, QPushButton, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QHeaderView, QLabel, QSplitter, QStackedWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
 from gui.styles.tokens import SPACING
-from gui.views.document_preview_view import DocumentPreviewView
+from gui.views.document_inspector_preview import DocumentInspectorPreview
+from gui.views.document_reader_view import DocumentReaderView
+from gui.widgets.controls import Select, secondary_button
 from gui.widgets.empty_state import EmptyState
 from gui.widgets.error_state import ErrorState
 from gui.widgets.formatters import confidence_label, layer_label, source_type_label, status_label
 from gui.widgets.section_header import SectionHeader
 from gui.widgets.status_chip import StatusChip, tone_for_status
+from gui.widgets.table import DataTable
+
+
+def _short_path(path: str, max_chars: int = 28) -> str:
+    return path if len(path) <= max_chars else f"{path[:10]}...{path[-max_chars + 13:]}"
 
 
 class LibraryView(QWidget):
@@ -31,31 +38,28 @@ class LibraryView(QWidget):
         self.empty_state = EmptyState("等待加载", "进入知识库后分页读取正式层列表。")
         self.error_state = ErrorState("知识库读取失败", "")
         self.error_state.hide()
-        self.layer_filter = QComboBox()
+        self.layer_filter = Select()
         self.layer_filter.addItem("全部正式层", None)
         self.layer_filter.addItem("规则", "rules")
         self.layer_filter.addItem("清单", "checklists")
         self.layer_filter.addItem("片段", "snippets")
-        self.category_filter = QComboBox()
-        self.refresh_button = QPushButton("刷新")
-        self.open_button = QPushButton("打开所选")
-        self.prev_button = QPushButton("上一页")
-        self.next_button = QPushButton("下一页")
-        self.preview_button = QPushButton("隐藏预览")
+        self.category_filter = Select()
+        self.refresh_button = secondary_button("刷新")
+        self.open_button = secondary_button("在主区域打开")
+        self.prev_button = secondary_button("上一页")
+        self.next_button = secondary_button("下一页")
+        self.preview_button = secondary_button("隐藏详情面板")
         self.page_label = QLabel("第 1 页")
         self.open_button.setEnabled(False)
         self.prev_button.setEnabled(False)
         self.next_button.setEnabled(False)
-        self.table = QTableWidget(0, 7)
+        self.table = DataTable(0, 7)
         self.table.setHorizontalHeaderLabels(["标题", "层级", "状态", "可信度", "来源", "路径", "审核"])
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.table.setAlternatingRowColors(True)
-        self.table.setShowGrid(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
-        self.preview = DocumentPreviewView()
+        self.preview = DocumentInspectorPreview()
+        self.reader = DocumentReaderView("返回知识库")
+        self.main_stack = QStackedWidget()
 
         filters = QHBoxLayout()
         filters.addWidget(QLabel("层级"))
@@ -71,8 +75,8 @@ class LibraryView(QWidget):
         paging.addWidget(self.prev_button)
         paging.addWidget(self.next_button)
         paging.addWidget(self.preview_button)
-        left = QWidget()
-        left_layout = QVBoxLayout(left)
+        self.library_page = QWidget()
+        left_layout = QVBoxLayout(self.library_page)
         left_layout.setContentsMargins(0, 0, 12, 0)
         left_layout.setSpacing(SPACING.gap)
         left_layout.addWidget(self.summary)
@@ -81,9 +85,11 @@ class LibraryView(QWidget):
         left_layout.addWidget(self.error_state)
         left_layout.addLayout(paging)
         left_layout.addWidget(self.table, 1)
+        self.main_stack.addWidget(self.library_page)
+        self.main_stack.addWidget(self.reader)
         self.splitter = QSplitter()
         self.splitter.setChildrenCollapsible(True)
-        self.splitter.addWidget(left)
+        self.splitter.addWidget(self.main_stack)
         self.splitter.addWidget(self.preview)
         self.splitter.setStretchFactor(0, 3)
         self.splitter.setStretchFactor(1, 2)
@@ -100,8 +106,9 @@ class LibraryView(QWidget):
         self.prev_button.clicked.connect(self.previous_page)
         self.next_button.clicked.connect(self.next_page)
         self.preview_button.clicked.connect(self.toggle_preview)
-        self.table.itemSelectionChanged.connect(self.update_selection_state)
+        self.table.itemSelectionChanged.connect(self.inspect_selected_document)
         self.table.itemActivated.connect(lambda item: self.open_selected_document())
+        self.reader.return_requested.connect(self.show_library)
         self.setTabOrder(self.layer_filter, self.category_filter)
         self.setTabOrder(self.category_filter, self.refresh_button)
         self.setTabOrder(self.refresh_button, self.table)
@@ -119,6 +126,7 @@ class LibraryView(QWidget):
 
     def load_first_page(self) -> None:
         self.offset = 0
+        self.show_library()
         self.load_summary()
 
     def previous_page(self) -> None:
@@ -162,22 +170,32 @@ class LibraryView(QWidget):
         self.update_selection_state()
 
     def open_selected_document(self) -> None:
-        items = self.table.selectedItems()
-        if not items:
+        row = self._selected_row()
+        if not row:
             return
-        row = items[0].data(Qt.UserRole) or {}
         model = self.document_vm.open_document(document_id=row.get("document_id"), path=row.get("path"))
-        self.preview.render_document(model)
-        if not self.preview.isVisible():
-            self.toggle_preview()
+        self.reader.render_document(model)
+        self.main_stack.setCurrentWidget(self.reader)
 
     def update_selection_state(self) -> None:
-        self.open_button.setEnabled(bool(self.table.selectedItems()))
+        self.open_button.setEnabled(bool(self._selected_row()))
+
+    def inspect_selected_document(self) -> None:
+        self.update_selection_state()
+        row = self._selected_row()
+        if not row:
+            self.preview.render_empty()
+            return
+        model = self.document_vm.open_document(document_id=row.get("document_id"), path=row.get("path"))
+        self.preview.render_document(model, row=row)
+
+    def show_library(self) -> None:
+        self.main_stack.setCurrentWidget(self.library_page)
 
     def toggle_preview(self) -> None:
         visible = self.preview.isVisible()
         self.preview.setVisible(not visible)
-        self.preview_button.setText("显示预览" if visible else "隐藏预览")
+        self.preview_button.setText("显示详情面板" if visible else "隐藏详情面板")
 
     def _render_category_filter(self, categories: list[Dict[str, Any]], active: str | None) -> None:
         self._loading_filters = True
@@ -201,15 +219,23 @@ class LibraryView(QWidget):
                 status_label(row.get("status")),
                 confidence_label(row.get("confidence")),
                 source_type_label(row.get("source_type")),
-                row.get("path", ""),
+                _short_path(str(row.get("path", ""))),
                 "需审核" if row.get("review_required") else "已审核",
             ]
             for col, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
                 item.setData(Qt.UserRole, row)
+                if col == 5:
+                    item.setToolTip(str(row.get("path") or ""))
                 self.table.setItem(row_index, col, item)
             self.table.setCellWidget(row_index, 1, StatusChip(layer_label(row.get("layer")), "info"))
             self.table.setCellWidget(row_index, 2, StatusChip(status_label(row.get("status")), tone_for_status(row.get("status"))))
+
+    def _selected_row(self) -> Dict[str, Any] | None:
+        selected = self.table.selectedItems()
+        if not selected:
+            return None
+        return selected[0].data(Qt.UserRole) or None
 
     @staticmethod
     def _error_text(model: Dict[str, Any]) -> str:

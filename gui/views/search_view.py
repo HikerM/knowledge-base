@@ -5,14 +5,17 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QAbstractItemView, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QSplitter, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QAbstractItemView, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QSplitter, QStackedWidget, QVBoxLayout, QWidget
 
 from gui.styles.tokens import SPACING
-from gui.views.document_preview_view import DocumentPreviewView
+from gui.views.document_inspector_preview import DocumentInspectorPreview
+from gui.views.document_reader_view import DocumentReaderView
+from gui.widgets.controls import SearchInput, primary_button, secondary_button
 from gui.widgets.empty_state import EmptyState
 from gui.widgets.error_state import ErrorState
 from gui.widgets.formatters import confidence_label, layer_label, source_type_label, status_label
 from gui.widgets.section_header import SectionHeader
+from gui.widgets.status_chip import StatusChip, tone_for_status
 
 
 class SearchView(QWidget):
@@ -23,18 +26,19 @@ class SearchView(QWidget):
         self.limit = 25
         self.offset = 0
         self.has_more = False
-        self.query = QLineEdit()
-        self.query.setPlaceholderText("搜索正式知识：规则、清单、片段")
-        self.button = QPushButton("搜索")
-        self.open_button = QPushButton("打开所选")
-        self.prev_button = QPushButton("上一页")
-        self.next_button = QPushButton("下一页")
-        self.preview_button = QPushButton("隐藏预览")
+        self.query = SearchInput("搜索正式知识：规则、清单、片段")
+        self.button = primary_button("搜索")
+        self.open_button = secondary_button("在主区域打开")
+        self.prev_button = secondary_button("上一页")
+        self.next_button = secondary_button("下一页")
+        self.preview_button = secondary_button("隐藏详情面板")
         self.results = QListWidget()
         self.results.setSelectionMode(QAbstractItemView.SingleSelection)
         self.results.setWordWrap(True)
         self.results.setObjectName("resultList")
-        self.preview = DocumentPreviewView()
+        self.preview = DocumentInspectorPreview()
+        self.reader = DocumentReaderView("返回搜索结果")
+        self.main_stack = QStackedWidget()
         self.summary = QLabel("输入查询词后搜索正式层索引。")
         self.summary.setObjectName("mutedText")
         self.summary.setWordWrap(True)
@@ -46,7 +50,6 @@ class SearchView(QWidget):
         self.open_button.setEnabled(False)
         self.prev_button.setEnabled(False)
         self.next_button.setEnabled(False)
-        self.button.setProperty("buttonRole", "primary")
 
         controls = QHBoxLayout()
         controls.addWidget(self.query, 1)
@@ -58,8 +61,8 @@ class SearchView(QWidget):
         paging.addWidget(self.prev_button)
         paging.addWidget(self.next_button)
         paging.addWidget(self.preview_button)
-        left = QWidget()
-        left_layout = QVBoxLayout(left)
+        self.result_page = QWidget()
+        left_layout = QVBoxLayout(self.result_page)
         left_layout.setContentsMargins(0, 0, 12, 0)
         left_layout.setSpacing(SPACING.gap)
         left_layout.addLayout(controls)
@@ -68,9 +71,11 @@ class SearchView(QWidget):
         left_layout.addWidget(self.error_state)
         left_layout.addLayout(paging)
         left_layout.addWidget(self.results, 1)
+        self.main_stack.addWidget(self.result_page)
+        self.main_stack.addWidget(self.reader)
         self.splitter = QSplitter()
         self.splitter.setChildrenCollapsible(True)
-        self.splitter.addWidget(left)
+        self.splitter.addWidget(self.main_stack)
         self.splitter.addWidget(self.preview)
         self.splitter.setStretchFactor(0, 3)
         self.splitter.setStretchFactor(1, 2)
@@ -86,9 +91,9 @@ class SearchView(QWidget):
         self.next_button.clicked.connect(self.next_page)
         self.preview_button.clicked.connect(self.toggle_preview)
         self.query.returnPressed.connect(self.run_search)
-        self.results.itemActivated.connect(self.open_item)
-        self.results.itemClicked.connect(self.open_item)
-        self.results.itemSelectionChanged.connect(self.update_selection_state)
+        self.results.itemActivated.connect(self.open_item_in_reader)
+        self.results.itemSelectionChanged.connect(self.inspect_current_item)
+        self.reader.return_requested.connect(self.show_results)
         self.setTabOrder(self.query, self.button)
         self.setTabOrder(self.button, self.open_button)
         self.setTabOrder(self.open_button, self.results)
@@ -103,6 +108,7 @@ class SearchView(QWidget):
 
     def run_search(self) -> None:
         self.offset = 0
+        self.show_results()
         self._load_page()
 
     def previous_page(self) -> None:
@@ -160,6 +166,9 @@ class SearchView(QWidget):
             item.setData(Qt.UserRole, row)
             item.setToolTip(str(row.get("path") or ""))
             self.results.addItem(item)
+            widget = self._row_widget(row)
+            item.setSizeHint(widget.sizeHint())
+            self.results.setItemWidget(item, widget)
         if not rows and str(data.get("query") or "").strip() and not model.get("errors"):
             item = QListWidgetItem("没有匹配结果。请换一个查询词。")
             item.setFlags(Qt.ItemFlag.NoItemFlags)
@@ -170,29 +179,71 @@ class SearchView(QWidget):
         item = self.results.currentItem()
         self.open_button.setEnabled(bool(item and item.data(Qt.UserRole)))
 
+    def inspect_current_item(self) -> None:
+        self.update_selection_state()
+        item = self.results.currentItem()
+        row = item.data(Qt.UserRole) if item is not None else None
+        if not row:
+            self.preview.render_empty()
+            return
+        model = self.document_vm.open_document(document_id=row.get("document_id"), path=row.get("path"))
+        self.preview.render_document(model, row=row)
+
     def open_current_item(self) -> None:
         item = self.results.currentItem()
         if item is not None:
-            self.open_item(item)
+            self.open_item_in_reader(item)
 
-    def open_item(self, item: QListWidgetItem) -> None:
+    def open_item_in_reader(self, item: QListWidgetItem) -> None:
         row = item.data(Qt.UserRole) or {}
         if not row:
             return
         model = self.document_vm.open_document(document_id=row.get("document_id"), path=row.get("path"))
-        self.preview.render_document(model)
-        if not self.preview.isVisible():
-            self.toggle_preview()
+        self.reader.render_document(model)
+        self.main_stack.setCurrentWidget(self.reader)
+
+    def show_results(self) -> None:
+        self.main_stack.setCurrentWidget(self.result_page)
 
     def toggle_preview(self) -> None:
         visible = self.preview.isVisible()
         self.preview.setVisible(not visible)
-        self.preview_button.setText("显示预览" if visible else "隐藏预览")
+        self.preview_button.setText("显示详情面板" if visible else "隐藏详情面板")
 
     @staticmethod
     def _row_text(row: Dict[str, Any]) -> str:
         meta = f"{layer_label(row.get('layer'))} | {status_label(row.get('status'))} | 可信度 {confidence_label(row.get('confidence'))} | 来源 {source_type_label(row.get('source_type'))}"
         return f"{row.get('title') or '未命名文档'}\n{row.get('snippet') or '无摘要'}\n{meta}\n{row.get('path') or ''}"
+
+    @staticmethod
+    def _row_widget(row: Dict[str, Any]) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(5)
+        title = QLabel(str(row.get("title") or "未命名文档"))
+        title.setObjectName("cardValue")
+        snippet = QLabel(str(row.get("snippet") or "无摘要"))
+        snippet.setObjectName("mutedText")
+        snippet.setWordWrap(True)
+        chips = QHBoxLayout()
+        chips.setContentsMargins(0, 0, 0, 0)
+        chips.setSpacing(6)
+        for chip in [
+            StatusChip(layer_label(row.get("layer")), "info"),
+            StatusChip(status_label(row.get("status")), tone_for_status(row.get("status"))),
+            StatusChip(f"可信度 {confidence_label(row.get('confidence'))}", "muted"),
+            StatusChip(source_type_label(row.get("source_type")), "muted"),
+        ]:
+            chips.addWidget(chip)
+        chips.addStretch(1)
+        path = QLabel(str(row.get("path") or ""))
+        path.setObjectName("pathLabel")
+        layout.addWidget(title)
+        layout.addWidget(snippet)
+        layout.addLayout(chips)
+        layout.addWidget(path)
+        return widget
 
     @staticmethod
     def _error_text(model: Dict[str, Any]) -> str:

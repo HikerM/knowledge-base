@@ -25,6 +25,7 @@ def main() -> int:
     from gui.main_window import MainWindow
     from gui.styles.theme import apply_light_theme
     from gui.widgets.card import Card
+    from gui.widgets.controls import Button, SearchInput, Select
     from gui.widgets.status_chip import StatusChip
 
     app = QApplication.instance() or QApplication(sys.argv)
@@ -32,6 +33,9 @@ def main() -> int:
     assert "QFrame#topbar" in app.styleSheet()
     chip = StatusChip("索引：就绪", "ready")
     assert chip.text() == "索引：就绪"
+    assert SearchInput("搜索").placeholderText() == "搜索"
+    assert isinstance(Select(), Select)
+    assert Button("按钮", "secondary").property("buttonRole") == "secondary"
     adapter = FakeServiceAdapter()
     window = MainWindow(adapter=adapter)
     window.show()
@@ -41,6 +45,14 @@ def main() -> int:
     assert window.shell.sidebar._buttons["dashboard"].property("navButton") is True
     assert all(isinstance(card, Card) for card in window.shell.dashboard_view.cards.values())
     assert {"workspace", "index", "documents", "backup", "tasks"} <= set(window.shell.dashboard_view.cards)
+    window.shell.search_view.render_results(
+        {
+            "state": "empty",
+            "data": {"query": "none", "results": [], "index_status": "ready", "page": {"limit": 25, "offset": 0, "count": 0, "has_more": False}},
+            "errors": [],
+        }
+    )
+    assert not window.shell.search_view.empty_state.isHidden()
     assert adapter.calls == [("load_workspace_status", {})]
     startup_forbidden = {
         "load_recent_tasks",

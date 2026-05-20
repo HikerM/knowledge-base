@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QLabel
+from PySide6.QtWidgets import QLabel, QSizePolicy
 
 
 def tone_for_status(value: object) -> str:
@@ -22,6 +22,7 @@ class StatusChip(QLabel):
     def __init__(self, text: str = "", tone: str = "muted"):
         super().__init__()
         self.setObjectName("statusChip")
+        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         self.set_chip(text, tone)
 
     def set_chip(self, text: str, tone: str = "muted") -> None:

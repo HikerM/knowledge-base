@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from gui.styles.tokens import BORDERS, COLORS, FONTS, RADIUS, SPACING
+from gui.styles.tokens import BORDERS, COLORS, CONTROLS, FONTS, RADIUS
 
 
 def build_light_qss() -> str:
@@ -99,10 +99,27 @@ QTableWidget {{
 
 QLineEdit {{
     padding: 8px 11px;
+    min-height: {CONTROLS.height}px;
 }}
 
 QComboBox {{
     padding: 7px 10px;
+    min-height: {CONTROLS.height}px;
+}}
+
+QComboBox:hover,
+QLineEdit:hover {{
+    border-color: {COLORS.border_strong};
+}}
+
+QComboBox::drop-down {{
+    width: 28px;
+    border: 0;
+}}
+
+QLineEdit[validationState="error"],
+QComboBox[validationState="error"] {{
+    border: {BORDERS.error};
 }}
 
 QTextEdit {{
@@ -116,6 +133,7 @@ QPushButton {{
     border-radius: {RADIUS.small}px;
     padding: 8px 12px;
     color: {COLORS.text_primary};
+    min-height: {CONTROLS.compact_height}px;
 }}
 
 QPushButton:hover {{
@@ -150,8 +168,38 @@ QPushButton[buttonRole="primary"]:hover {{
     border-color: {COLORS.primary_hover};
 }}
 
+QPushButton[buttonRole="secondary"] {{
+    background: {COLORS.card_bg};
+    border-color: {COLORS.border};
+    color: {COLORS.text_primary};
+}}
+
 QPushButton[buttonRole="ghost"] {{
     background: transparent;
+}}
+
+QPushButton[buttonRole="danger"] {{
+    background: {COLORS.danger_bg};
+    border-color: {COLORS.danger_bg};
+    color: {COLORS.danger};
+    font-weight: 600;
+}}
+
+QPushButton:pressed {{
+    padding-top: 9px;
+    padding-bottom: 7px;
+}}
+
+QToolButton {{
+    background: {COLORS.card_bg};
+    border: {BORDERS.default};
+    border-radius: {RADIUS.small}px;
+    padding: 6px 9px;
+}}
+
+QToolButton:hover {{
+    background: {COLORS.subtle_bg};
+    border-color: {COLORS.border_strong};
 }}
 
 QPushButton[navButton="true"] {{
@@ -183,30 +231,31 @@ QLabel#statusChip {{
     padding: 3px 8px;
     font-size: {FONTS.small}px;
     font-weight: 600;
+    min-height: {CONTROLS.chip_height}px;
 }}
 
 QLabel#statusChip[chipTone="ready"] {{
-    background: {COLORS.success_bg};
+    background: {COLORS.chip_ready_bg};
     color: {COLORS.success};
 }}
 
 QLabel#statusChip[chipTone="warning"] {{
-    background: {COLORS.warning_bg};
+    background: {COLORS.chip_warning_bg};
     color: {COLORS.warning};
 }}
 
 QLabel#statusChip[chipTone="danger"] {{
-    background: {COLORS.danger_bg};
+    background: {COLORS.chip_danger_bg};
     color: {COLORS.danger};
 }}
 
 QLabel#statusChip[chipTone="info"] {{
-    background: {COLORS.info_bg};
+    background: {COLORS.chip_info_bg};
     color: {COLORS.info};
 }}
 
 QLabel#statusChip[chipTone="muted"] {{
-    background: {COLORS.muted_bg};
+    background: {COLORS.chip_muted_bg};
     color: {COLORS.text_secondary};
 }}
 
@@ -235,23 +284,51 @@ QHeaderView::section {{
     font-weight: 600;
 }}
 
+QTableView,
 QTableWidget {{
     gridline-color: {COLORS.border};
     alternate-background-color: {COLORS.subtle_bg};
     outline: 0;
 }}
 
+QTableView::item,
 QTableWidget::item {{
     padding: 8px;
 }}
 
+QTableView::item:selected,
 QTableWidget::item:selected {{
     background: {COLORS.selected};
     color: {COLORS.text_primary};
 }}
 
+QTableCornerButton::section {{
+    background: {COLORS.subtle_bg};
+    border: 0;
+}}
+
 QSplitter::handle {{
     background: {COLORS.border};
+}}
+
+QTabWidget::pane {{
+    border: {BORDERS.default};
+    border-radius: {RADIUS.medium}px;
+    background: {COLORS.card_bg};
+}}
+
+QTabBar::tab {{
+    background: {COLORS.subtle_bg};
+    border: {BORDERS.default};
+    border-bottom: 0;
+    padding: 8px 12px;
+    margin-right: 4px;
+}}
+
+QTabBar::tab:selected {{
+    background: {COLORS.card_bg};
+    color: {COLORS.primary};
+    font-weight: 600;
 }}
 
 QScrollBar:vertical {{
@@ -263,5 +340,16 @@ QScrollBar::handle:vertical {{
     background: {COLORS.border_strong};
     border-radius: 5px;
     min-height: 28px;
+}}
+
+QScrollBar:horizontal {{
+    background: transparent;
+    height: 10px;
+}}
+
+QScrollBar::handle:horizontal {{
+    background: {COLORS.border_strong};
+    border-radius: 5px;
+    min-width: 28px;
 }}
 """.strip()

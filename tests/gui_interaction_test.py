@@ -110,16 +110,26 @@ def main() -> int:
     assert adapter.calls[-1][0] == "search"
     assert window.shell.search_view.results.count() == 2
     item = window.shell.search_view.results.item(0)
-    window.shell.search_view.results.itemActivated.emit(item)
+    window.shell.search_view.results.setCurrentItem(item)
     app.processEvents()
     assert adapter.calls[-1][0] == "open_document"
-    assert "只读预览正文" in window.shell.search_view.preview.body.toPlainText()
+    assert "只读预览正文" not in window.shell.search_view.preview.summary_card.value_label.text()
+    assert "示例正式搜索结果" in window.shell.search_view.preview.summary_card.value_label.text()
     window.shell.search_view.preview_button.click()
     app.processEvents()
     assert not window.shell.search_view.preview.isVisible()
     window.shell.search_view.preview_button.click()
     app.processEvents()
     assert window.shell.search_view.preview.isVisible()
+    window.shell.search_view.open_button.click()
+    app.processEvents()
+    assert adapter.calls[-1][0] == "open_document"
+    assert window.shell.search_view.main_stack.currentWidget() is window.shell.search_view.reader
+    assert "只读预览正文" in window.shell.search_view.reader.body.toPlainText()
+    assert window.shell.search_view.reader.body.isReadOnly()
+    window.shell.search_view.reader.return_button.click()
+    app.processEvents()
+    assert window.shell.search_view.main_stack.currentWidget() is window.shell.search_view.result_page
 
     window.shell.sidebar._buttons["library"].click()
     app.processEvents()
@@ -132,10 +142,14 @@ def main() -> int:
     assert adapter.calls[-1] == ("load_library_summary", {"limit": 25, "offset": 25, "layer": None, "category_id": None})
     window.shell.library_view.table.selectRow(0)
     app.processEvents()
-    assert adapter.calls[-1][0] == "load_library_summary"
+    assert adapter.calls[-1][0] == "open_document"
+    assert "只读预览正文" not in window.shell.library_view.preview.summary_card.value_label.text()
     window.shell.library_view.open_button.click()
     app.processEvents()
     assert adapter.calls[-1][0] == "open_document"
+    assert window.shell.library_view.main_stack.currentWidget() is window.shell.library_view.reader
+    assert "只读预览正文" in window.shell.library_view.reader.body.toPlainText()
+    assert window.shell.library_view.reader.body.isReadOnly()
 
     window.shell.sidebar._buttons["tasks"].click()
     app.processEvents()

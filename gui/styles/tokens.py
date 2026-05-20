@@ -28,6 +28,11 @@ class ColorTokens:
     info: str = "#0284C7"
     info_bg: str = "#E0F2FE"
     muted_bg: str = "#F1F5F9"
+    chip_ready_bg: str = "#DCFCE7"
+    chip_warning_bg: str = "#FEF3C7"
+    chip_danger_bg: str = "#FEE2E2"
+    chip_info_bg: str = "#E0F2FE"
+    chip_muted_bg: str = "#EEF2F7"
 
 
 @dataclass(frozen=True)
@@ -37,6 +42,7 @@ class FontTokens:
     small: int = 12
     title: int = 22
     section: int = 17
+    reader: int = 14
 
 
 @dataclass(frozen=True)
@@ -60,6 +66,17 @@ class RadiusTokens:
 class BorderTokens:
     default: str = "1px solid #E2E8F0"
     focus: str = "1px solid #93C5FD"
+    error: str = "1px solid #DC2626"
+
+
+@dataclass(frozen=True)
+class ControlTokens:
+    height: int = 36
+    compact_height: int = 30
+    large_height: int = 40
+    table_row_height: int = 36
+    table_header_height: int = 38
+    chip_height: int = 22
 
 
 COLORS = ColorTokens()
@@ -67,4 +84,4 @@ FONTS = FontTokens()
 SPACING = SpacingTokens()
 RADIUS = RadiusTokens()
 BORDERS = BorderTokens()
-
+CONTROLS = ControlTokens()
