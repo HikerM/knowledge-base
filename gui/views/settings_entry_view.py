@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from PySide6.QtWidgets import QLabel, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QAbstractItemView, QLabel, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
 from gui.widgets.formatters import bool_label, status_label
 
@@ -18,6 +18,8 @@ class SettingsEntryView(QWidget):
         self.notice = QLabel("第一阶段只读入口：不提供编辑表单、保存、应用或执行操作。")
         self.sections = QTableWidget(0, 5)
         self.sections.setHorizontalHeaderLabels(["区域", "阶段", "只读", "可编辑", "可执行"])
+        self.sections.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.sections.setSelectionBehavior(QAbstractItemView.SelectRows)
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 20, 20, 20)
         root.addWidget(QLabel("设置"))
@@ -28,6 +30,9 @@ class SettingsEntryView(QWidget):
 
     def load_settings(self) -> None:
         self.render_settings(self.settings_vm.load_entry())
+
+    def focus_primary(self) -> None:
+        self.sections.setFocus()
 
     def render_settings(self, model: Dict[str, Any]) -> None:
         data = model.get("data") or {}

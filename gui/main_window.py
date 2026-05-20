@@ -21,4 +21,4 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.shell)
         self.setWindowTitle(f"{APP_NAME} - {PHASE}")
         self.resize(1280, 800)
-        self.setMinimumSize(1100, 720)
+        self.setMinimumSize(920, 640)

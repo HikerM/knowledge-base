@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 
 class ErrorState(QWidget):
-    def __init__(self, title: str = "Service error", message: str = ""):
+    def __init__(self, title: str = "服务错误", message: str = ""):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)

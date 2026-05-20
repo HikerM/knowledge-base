@@ -78,7 +78,7 @@ class FakeServiceAdapter:
 
     def search(self, query: str, limit: int = 25, offset: int = 0, filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         self.calls.append(("search", {"query": query, "limit": limit, "offset": offset, "filters": dict(filters or {})}))
-        rows = [] if not query.strip() else [self._search_row("rules"), self._search_row("checklists")]
+        rows = [] if not query.strip() else [self._search_row("rules"), self._search_row("checklists", 2)]
         return _envelope(
             "search",
             "ready" if rows else "empty",
@@ -97,9 +97,9 @@ class FakeServiceAdapter:
         categories = [
             {
                 "category_id": "frontend",
-                "display_name": "Frontend",
+                "display_name": "前端",
                 "path": "knowledge/01-frontend",
-                "description": "Frontend formal knowledge",
+                "description": "前端正式知识",
                 "document_count": 5,
                 "layer_counts": {"rules": 3, "checklists": 1, "snippets": 1},
                 "status_counts": {"active": 5},
@@ -107,9 +107,11 @@ class FakeServiceAdapter:
                 "edit_available": False,
             }
         ]
-        documents = [self._search_row("rules"), self._search_row("checklists"), self._search_row("snippets")]
+        layers = ["rules", "checklists", "snippets"] * 20
+        documents = [self._search_row(layer_name, index) for index, layer_name in enumerate(layers, start=1)]
         if layer:
             documents = [item for item in documents if item["layer"] == layer]
+        total = len(documents)
         documents = documents[offset : offset + limit]
         return _envelope(
             "library",
@@ -120,7 +122,7 @@ class FakeServiceAdapter:
                 "active_category_id": None,
                 "active_view": layer or "all_formal",
                 "documents": documents,
-                "page": {"limit": limit, "offset": offset, "count": len(documents), "total": 3, "has_more": False},
+                "page": {"limit": limit, "offset": offset, "count": len(documents), "total": total, "has_more": offset + limit < total},
             },
             ["CategoryService"],
         )
@@ -219,12 +221,12 @@ class FakeServiceAdapter:
         }
 
     @staticmethod
-    def _search_row(layer: str) -> Dict[str, Any]:
-        path = f"knowledge/01-frontend/{layer}/fixture-{layer}.md"
+    def _search_row(layer: str, index: int = 1) -> Dict[str, Any]:
+        path = f"knowledge/01-frontend/{layer}/fixture-{layer}-{index}.md"
         return {
             "document_id": path,
             "path": path,
-            "title": f"示例 {layer}",
+            "title": f"示例 {layer} {index}",
             "category_id": "frontend",
             "layer": layer,
             "status": "active",

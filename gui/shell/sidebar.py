@@ -5,6 +5,8 @@ from __future__ import annotations
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QFrame, QPushButton, QVBoxLayout
 
+from gui.shell.navigation import NAVIGATION_ROUTES, NavigationRoute
+
 
 class Sidebar(QFrame):
     route_changed = Signal(str)
@@ -16,23 +18,17 @@ class Sidebar(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
-        for route, label, enabled in [
-            ("dashboard", "首页", True),
-            ("search", "搜索", True),
-            ("library", "知识库", True),
-            ("review", "审核", False),
-            ("tasks", "任务中心", True),
-            ("maintenance", "维护", False),
-            ("settings", "设置", True),
-        ]:
-            button = QPushButton(label)
-            button.setEnabled(enabled)
-            button.setCheckable(enabled)
-            if enabled:
-                button.clicked.connect(lambda checked=False, key=route: self.set_active(key))
+        for item in NAVIGATION_ROUTES:
+            button = QPushButton(item.label)
+            button.setAccessibleName(item.label)
+            button.setEnabled(item.enabled)
+            button.setCheckable(item.enabled)
+            button.setToolTip(self._tooltip(item))
+            if item.enabled:
+                button.clicked.connect(lambda checked=False, key=item.route_id: self.set_active(key))
             else:
-                button.setToolTip("第一阶段只读 MVP 暂不开放")
-            self._buttons[route] = button
+                button.setCheckable(False)
+            self._buttons[item.route_id] = button
             layout.addWidget(button)
         layout.addStretch(1)
         self.setStyleSheet(
@@ -42,9 +38,17 @@ class Sidebar(QFrame):
             "QPushButton:disabled { color: #9CA3AF; }"
         )
 
-    def set_active(self, route: str) -> None:
+    def set_active(self, route: str, *, emit: bool = True) -> bool:
         if route not in self._buttons or not self._buttons[route].isEnabled():
-            return
+            return False
         for key, button in self._buttons.items():
             button.setChecked(key == route)
-        self.route_changed.emit(route)
+        if emit:
+            self.route_changed.emit(route)
+        return True
+
+    @staticmethod
+    def _tooltip(item: NavigationRoute) -> str:
+        if item.enabled:
+            return f"{item.label} {item.shortcut}"
+        return f"{item.label} {item.shortcut} | {item.disabled_reason}"

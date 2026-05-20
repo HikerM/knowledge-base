@@ -17,6 +17,7 @@ class DashboardView(QWidget):
         self.recent_tasks = QListWidget()
         self.actions = QListWidget()
         self.state = QLabel("启动阶段只读取工作区状态；点击刷新后加载首页摘要。")
+        self.state.setWordWrap(True)
         self.refresh_button = QPushButton("刷新首页摘要")
 
         root = QVBoxLayout(self)
@@ -43,7 +44,11 @@ class DashboardView(QWidget):
         self.setStyleSheet("#screenTitle { font-size: 24px; font-weight: 600; color: #1F2937; } QLabel { color: #1F2937; } QListWidget { border: 1px solid #D8DEE8; border-radius: 8px; }")
 
     def load(self) -> None:
+        self.state.setText("正在加载首页摘要...")
         self.render_summary(self.dashboard_vm.load_summary())
+
+    def focus_primary(self) -> None:
+        self.refresh_button.setFocus()
 
     def render_startup_status(self, model: Dict[str, Any]) -> None:
         data = model.get("data") or {}

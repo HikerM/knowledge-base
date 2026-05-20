@@ -28,6 +28,14 @@ STATUS_LABELS = {
     "unavailable": "不可用",
 }
 CONFIDENCE_LABELS = {"high": "高", "medium": "中", "low": "低"}
+SOURCE_TYPE_LABELS = {"official": "官方", "internal_practice": "内部实践", "vendor": "厂商", "blog": "博客", "research": "研究", "unknown": "未知"}
+TASK_TYPE_LABELS = {
+    "index": "索引",
+    "audit": "审核",
+    "backup_create": "备份",
+    "workspace_status": "工作区状态",
+    "noop": "空任务",
+}
 
 
 def layer_label(value: Any) -> str:
@@ -45,6 +53,16 @@ def confidence_label(value: Any) -> str:
     return CONFIDENCE_LABELS.get(value, value or "未知")
 
 
+def source_type_label(value: Any) -> str:
+    value = str(value or "")
+    return SOURCE_TYPE_LABELS.get(value, value or "未知")
+
+
+def task_type_label(value: Any) -> str:
+    value = str(value or "")
+    return TASK_TYPE_LABELS.get(value, value or "未知")
+
+
 def bool_label(value: Any) -> str:
     return "是" if bool(value) else "否"
 
@@ -54,4 +72,4 @@ def elapsed_label(value: Any) -> str:
         ms = int(value or 0)
     except (TypeError, ValueError):
         ms = 0
-    return f"{ms} ms" if ms < 1000 else f"{ms / 1000:.1f} s"
+    return f"{ms} 毫秒" if ms < 1000 else f"{ms / 1000:.1f} 秒"

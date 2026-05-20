@@ -6,33 +6,55 @@ import json
 from typing import Any, Dict
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QAbstractItemView, QLabel, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QAbstractItemView, QHBoxLayout, QHeaderView, QLabel, QPushButton, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget
 
-from gui.widgets.formatters import elapsed_label, status_label
+from gui.widgets.formatters import elapsed_label, status_label, task_type_label
 
 
 class TaskSummaryView(QWidget):
     def __init__(self, task_vm: Any):
         super().__init__()
         self.task_vm = task_vm
-        self.summary = QLabel("正在读取任务摘要。")
+        self.summary = QLabel("进入任务中心后读取最近任务；日志摘要需选择任务后显式查看。")
+        self.summary.setWordWrap(True)
+        self.refresh_button = QPushButton("刷新任务")
+        self.detail_button = QPushButton("查看日志摘要")
+        self.detail_button.setEnabled(False)
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(["任务", "类型", "状态", "进度", "耗时", "错误摘要"])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.setAlternatingRowColors(True)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
         self.detail = QTextEdit()
         self.detail.setReadOnly(True)
+        self.detail.setPlainText("选择一条任务后点击“查看日志摘要”。")
+        controls = QHBoxLayout()
+        controls.addWidget(self.refresh_button)
+        controls.addWidget(self.detail_button)
+        controls.addStretch(1)
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 20, 20, 20)
         root.addWidget(QLabel("任务中心"))
         root.addWidget(self.summary)
+        root.addLayout(controls)
         root.addWidget(self.table, 1)
         root.addWidget(QLabel("只读日志摘要"))
         root.addWidget(self.detail, 1)
-        self.table.itemSelectionChanged.connect(self.open_selected_task)
+        self.refresh_button.clicked.connect(self.load_tasks)
+        self.detail_button.clicked.connect(self.open_selected_task)
+        self.table.itemSelectionChanged.connect(self.update_selection_state)
+        self.table.itemActivated.connect(lambda item: self.open_selected_task())
+        self.setTabOrder(self.refresh_button, self.table)
+        self.setTabOrder(self.table, self.detail_button)
 
     def load_tasks(self) -> None:
         self.render_tasks(self.task_vm.load_recent_tasks(limit=25, offset=0))
+
+    def focus_primary(self) -> None:
+        self.refresh_button.setFocus()
 
     def render_tasks(self, model: Dict[str, Any]) -> None:
         rows = (model.get("data") or {}).get("tasks", [])
@@ -46,7 +68,7 @@ class TaskSummaryView(QWidget):
         for row_index, row in enumerate(rows):
             values = [
                 row.get("title", ""),
-                row.get("task_type", ""),
+                task_type_label(row.get("task_type")),
                 status_label(row.get("status")),
                 f"{row.get('progress_percent', 0)}%",
                 elapsed_label(row.get("elapsed_ms")),
@@ -56,6 +78,10 @@ class TaskSummaryView(QWidget):
                 item = QTableWidgetItem(str(value))
                 item.setData(Qt.UserRole, row)
                 self.table.setItem(row_index, col, item)
+        self.update_selection_state()
+
+    def update_selection_state(self) -> None:
+        self.detail_button.setEnabled(bool(self.table.selectedItems()))
 
     def open_selected_task(self) -> None:
         items = self.table.selectedItems()
@@ -77,6 +103,7 @@ class TaskSummaryView(QWidget):
             f"任务：{task.get('title', '')}",
             f"状态：{status_label(task.get('status'))}，进度：{task.get('progress_percent', 0)}%",
             f"错误：{json.dumps(task.get('error') or {}, ensure_ascii=False)}",
+            f"结果摘要：{json.dumps(task.get('result_summary') or {}, ensure_ascii=False)}",
             "",
             "进度事件：",
         ]

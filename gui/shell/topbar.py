@@ -47,7 +47,7 @@ class TopBar(QFrame):
 
     def update_workspace(self, model: Dict[str, Any]) -> None:
         data = model.get("data") or {}
-        workspace_path = str(data.get("workspace_path") or "No workspace")
+        workspace_path = str(data.get("workspace_path") or "未选择工作区")
         self.workspace_label.setText(Path(workspace_path).name or workspace_path)
         index_status = str(data.get("index_status") or "unknown")
         self.index_badge.set_badge(f"索引：{status_label(index_status)}", tone_for_status(index_status))
