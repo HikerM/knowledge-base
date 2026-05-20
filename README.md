@@ -39,7 +39,9 @@ GUI Design Contract：
 
 - 未来 Windows GUI 的 Product UI Architecture Contract 见 [docs/gui-product-ui-architecture.md](D:/AI/personal-knowledge-base/docs/gui-product-ui-architecture.md)。
 - GUI Phase 1 Read-only MVP Screen Contract 见 [docs/gui-phase-1-read-only-mvp-contract.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-read-only-mvp-contract.md)。
+- GUI Phase 1 Engineering Preparation Contract 见 [docs/gui-phase-1-engineering-prep.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-engineering-prep.md)。
 - 当前文档只是 GUI Phase 0 架构合同，不是 GUI 实现，不包含 EXE 打包，也不做 Tauri / Electron / PySide / WinUI 等实现选型。
+- GUI Phase 1 编码前必须先定义 GUI-to-service adapter、read-only ViewModel contracts、service fixtures、UI test harness 和 startup performance acceptance。
 - GUI 顶部栏不是主导航，只保留 workspace switch、global search / command search、index/task/backup status indicator 和 settings/user entry。
 - GUI 左侧栏是唯一主导航，只保留：首页、搜索、知识库、审核、任务中心、维护、设置。
 - GUI Phase 1 只能做 read-only MVP：工作区入口、首页、搜索、知识库、文档预览、任务中心摘要、设置入口。
@@ -636,7 +638,7 @@ python scripts/kb.py maintenance --vacuum
 
 ## EXE / Desktop app future direction
 
-GUI Product UI Architecture Contract 见 [docs/gui-product-ui-architecture.md](D:/AI/personal-knowledge-base/docs/gui-product-ui-architecture.md)。当前只完成 Phase 0 架构合同；它用于约束未来 GUI 设计和实现边界，不代表已经实现 GUI、打包 EXE 或完成技术选型。该合同把左侧栏定义为唯一主导航，顶部栏仅用于 workspace switch、global search / command search、index/task/backup status 和 settings/user entry。
+GUI Product UI Architecture Contract 见 [docs/gui-product-ui-architecture.md](D:/AI/personal-knowledge-base/docs/gui-product-ui-architecture.md)。GUI Phase 1 Read-only MVP Screen Contract 见 [docs/gui-phase-1-read-only-mvp-contract.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-read-only-mvp-contract.md)。GUI Phase 1 Engineering Preparation Contract 见 [docs/gui-phase-1-engineering-prep.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-engineering-prep.md)。当前只完成 GUI 架构和工程准备合同；它们用于约束未来 GUI 设计和实现边界，不代表已经实现 GUI、打包 EXE 或完成技术选型。该合同把左侧栏定义为唯一主导航，顶部栏仅用于 workspace switch、global search / command search、index/task/backup status 和 settings/user entry。
 
 未来 Windows EXE / GUI 的正确架构是：
 
