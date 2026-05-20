@@ -130,6 +130,7 @@ python scripts/kb.py research --query "react state" --category frontend
 - GUI 开发必须先遵守 `docs/gui-product-ui-architecture.md` 中的 Product UI Architecture Contract。
 - GUI Phase 1 必须遵守 `docs/gui-phase-1-read-only-mvp-contract.md` 中的 Read-only MVP Screen Contract。
 - GUI Phase 1 工程准备必须遵守 `docs/gui-phase-1-engineering-prep.md`；在技术选型和 GUI 编码前，先定义 GUI-to-service adapter、read-only ViewModel contracts、service fixtures、UI test harness 和 startup performance acceptance。
+- GUI 技术选型必须先通过 `docs/gui-technology-selection.md`；当前第一版 Read-only MVP 推荐 PySide6 / Qt for Python，Tauri + React 只作为后续 UI 质量增强路线。
 - GUI 顶部栏不得作为主导航；顶部栏只保留 workspace switch、global search / command search、index status indicator、task status indicator、backup status indicator、settings/user entry。
 - GUI 左侧栏是唯一主导航；只保留：首页、搜索、知识库、审核、任务中心、维护、设置。
 - 归档、整理中心、备份与同步、审计中心 必须归入「维护」；模板管理、来源管理、分类设置 必须归入「设置」。
@@ -143,6 +144,9 @@ python scripts/kb.py research --query "react state" --category frontend
 - GUI 不得直接读写 Markdown 或 SQLite；必须通过 service/core API 访问。
 - GUI 不得通过拼接 CLI 命令字符串作为主要集成方式。
 - GUI-to-service adapter 必须保持 framework-neutral，只把 `knowledge_app.services` 的结构化结果转换为 read-only ViewModel；不得在 adapter 中重写 search/index/audit、解析 Markdown、查询 SQLite 或执行 mutation。
+- GUI 不得绕过 service layer；即使使用 PySide6，View 也不得直接调用 `knowledge_core`，只能通过 ViewModel -> adapter -> `knowledge_app.services`。
+- 如果未来使用 Tauri 或 Electron，Python sidecar/service 必须保持 SQLite-hot / Markdown-source 边界，不得让前端、Rust/Node host、插件或 bridge 直接读写 Markdown 或 SQLite。
+- 不得为了 GUI 开发方便直接读取 `knowledge/**/*.md`、`.kb/index.sqlite`、`.kb/tasks/` 或 backup zip；Document body 只能通过 `DocumentService.open_document`，task/progress/log 只能通过 `TaskQueueService`。
 - CLI 入口也必须复用 service/core API；不得把长期 GUI/EXE 启动逻辑只写在 `scripts/kb.py`。
 - App startup、首页、搜索、知识库、审核、维护中的 metadata 列表默认只读取 SQLite metadata / FTS index，不得读取 Markdown 正文。
 - App startup 不得扫描 `knowledge/`、不得读取所有 Markdown、不得自动触发 index。

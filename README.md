@@ -40,7 +40,9 @@ GUI Design Contract：
 - 未来 Windows GUI 的 Product UI Architecture Contract 见 [docs/gui-product-ui-architecture.md](D:/AI/personal-knowledge-base/docs/gui-product-ui-architecture.md)。
 - GUI Phase 1 Read-only MVP Screen Contract 见 [docs/gui-phase-1-read-only-mvp-contract.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-read-only-mvp-contract.md)。
 - GUI Phase 1 Engineering Preparation Contract 见 [docs/gui-phase-1-engineering-prep.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-engineering-prep.md)。
-- 当前文档只是 GUI Phase 0 架构合同，不是 GUI 实现，不包含 EXE 打包，也不做 Tauri / Electron / PySide / WinUI 等实现选型。
+- GUI Technology Selection 见 [docs/gui-technology-selection.md](D:/AI/personal-knowledge-base/docs/gui-technology-selection.md)。
+- 当前已完成 GUI 技术选型评估，但还没有开始 GUI 实现、创建 GUI 工程或打包 EXE。
+- 当前推荐路线：第一版 Read-only MVP 优先 PySide6 / Qt for Python，因为它可以直接复用 Python service layer，不需要 sidecar / local HTTP service / bridge；Tauri + React 作为后续 UI 质量增强路线。
 - GUI Phase 1 编码前必须先定义 GUI-to-service adapter、read-only ViewModel contracts、service fixtures、UI test harness 和 startup performance acceptance。
 - GUI 顶部栏不是主导航，只保留 workspace switch、global search / command search、index/task/backup status indicator 和 settings/user entry。
 - GUI 左侧栏是唯一主导航，只保留：首页、搜索、知识库、审核、任务中心、维护、设置。
@@ -638,7 +640,7 @@ python scripts/kb.py maintenance --vacuum
 
 ## EXE / Desktop app future direction
 
-GUI Product UI Architecture Contract 见 [docs/gui-product-ui-architecture.md](D:/AI/personal-knowledge-base/docs/gui-product-ui-architecture.md)。GUI Phase 1 Read-only MVP Screen Contract 见 [docs/gui-phase-1-read-only-mvp-contract.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-read-only-mvp-contract.md)。GUI Phase 1 Engineering Preparation Contract 见 [docs/gui-phase-1-engineering-prep.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-engineering-prep.md)。当前只完成 GUI 架构和工程准备合同；它们用于约束未来 GUI 设计和实现边界，不代表已经实现 GUI、打包 EXE 或完成技术选型。该合同把左侧栏定义为唯一主导航，顶部栏仅用于 workspace switch、global search / command search、index/task/backup status 和 settings/user entry。
+GUI Product UI Architecture Contract 见 [docs/gui-product-ui-architecture.md](D:/AI/personal-knowledge-base/docs/gui-product-ui-architecture.md)。GUI Phase 1 Read-only MVP Screen Contract 见 [docs/gui-phase-1-read-only-mvp-contract.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-read-only-mvp-contract.md)。GUI Phase 1 Engineering Preparation Contract 见 [docs/gui-phase-1-engineering-prep.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-engineering-prep.md)。GUI Technology Selection 见 [docs/gui-technology-selection.md](D:/AI/personal-knowledge-base/docs/gui-technology-selection.md)。当前只完成 GUI 架构、工程准备和技术选型合同；它们用于约束未来 GUI 设计和实现边界，不代表已经实现 GUI、创建 GUI 工程或打包 EXE。该合同把左侧栏定义为唯一主导航，顶部栏仅用于 workspace switch、global search / command search、index/task/backup status 和 settings/user entry。
 
 未来 Windows EXE / GUI 的正确架构是：
 
@@ -662,12 +664,16 @@ GUI 不应直接读写 Markdown 或 SQLite，也不应通过拼接 CLI 命令字
 
 v1.7.0 起，后台任务的稳定边界是 `TaskQueueService`。GUI / EXE 应调用 service API 创建、查询、取消和运行任务，UI 主线程不得直接执行 index/audit/backup/restore/archive/template apply。v1.8.x 当前安全执行只接入 `noop`、`workspace_status`、`backup_create`、`audit`、`index` 以及最低风险的 `category_update_display_name_execute`、`category_update_description_execute`；两者都必须先有 plan、snapshot、approval，并且只写 `config/categories.yaml` 的对应展示字段。GUI 可通过 task progress/log API 轮询或订阅任务状态。Task cleanup 必须 plan-first；retry 必须保留 `retry_of` 链路；cancellation 是 cooperative。restore/archive/delete/merge/template apply 等 destructive task 仍是 future work。
 
-当前不做 GUI、不做 EXE 打包、不做 Tauri/Electron/PySide/WinUI 选型。未来路线建议：
+当前不做 GUI、不做 EXE 打包。技术选型评估已经完成，路线如下：
 
-- 界面质量和长期扩展优先：Tauri + React。
-- 开发速度优先：Electron + React。
-- 最大化复用 Python 优先：PySide6。
-- Windows 原生生态优先：WinUI/.NET。
+- 第一版 Read-only MVP 推荐：PySide6 / Qt for Python。
+- 第二选择 / 后续 UI 质量增强路线：Tauri + React + Python sidecar/service。
+- 快速 Web UI 备选：Electron + React + Python sidecar/service，但内存和包体风险更高。
+- 不建议第一版采用：WinUI / .NET + Python bridge，因为 Python service layer 复用成本和 bridge/重写成本过高。
+
+第一版优先复用 Python service layer，是因为当前 `WorkspaceStatusService`、`SearchService`、`CategoryService`、`DocumentService`、`TaskQueueService`、Backup/Snapshot、Plan-only mutation 和 Safe Execute Mutation 都已经在 Python 中稳定存在。PySide6 可以让 GUI-to-service adapter 直接调用这些 service，避免在第一个 Read-only MVP 中同时引入 sidecar、local HTTP service、IPC bridge 和双运行时打包风险。
+
+GUI 仍未开始实现，因为下一阶段必须先基于技术选型文档审计结果创建最小 Implementation Skeleton；该 skeleton 也只能证明 startup/search/library/document/task summary/settings entry 的 read-only service path，不得提前暴露 mutation UI、RSS、vector search 或直接 Markdown/SQLite 访问。
 
 ## Backup / restore principles
 
