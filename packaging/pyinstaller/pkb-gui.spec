@@ -47,6 +47,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    version=str(spec_dir / "version_info.txt"),
 )
 
 coll = COLLECT(

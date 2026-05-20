@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
-from PySide6.QtWidgets import QLabel, QListWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QListWidget, QMessageBox, QVBoxLayout, QWidget
 
 from gui.styles.tokens import SPACING
 from gui.widgets.card import Card
+from gui.widgets.controls import secondary_button
 from gui.widgets.formatters import bool_label, status_label
 from gui.widgets.section_header import SectionHeader
 from gui.widgets.status_chip import StatusChip, tone_for_status
@@ -20,10 +21,16 @@ def _short_path(path: str, max_chars: int = 72) -> str:
 
 
 class SettingsEntryView(QWidget):
-    def __init__(self, settings_vm: Any):
+    def __init__(self, settings_vm: Any, gui_settings_provider: Callable[[], Dict[str, Any]] | None = None, reset_window_layout: Callable[[], None] | None = None):
         super().__init__()
         self.settings_vm = settings_vm
+        self.gui_settings_provider = gui_settings_provider
+        self.reset_window_layout = reset_window_layout
         self.workspace_card = Card("工作区", "未知", "")
+        self.window_card = Card("窗口布局", "未加载", "")
+        self.reset_window_button = secondary_button("重置窗口布局")
+        self.reset_window_button.clicked.connect(self._confirm_reset_window_layout)
+        self.window_card.add_body_widget(self.reset_window_button)
         self.service_card = Card("只读状态", "未加载", "")
         self.service_chip = StatusChip("服务：未知", "muted")
         self.index_chip = StatusChip("索引：未知", "muted")
@@ -31,7 +38,7 @@ class SettingsEntryView(QWidget):
         self.service_card.add_body_widget(self.service_chip)
         self.service_card.add_body_widget(self.index_chip)
         self.service_card.add_body_widget(self.mutation_chip)
-        self.notice = QLabel("当前设置入口仅展示只读信息，不提供编辑、保存、应用或执行操作。")
+        self.notice = QLabel("知识库设置保持只读；窗口布局只保存到当前用户目录，不写入工作区。")
         self.notice.setObjectName("mutedText")
         self.notice.setWordWrap(True)
         self.sections = QListWidget()
@@ -40,6 +47,7 @@ class SettingsEntryView(QWidget):
         root.setSpacing(SPACING.gap)
         root.addWidget(SectionHeader("设置", "查看工作区和只读能力边界。"))
         root.addWidget(self.workspace_card)
+        root.addWidget(self.window_card)
         root.addWidget(self.service_card)
         root.addWidget(self.notice)
         section_title = QLabel("功能区域")
@@ -58,6 +66,7 @@ class SettingsEntryView(QWidget):
         workspace_path = str(data.get("workspace_path") or "")
         self.workspace_card.set_content("工作区", _short_path(workspace_path) or "未知", "完整路径见提示")
         self.workspace_card.setToolTip(workspace_path)
+        self._render_gui_settings()
         service_status = data.get("service_status")
         index_status = data.get("index_status")
         self.service_card.set_content("只读状态", "服务边界正常", f"文档 {data.get('document_count', 0)} / 分块 {data.get('chunk_count', 0)}")
@@ -71,6 +80,23 @@ class SettingsEntryView(QWidget):
             self.sections.addItem(f"{values[0]} · {values[1]} · 只读 {values[2]} · 可编辑 {values[3]} · 可执行 {values[4]}")
         if not rows:
             self.sections.addItem("没有可展示的设置区域。")
+
+    def _render_gui_settings(self) -> None:
+        snapshot = self.gui_settings_provider() if self.gui_settings_provider else {}
+        size_text = f"{snapshot.get('window_width', 0)} x {snapshot.get('window_height', 0)}"
+        if snapshot.get("maximized"):
+            size_text = f"{size_text}（最大化）"
+        path = str(snapshot.get("settings_path") or "")
+        caption = f"保存位置：{_short_path(path, 64)}" if path else "保存位置：当前用户目录"
+        self.window_card.set_content("窗口布局", size_text, caption)
+        self.window_card.setToolTip(path)
+
+    def _confirm_reset_window_layout(self) -> None:
+        if self.reset_window_layout is None:
+            return
+        result = QMessageBox.question(self, "重置窗口布局", "重置后将使用默认窗口大小和居中位置，只影响当前用户的本地界面设置。是否继续？")
+        if result == QMessageBox.StandardButton.Yes:
+            self.reset_window_layout()
 
     @staticmethod
     def _phase_label(value: str) -> str:

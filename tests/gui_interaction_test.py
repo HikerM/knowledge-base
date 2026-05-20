@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -27,10 +28,14 @@ def main() -> int:
     from gui.main_window import MainWindow
 
     app = QApplication.instance() or QApplication(sys.argv)
+    temp_dir = tempfile.TemporaryDirectory(prefix="pkb-gui-interaction-")
+    settings_counter = 0
 
     def build_window() -> tuple[MainWindow, FakeServiceAdapter]:
+        nonlocal settings_counter
+        settings_counter += 1
         adapter = FakeServiceAdapter()
-        window = MainWindow(adapter=adapter)
+        window = MainWindow(adapter=adapter, gui_settings_path=Path(temp_dir.name) / f"gui-settings-{settings_counter}.json")
         window.show()
         app.processEvents()
         assert adapter.calls == [("load_workspace_status", {})]
@@ -171,6 +176,7 @@ def main() -> int:
 
     window.close()
     app.processEvents()
+    temp_dir.cleanup()
     print("gui interaction tests passed")
     return 0
 

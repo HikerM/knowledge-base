@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -36,44 +37,45 @@ def main() -> int:
     assert SearchInput("搜索").placeholderText() == "搜索"
     assert isinstance(Select(), Select)
     assert Button("按钮", "secondary").property("buttonRole") == "secondary"
-    adapter = FakeServiceAdapter()
-    window = MainWindow(adapter=adapter)
-    window.show()
-    app.processEvents()
-    assert window.shell.stack.currentWidget() is window.shell.dashboard_view
-    assert window.shell.sidebar._buttons["dashboard"].isChecked()
-    assert window.shell.sidebar._buttons["dashboard"].property("navButton") is True
-    assert all(isinstance(card, Card) for card in window.shell.dashboard_view.cards.values())
-    assert {"workspace", "index", "documents", "backup", "tasks"} <= set(window.shell.dashboard_view.cards)
-    window.shell.search_view.render_results(
-        {
-            "state": "empty",
-            "data": {"query": "none", "results": [], "index_status": "ready", "page": {"limit": 25, "offset": 0, "count": 0, "has_more": False}},
-            "errors": [],
+    with tempfile.TemporaryDirectory(prefix="pkb-gui-smoke-") as tmp:
+        adapter = FakeServiceAdapter()
+        window = MainWindow(adapter=adapter, gui_settings_path=Path(tmp) / "gui-settings.json")
+        window.show()
+        app.processEvents()
+        assert window.shell.stack.currentWidget() is window.shell.dashboard_view
+        assert window.shell.sidebar._buttons["dashboard"].isChecked()
+        assert window.shell.sidebar._buttons["dashboard"].property("navButton") is True
+        assert all(isinstance(card, Card) for card in window.shell.dashboard_view.cards.values())
+        assert {"workspace", "index", "documents", "backup", "tasks"} <= set(window.shell.dashboard_view.cards)
+        window.shell.search_view.render_results(
+            {
+                "state": "empty",
+                "data": {"query": "none", "results": [], "index_status": "ready", "page": {"limit": 25, "offset": 0, "count": 0, "has_more": False}},
+                "errors": [],
+            }
+        )
+        assert not window.shell.search_view.empty_state.isHidden()
+        assert adapter.calls == [("load_workspace_status", {})]
+        startup_forbidden = {
+            "load_recent_tasks",
+            "load_home_summary",
+            "search",
+            "load_library_summary",
+            "open_document",
+            "load_task_detail",
+            "load_settings_entry",
         }
-    )
-    assert not window.shell.search_view.empty_state.isHidden()
-    assert adapter.calls == [("load_workspace_status", {})]
-    startup_forbidden = {
-        "load_recent_tasks",
-        "load_home_summary",
-        "search",
-        "load_library_summary",
-        "open_document",
-        "load_task_detail",
-        "load_settings_entry",
-    }
-    assert not any(call[0] in startup_forbidden for call in adapter.calls)
-    assert window.minimumWidth() >= 920
-    assert "v2.0.0-alpha.3" in window.windowTitle()
-    nav_labels = [button.text() for button in window.shell.sidebar._buttons.values()]
-    for label in ["首页", "搜索", "知识库", "审核", "任务中心", "维护", "设置"]:
-        assert label in nav_labels
-    all_button_text = " ".join(button.text().lower() for button in window.findChildren(QPushButton))
-    for forbidden in ["cancel", "retry", "cleanup", "archive", "delete", "merge", "restore", "rss", "vector", "ai", "归档", "删除", "合并", "恢复"]:
-        assert forbidden not in all_button_text
-    window.close()
-    app.processEvents()
+        assert not any(call[0] in startup_forbidden for call in adapter.calls)
+        assert window.minimumWidth() >= 920
+        assert "v2.0.0-alpha.3" in window.windowTitle()
+        nav_labels = [button.text() for button in window.shell.sidebar._buttons.values()]
+        for label in ["首页", "搜索", "知识库", "审核", "任务中心", "维护", "设置"]:
+            assert label in nav_labels
+        all_button_text = " ".join(button.text().lower() for button in window.findChildren(QPushButton))
+        for forbidden in ["cancel", "retry", "cleanup", "archive", "delete", "merge", "restore", "rss", "vector", "ai", "归档", "删除", "合并", "恢复"]:
+            assert forbidden not in all_button_text
+        window.close()
+        app.processEvents()
     print("gui smoke tests passed")
     return 0
 

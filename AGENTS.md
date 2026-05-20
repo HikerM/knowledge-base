@@ -181,6 +181,10 @@ python scripts/kb.py research --query "react state" --category frontend
 - UI 主线程不得执行 index、audit、secret-scan、reindex、dedupe、conflicts、benchmark、maintenance、Optional Git Sync 或 backup/export。
 - 不得把 GUI 写成单文件巨型 `App.tsx`、`main.py` 或等价的大型入口文件。
 - EXE 相关开发必须保护 workspace 数据；软件安装目录不存用户知识数据，workspace 中的 Markdown 始终优先保护。
+- PyInstaller 打包默认只允许 one-folder baseline / hardening；one-file、installer、code signing、auto update 是后续独立阶段。
+- GUI 本地窗口设置只能写入 `%LOCALAPPDATA%\PersonalKnowledgeBase\settings\gui-settings.json` 或等价用户目录，不得写入安装目录、workspace、`knowledge/`、`.kb/` 或 `config/`。
+- GUI 日志只能写入 `%LOCALAPPDATA%\PersonalKnowledgeBase\logs\pkb-gui.log` 或等价用户目录，不得写入安装目录或 workspace。
+- GUI 启动可以读取本地 GUI 设置以恢复窗口大小、位置和最大化状态；该读取不得触发 workspace index/search/library/task/document open。
 - SQLite 索引可删除重建；删除 `.kb/index.sqlite` 后，可通过后台 reindex 从 Markdown 重建，不得把 `.kb/index.sqlite` 当作事实来源。
 - 所有维护命令默认不得删除、不得 promote、不得修改 raw/distilled/rules。
 - `vacuum`、`reindex`、cleanup、restore 等操作必须显式触发，并在 GUI 中要求确认。

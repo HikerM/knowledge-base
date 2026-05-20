@@ -29,7 +29,7 @@ from gui.views.task_summary_view import TaskSummaryView
 class AppShell(QWidget):
     """Desktop shell with TopBar, Sidebar, main content, and StatusBar."""
 
-    def __init__(self, adapter: Any):
+    def __init__(self, adapter: Any, gui_settings_provider: Any | None = None, reset_window_layout: Any | None = None):
         super().__init__()
         self.setObjectName("AppShell")
         self.adapter = adapter
@@ -40,6 +40,7 @@ class AppShell(QWidget):
         self.document_vm = DocumentViewModel(adapter)
         self.task_vm = TaskViewModel(adapter)
         self.settings_vm = SettingsViewModel(adapter)
+        self.reset_window_layout = reset_window_layout
         self.loaded_routes: set[str] = set()
         self.current_route: str | None = None
         self.navigation_shortcuts: dict[str, QShortcut] = {}
@@ -54,7 +55,7 @@ class AppShell(QWidget):
         self.search_view = SearchView(self.search_vm, self.document_vm)
         self.library_view = LibraryView(self.library_vm, self.document_vm)
         self.task_view = TaskSummaryView(self.task_vm)
-        self.settings_view = SettingsEntryView(self.settings_vm)
+        self.settings_view = SettingsEntryView(self.settings_vm, gui_settings_provider=gui_settings_provider, reset_window_layout=self._reset_window_layout)
 
         self.routes = {
             "dashboard": self.dashboard_view,
@@ -133,3 +134,12 @@ class AppShell(QWidget):
     def _run_global_search(self, query: str) -> None:
         if self.navigate("search"):
             self.search_view.set_query_and_run(query)
+
+    def _reset_window_layout(self) -> None:
+        if self.reset_window_layout is None:
+            self.statusbar.show_notice("窗口布局重置暂不可用")
+            return
+        ok, message = self.reset_window_layout()
+        self.statusbar.show_notice(message)
+        if ok:
+            self.settings_view.load_settings()

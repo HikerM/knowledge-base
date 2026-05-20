@@ -55,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     app = QApplication(qt_argv)
     apply_light_theme(app)
     window = MainWindow(workspace_path=workspace_path)
+    app.aboutToQuit.connect(window.persist_window_settings)
     window.show()
     auto_close = os.environ.get("PKB_GUI_AUTO_CLOSE_MS")
     if auto_close:
