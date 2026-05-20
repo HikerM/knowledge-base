@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtWidgets import QMainWindow
@@ -14,9 +15,9 @@ from gui.shell.app_shell import AppShell
 class MainWindow(QMainWindow):
     """Top-level window that only mounts the AppShell."""
 
-    def __init__(self, adapter: Any | None = None):
+    def __init__(self, adapter: Any | None = None, workspace_path: Path | str | None = None):
         super().__init__()
-        self.adapter = adapter or ServiceAdapter()
+        self.adapter = adapter or ServiceAdapter(workspace_path=workspace_path)
         self.shell = AppShell(self.adapter)
         self.setCentralWidget(self.shell)
         self.setWindowTitle(f"{APP_NAME} - {PHASE}")

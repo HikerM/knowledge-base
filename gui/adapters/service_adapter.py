@@ -34,7 +34,7 @@ class ServiceAdapter:
     """Thin adapter over read-only service-layer calls used by the GUI."""
 
     def __init__(self, workspace_path: Path | str | None = None):
-        self.workspace_path = Path(workspace_path).resolve() if workspace_path else None
+        self.workspace_path = Path(workspace_path).resolve() if workspace_path else Path.cwd().resolve()
 
     def load_workspace_status(self) -> Dict[str, Any]:
         service = "WorkspaceStatusService"
@@ -103,7 +103,7 @@ class ServiceAdapter:
             warning = ui_warning("WorkspaceStatusService", "索引不可用，搜索结果为空", code="index_unavailable")
             return envelope("search", "empty", empty_search(query, limit, offset, index_status), ["WorkspaceStatusService", "SearchService"], warnings=[warning])
         try:
-            result = SearchService().search(query, filters=formal_filters(filters), top_k=min(limit + offset, 50))
+            result = SearchService(self.workspace_path).search(query, filters=formal_filters(filters), top_k=min(limit + offset, 50))
         except Exception as exc:  # noqa: BLE001
             return envelope("search", "error", empty_search(query, limit, offset, index_status), ["SearchService"], errors=[ui_error("SearchService", str(exc))])
         if not result.success or result.data is None:

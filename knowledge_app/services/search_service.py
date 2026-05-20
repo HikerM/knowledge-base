@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Dict, Optional
 
+from knowledge_core import paths as core_paths
 from knowledge_core.search import DEFAULT_TOP_K, SearchError, run_search
 
 from knowledge_app.models.operation_result import OperationResult
@@ -13,6 +16,9 @@ from knowledge_app.models.search_result import SearchResult
 
 class SearchService:
     """Thin service wrapper around the existing SQLite FTS search behavior."""
+
+    def __init__(self, workspace_path: Path | str | None = None):
+        self.workspace_path = Path(workspace_path).resolve() if workspace_path else None
 
     def search(
         self,
@@ -42,10 +48,23 @@ class SearchService:
             research=bool(include_options.get("research", False)),
         )
         try:
-            payload = run_search(args, read_only=True)
+            with self._workspace_root():
+                payload = run_search(args, read_only=True)
             result = SearchResult.from_payload(payload)
             return OperationResult(success=True, data=result, elapsed_ms=result.elapsed_ms)
         except SearchError as exc:
             return OperationResult(success=False, errors=[str(exc)])
         except Exception as exc:
             return OperationResult(success=False, errors=[f"search service failed: {exc}"])
+
+    @contextmanager
+    def _workspace_root(self):
+        if self.workspace_path is None:
+            yield
+            return
+        original_root = core_paths.ROOT
+        try:
+            core_paths.configure_root(self.workspace_path)
+            yield
+        finally:
+            core_paths.configure_root(original_root)
