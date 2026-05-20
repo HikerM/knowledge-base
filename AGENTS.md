@@ -145,6 +145,14 @@ python scripts/kb.py research --query "react state" --category frontend
 - GUI 不得通过拼接 CLI 命令字符串作为主要集成方式。
 - GUI-to-service adapter 必须保持 framework-neutral，只把 `knowledge_app.services` 的结构化结果转换为 read-only ViewModel；不得在 adapter 中重写 search/index/audit、解析 Markdown、查询 SQLite 或执行 mutation。
 - GUI 不得绕过 service layer；即使使用 PySide6，View 也不得直接调用 `knowledge_core`，只能通过 ViewModel -> adapter -> `knowledge_app.services`。
+- GUI 代码必须按职责拆分在 `gui/app.py`、`gui/main_window.py`、`gui/shell/`、`gui/views/`、`gui/viewmodels/`、`gui/adapters/`、`gui/widgets/`、`gui/fixtures/`；不得把页面、ViewModel、Adapter、Service 混在单个大文件。
+- `gui/app.py` 只负责 QApplication 和 MainWindow 启动；`gui/main_window.py` 只负责挂载 AppShell。
+- `gui/views/` 只能放页面 UI，不得直接 import `knowledge_app.services`、`knowledge_core`、`sqlite3`，不得直接读取 Markdown、SQLite、`.kb/tasks/` 或 backup zip。
+- `gui/viewmodels/` 只能调用 adapter，不得直接读写文件系统，不得直接调用 service/core。
+- `gui/adapters/service_adapter.py` 是 GUI 到 service layer 的唯一入口；adapter 不得拼接 CLI 命令字符串，不得重写 search/index/audit/category/document/task 逻辑，不得暴露 Phase 1 mutation execute 能力。
+- GUI Phase 1 startup 只能调用 adapter 的 workspace status 路径；不得在启动时触发 search、library load、task list、index、audit、backup 或 Markdown open。
+- `gui/fixtures/` 只能放测试/开发 fake adapter 和 fixture 数据；真实 View/ViewModel 不得内嵌 fake 数据。
+- GUI Phase 1 不得暴露 mutation execute：不得显示 category display_name / description execute，不得显示 archive/delete/merge/template apply/restore execute，不得显示 cleanup/retry/cancel 的可用按钮。
 - 如果未来使用 Tauri 或 Electron，Python sidecar/service 必须保持 SQLite-hot / Markdown-source 边界，不得让前端、Rust/Node host、插件或 bridge 直接读写 Markdown 或 SQLite。
 - 不得为了 GUI 开发方便直接读取 `knowledge/**/*.md`、`.kb/index.sqlite`、`.kb/tasks/` 或 backup zip；Document body 只能通过 `DocumentService.open_document`，task/progress/log 只能通过 `TaskQueueService`。
 - CLI 入口也必须复用 service/core API；不得把长期 GUI/EXE 启动逻辑只写在 `scripts/kb.py`。
