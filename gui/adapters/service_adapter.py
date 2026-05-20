@@ -1,4 +1,4 @@
-"""Read-only GUI-to-service adapter for Phase 1 PySide6 screens."""
+"""Read-only GUI-to-service adapter for first-stage PySide6 screens."""
 
 from __future__ import annotations
 
@@ -259,7 +259,7 @@ class ServiceAdapter:
     def _recommended_actions(index_status: str) -> list[Dict[str, Any]]:
         if index_status == "missing":
             return [
-                route_action("index_missing", "索引缺失，等待后续维护入口重建", "disabled_future", "index", False, "Phase 1 不自动触发索引"),
+                route_action("index_missing", "索引缺失，等待后续维护入口重建", "disabled_future", "index", False, "第一阶段不自动触发索引"),
                 route_action("open_tasks", "查看任务中心", "route", "tasks", True),
                 route_action("open_settings", "查看只读设置", "route", "settings", True),
             ]

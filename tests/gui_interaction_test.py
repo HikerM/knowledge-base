@@ -29,6 +29,11 @@ def main() -> int:
     window = MainWindow(adapter=adapter)
     window.show()
     app.processEvents()
+    assert adapter.calls == [("load_workspace_status", {})]
+
+    window.shell.dashboard_view.refresh_button.click()
+    app.processEvents()
+    assert adapter.calls[-1][0] == "load_home_summary"
 
     window.shell.sidebar.set_active("search")
     window.shell.search_view.query.setText("fixture")
@@ -40,7 +45,7 @@ def main() -> int:
     window.shell.search_view.results.itemActivated.emit(item)
     app.processEvents()
     assert adapter.calls[-1][0] == "open_document"
-    assert "Read-only preview body" in window.shell.search_view.preview.body.toPlainText()
+    assert "只读预览正文" in window.shell.search_view.preview.body.toPlainText()
 
     window.shell.sidebar.set_active("library")
     app.processEvents()
@@ -55,7 +60,7 @@ def main() -> int:
     window.shell.task_view.table.selectRow(0)
     app.processEvents()
     assert adapter.calls[-1][0] == "load_task_detail"
-    assert "fixture log" in window.shell.task_view.detail.toPlainText()
+    assert "示例日志" in window.shell.task_view.detail.toPlainText()
 
     window.shell.sidebar.set_active("settings")
     app.processEvents()

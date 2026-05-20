@@ -25,7 +25,7 @@ def _envelope(view_id: str, state: str, data: Dict[str, Any] | None, services: l
 
 
 class FakeServiceAdapter:
-    """Fixture adapter that exposes only Phase 1 read-only capabilities."""
+    """Fixture adapter that exposes only first-stage read-only capabilities."""
 
     def __init__(self):
         self.calls: list[tuple[str, Dict[str, Any]]] = []
@@ -134,7 +134,7 @@ class FakeServiceAdapter:
             {
                 "document_id": str(document_id or target),
                 "path": target,
-                "title": "Fixture Formal Rule",
+                "title": "示例正式规则",
                 "category_id": "frontend",
                 "layer": "rules",
                 "status": "active",
@@ -143,8 +143,8 @@ class FakeServiceAdapter:
                 "source_url": "https://example.com/gui-fixture",
                 "review_required": False,
                 "last_reviewed": "2026-05-20",
-                "frontmatter": {"title": "Fixture Formal Rule"},
-                "body": "# Fixture Formal Rule\n\nRead-only preview body.",
+                "frontmatter": {"title": "示例正式规则"},
+                "body": "# 示例正式规则\n\n只读预览正文。",
                 "open_mode": "read_only",
                 "trust_warning": None,
                 "mutation_actions_available": False,
@@ -181,8 +181,8 @@ class FakeServiceAdapter:
             "ready",
             {
                 "task": task,
-                "progress_events": [{"schema_version": 1, "sequence": 1, "timestamp": "2026-05-20T00:00:00Z", "progress_percent": 40, "message": "running", "current_step": "fixture", "detail": {}}],
-                "log_entries": [{"timestamp": "2026-05-20T00:00:00Z", "message": "fixture log", "detail": {}}],
+                "progress_events": [{"schema_version": 1, "sequence": 1, "timestamp": "2026-05-20T00:00:00Z", "progress_percent": 40, "message": "运行中", "current_step": "示例", "detail": {}}],
+                "log_entries": [{"timestamp": "2026-05-20T00:00:00Z", "message": "示例日志", "detail": {}}],
             },
             ["TaskQueueService"],
         )
@@ -224,16 +224,16 @@ class FakeServiceAdapter:
         return {
             "document_id": path,
             "path": path,
-            "title": f"Fixture {layer.title()}",
+            "title": f"示例 {layer}",
             "category_id": "frontend",
             "layer": layer,
             "status": "active",
             "confidence": "high",
             "source_type": "internal_practice",
             "review_required": False,
-            "snippet": "Fixture formal search result.",
+            "snippet": "示例正式搜索结果。",
             "updated_at": "2026-05-20T00:00:00Z",
-            "open_document_action": {"action_id": "open_document", "label": "Open", "kind": "open_document", "target": path, "execute": False, "enabled": True},
+            "open_document_action": {"action_id": "open_document", "label": "打开文档", "kind": "open_document", "target": path, "execute": False, "enabled": True},
         }
 
     @staticmethod
@@ -243,9 +243,9 @@ class FakeServiceAdapter:
                 "task_id": "fixture-task-running",
                 "task_type": "index",
                 "status": "running",
-                "title": "Fixture index task",
+                "title": "示例索引任务",
                 "progress_percent": 40,
-                "progress_message": "indexing",
+                "progress_message": "正在索引",
                 "cancel_requested": False,
                 "error": {},
                 "log_available": True,

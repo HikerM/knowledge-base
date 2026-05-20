@@ -80,8 +80,7 @@ class AppShell(QWidget):
         model = self.workspace_vm.load_status()
         self.topbar.update_workspace(model)
         self.statusbar.update_workspace(model)
-        self.dashboard_view.load()
-        self.loaded_routes.add("dashboard")
+        self.dashboard_view.render_startup_status(model)
 
     def show_route(self, route: str) -> None:
         widget = self.routes.get(route)

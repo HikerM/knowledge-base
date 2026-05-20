@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from PySide6.QtWidgets import QFrame, QGridLayout, QLabel, QListWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QGridLayout, QLabel, QListWidget, QPushButton, QVBoxLayout, QWidget
 
 from gui.widgets.formatters import status_label
 
@@ -16,7 +16,8 @@ class DashboardView(QWidget):
         self.cards: dict[str, QLabel] = {}
         self.recent_tasks = QListWidget()
         self.actions = QListWidget()
-        self.state = QLabel("正在读取只读首页摘要。")
+        self.state = QLabel("启动阶段只读取工作区状态；点击刷新后加载首页摘要。")
+        self.refresh_button = QPushButton("刷新首页摘要")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 20, 20, 20)
@@ -25,6 +26,7 @@ class DashboardView(QWidget):
         title.setObjectName("screenTitle")
         root.addWidget(title)
         root.addWidget(self.state)
+        root.addWidget(self.refresh_button)
 
         grid = QGridLayout()
         grid.setSpacing(12)
@@ -36,10 +38,29 @@ class DashboardView(QWidget):
         root.addWidget(self.recent_tasks, 1)
         root.addWidget(QLabel("推荐操作"))
         root.addWidget(self.actions)
+        self.refresh_button.clicked.connect(self.load)
+        self._render_initial_placeholders()
         self.setStyleSheet("#screenTitle { font-size: 24px; font-weight: 600; color: #1F2937; } QLabel { color: #1F2937; } QListWidget { border: 1px solid #D8DEE8; border-radius: 8px; }")
 
     def load(self) -> None:
         self.render_summary(self.dashboard_vm.load_summary())
+
+    def render_startup_status(self, model: Dict[str, Any]) -> None:
+        data = model.get("data") or {}
+        if model.get("state") == "error":
+            self.state.setText(self._error_text(model))
+            return
+        self.state.setText("启动状态已加载；首页摘要尚未加载。")
+        self.cards["workspace"].setText(f"工作区路径\n{data.get('workspace_path', '')}")
+        self.cards["index"].setText(f"索引状态\n{status_label(data.get('index_status'))}")
+        self.cards["documents"].setText(f"文档数量\n{data.get('document_count', 0)}")
+        self.cards["chunks"].setText(f"分块数量\n{data.get('chunk_count', 0)}")
+        self.cards["backup"].setText("备份 / 快照\n摘要尚未加载")
+        self.cards["tasks"].setText("任务摘要\n摘要尚未加载")
+        self.recent_tasks.clear()
+        self.recent_tasks.addItem("摘要尚未加载。点击刷新首页摘要后读取最近任务。")
+        self.actions.clear()
+        self.actions.addItem("摘要尚未加载。点击刷新首页摘要后显示推荐操作。")
 
     def render_summary(self, model: Dict[str, Any]) -> None:
         data = model.get("data") or {}
@@ -87,6 +108,12 @@ class DashboardView(QWidget):
         self.cards[key] = label
         card.setStyleSheet("#summaryCard { background: #FFFFFF; border: 1px solid #D8DEE8; border-radius: 8px; padding: 12px; }")
         return card
+
+    def _render_initial_placeholders(self) -> None:
+        for label in self.cards.values():
+            label.setText("摘要尚未加载")
+        self.recent_tasks.addItem("摘要尚未加载。")
+        self.actions.addItem("摘要尚未加载。")
 
     @staticmethod
     def _error_text(model: Dict[str, Any]) -> str:

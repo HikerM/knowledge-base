@@ -30,7 +30,17 @@ def main() -> int:
     window.show()
     app.processEvents()
     assert window.shell.stack.currentWidget() is window.shell.dashboard_view
-    assert adapter.calls[:2] == [("load_workspace_status", {}), ("load_home_summary", {})]
+    assert adapter.calls == [("load_workspace_status", {})]
+    startup_forbidden = {
+        "load_recent_tasks",
+        "load_home_summary",
+        "search",
+        "load_library_summary",
+        "open_document",
+        "load_task_detail",
+        "load_settings_entry",
+    }
+    assert not any(call[0] in startup_forbidden for call in adapter.calls)
     assert window.minimumWidth() >= 1100
     assert "v2.0.0-alpha.2" in window.windowTitle()
     nav_labels = [button.text() for button in window.shell.sidebar._buttons.values()]

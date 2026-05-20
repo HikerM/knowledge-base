@@ -41,7 +41,7 @@ class TaskSummaryView(QWidget):
         elif not rows:
             self.summary.setText("没有任务记录。")
         else:
-            self.summary.setText(f"最近任务 {len(rows)} 条；操作按钮在 Phase 1 隐藏。")
+            self.summary.setText(f"最近任务 {len(rows)} 条；操作按钮在第一阶段隐藏。")
         self.table.setRowCount(len(rows))
         for row_index, row in enumerate(rows):
             values = [

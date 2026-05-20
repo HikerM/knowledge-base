@@ -15,7 +15,7 @@ class SettingsEntryView(QWidget):
         self.settings_vm = settings_vm
         self.workspace = QLabel("工作区：未知")
         self.service = QLabel("服务状态：未知")
-        self.notice = QLabel("Phase 1 只读入口：不提供编辑表单、保存、应用或执行操作。")
+        self.notice = QLabel("第一阶段只读入口：不提供编辑表单、保存、应用或执行操作。")
         self.sections = QTableWidget(0, 5)
         self.sections.setHorizontalHeaderLabels(["区域", "阶段", "只读", "可编辑", "可执行"])
         root = QVBoxLayout(self)
