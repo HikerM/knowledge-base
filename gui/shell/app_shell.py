@@ -8,10 +8,12 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QHBoxLayout, QStackedWidget, QVBoxLayout, QWidget
 
+from gui.assistant.assistant_overlay import AssistantOverlay
 from gui.shell.navigation import NAVIGATION_ROUTE_BY_ID, NAVIGATION_ROUTES
 from gui.shell.sidebar import Sidebar
 from gui.shell.statusbar import StatusBar
 from gui.shell.topbar import TopBar
+from gui.viewmodels.assistant_viewmodel import AssistantViewModel
 from gui.viewmodels.dashboard_viewmodel import DashboardViewModel
 from gui.viewmodels.document_viewmodel import DocumentViewModel
 from gui.viewmodels.library_viewmodel import LibraryViewModel
@@ -53,6 +55,7 @@ class AppShell(QWidget):
         self.document_vm = DocumentViewModel(adapter)
         self.task_vm = TaskViewModel(adapter)
         self.settings_vm = SettingsViewModel(adapter)
+        self.assistant_vm = AssistantViewModel(adapter)
         self.workspace_creation_vm = WorkspaceCreationViewModel(self.creation_adapter)
         self.reset_window_layout = reset_window_layout
         self.loaded_routes: set[str] = set()
@@ -94,6 +97,9 @@ class AppShell(QWidget):
         root.addLayout(main_row, 1)
         root.addWidget(self.statusbar)
 
+        self.assistant_overlay = AssistantOverlay(self.assistant_vm, self)
+        self.assistant_overlay.raise_()
+
         self._register_navigation_shortcuts()
         self.workspace_gate_view.workspace_selected.connect(self._select_workspace)
         self.workspace_gate_view.workspace_created.connect(self._workspace_created)
@@ -110,6 +116,7 @@ class AppShell(QWidget):
             else:
                 self.workspace_gate_view.show_unselected()
             self._show_workspace_gate()
+        self.assistant_overlay.reposition()
 
     def _load_startup_status(self) -> None:
         model = self.workspace_vm.load_status()
@@ -147,6 +154,7 @@ class AppShell(QWidget):
         self.document_vm.adapter = adapter
         self.task_vm.adapter = adapter
         self.settings_vm.adapter = adapter
+        self.assistant_overlay.set_adapter(adapter)
         self.loaded_routes.clear()
         self._load_startup_status()
         self.navigate("dashboard")
@@ -223,3 +231,8 @@ class AppShell(QWidget):
         self.statusbar.show_notice(message)
         if ok:
             self.settings_view.load_settings()
+
+    def resizeEvent(self, event: Any) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if hasattr(self, "assistant_overlay"):
+            self.assistant_overlay.reposition()

@@ -245,6 +245,23 @@ class ServiceAdapter:
         errors = [ui_error(service, item) for item in result.errors]
         return envelope("workspace_creation_execute", state, data, [service], warnings=warnings, errors=errors, elapsed_ms=result.elapsed_ms)
 
+    def send_assistant_message_mock(self, message: str, conversation_id: str = "mock-conversation", context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        services = ["AssistantService", "CapabilityRegistry", "PermissionPolicy", "MockAIProvider"]
+        try:
+            from knowledge_app.ai.assistant_models import AssistantRequest
+            from knowledge_app.ai.assistant_service import AssistantService
+
+            result = AssistantService.from_registry_path().send(
+                AssistantRequest(
+                    message=message,
+                    conversation_id=conversation_id,
+                    context=dict(context or {}),
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            return envelope("assistant_mock", "error", None, services, errors=[ui_error("AssistantService", str(exc))])
+        return envelope("assistant_mock", "ready", result.to_dict(), services)
+
     def capabilities(self) -> Dict[str, bool]:
         names = ["mutation_ui", "category_execute", "archive_execute", "delete_execute", "merge_execute", "template_apply_execute", "restore_execute", "rss", "vector_search"]
         return {name: False for name in names}

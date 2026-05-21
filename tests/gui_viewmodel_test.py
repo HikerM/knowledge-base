@@ -15,6 +15,7 @@ if str(SOURCE_ROOT) not in sys.path:
 
 from gui.adapters.service_adapter import ServiceAdapter
 from gui.fixtures.fake_service_adapter import FakeServiceAdapter
+from gui.viewmodels.assistant_viewmodel import AssistantViewModel
 from gui.viewmodels.dashboard_viewmodel import DashboardViewModel
 from gui.viewmodels.document_viewmodel import DocumentViewModel
 from gui.viewmodels.library_viewmodel import LibraryViewModel
@@ -87,6 +88,14 @@ def assert_fake_viewmodels() -> None:
     assert create_result["data"]["workspace_path"] == "D:/Temp/planned-kb"
     assert adapter.calls[-1][0] == "create_workspace_from_plan"
 
+    assistant = AssistantViewModel(adapter)
+    snapshot = assistant.snapshot()
+    assert snapshot["provider_mode"] == "mock"
+    assert snapshot["mutation_actions_available"] is False
+    assistant_result = assistant.send_message("搜索 GUI")
+    assert assistant_result["messages"][-1]["author"] == "AI 助手"
+    assert adapter.calls[-1][0] == "send_assistant_message_mock"
+
     caps = adapter.capabilities()
     assert all(value is False for value in caps.values())
     assert not hasattr(adapter, "execute_mutation")
@@ -142,7 +151,7 @@ def assert_service_adapter_startup_guards() -> None:
 
 
 def assert_viewmodels_do_not_import_services() -> None:
-    modules = [WorkspaceViewModel, WorkspaceCreationViewModel, DashboardViewModel, SearchViewModel, LibraryViewModel, DocumentViewModel, TaskViewModel, SettingsViewModel]
+    modules = [WorkspaceViewModel, WorkspaceCreationViewModel, DashboardViewModel, SearchViewModel, LibraryViewModel, DocumentViewModel, TaskViewModel, SettingsViewModel, AssistantViewModel]
     for cls in modules:
         source = inspect.getsource(sys.modules[cls.__module__])
         assert "knowledge_app.services" not in source

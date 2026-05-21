@@ -55,10 +55,10 @@ AI Assistant Control Plane：
 - v2.1.0 新增 AI 助手控制平面设计，见 [docs/ai-assistant-control-plane.md](D:/AI/personal-knowledge-base/docs/ai-assistant-control-plane.md)、[docs/ai-intent-taxonomy.md](D:/AI/personal-knowledge-base/docs/ai-intent-taxonomy.md)、[docs/ai-capability-registry.md](D:/AI/personal-knowledge-base/docs/ai-capability-registry.md)、[docs/ai-permission-policy.md](D:/AI/personal-knowledge-base/docs/ai-permission-policy.md)、[docs/ai-memory-design.md](D:/AI/personal-knowledge-base/docs/ai-memory-design.md)、[docs/ai-context-policy.md](D:/AI/personal-knowledge-base/docs/ai-context-policy.md) 和 [docs/ai-floating-assistant-ui-contract.md](D:/AI/personal-knowledge-base/docs/ai-floating-assistant-ui-contract.md)。
 - v2.1.0 只做设计文档、权限边界和能力注册表草案；示例配置见 [config/ai-capabilities.example.yaml](D:/AI/personal-knowledge-base/config/ai-capabilities.example.yaml)。
 - v2.1.1 新增 AI config loader / policy static tests：`knowledge_app/ai` 只负责 capability example loader、schema validation 和 PermissionPolicy 静态判定；测试覆盖 14 个示例 capability、unknown forbidden、L0/L1/L3/L4 决策和 service 字符串禁用 CLI/subprocess/shell。
-- `config/ai-capabilities.example.yaml` 仍是 example contract，不是运行时自动执行入口；loader 只在显式调用时校验该示例配置，不会在 startup 执行 capability。
-- AI 助手不是当前 v2.0.0 Windows installer 基础版的功能；当前 EXE 不包含真实 AI、模型安装、OpenAI/本地模型接入、悬浮聊天 UI、RSS、vector search 或 mutation UI。
-- v2.1.1 仍未实现真实 AI provider、OpenAI、本地大模型、ModelScope、模型下载、AI 聊天 UI、RSS/vector 或 mutation UI。
-- 下一阶段只允许控制平面设计：`用户自然语言 -> IntentRouter -> CapabilityRegistry -> PermissionPolicy -> ContextBuilder -> AIProvider -> Response / Plan -> Confirmation if needed -> Service / TaskQueue`。
+- v2.2.0 新增 MockAIProvider 和右下角悬浮 AI 助手 UI skeleton，用于验证 UI、registry、permission policy 和消息卡片形态；它不是真实 AI。
+- `config/ai-capabilities.example.yaml` 仍是 example contract，不是运行时自动执行入口；v2.2.0 只在用户发送 mock assistant 消息时显式加载它做白名单和 policy 判定，不会执行 capability。
+- v2.2.0 不接 OpenAI、本地模型、ModelScope，不下载模型，不做 RSS/vector，不保存长期记忆，不执行 mutation，不改变 search/index/audit 行为。
+- AI 助手控制平面仍必须遵守：`用户自然语言 -> IntentRouter -> CapabilityRegistry -> PermissionPolicy -> ContextBuilder -> AIProvider -> Response / Plan -> Confirmation if needed -> Service / TaskQueue`。当前实现只到 MockAIProvider response，不进入真实 Service / TaskQueue 执行。
 - AI 助手不得直接读写 Markdown，不得直接读写 SQLite，不得拼接 CLI 命令字符串，只能通过 `knowledge_app.services`。
 - AI 写操作必须遵守 `plan -> snapshot -> approval -> TaskQueue -> execute`；archive、delete、restore、promote、template apply 等破坏性能力当前 forbidden 或 future plan-only。
 - AI 长期记忆必须用户确认后保存；对话记录不等于长期记忆，用户必须能查看、删除和关闭记忆。
@@ -98,7 +98,7 @@ python -m gui.app
 - 软件安装目录不得作为 workspace；创建向导不得默认使用安装目录、当前工作目录或任何未经用户确认的目录。
 - 应用图标资源位于 `assets/app-icon/`；`app-icon.ico` 用于 Windows EXE，`app-icon.png` 用于 GUI 窗口和任务栏运行时图标。
 - 图标必须是真透明背景，不得使用棋盘格背景图伪装透明；可用 `python tests/icon_asset_test.py` 验证 PNG alpha 和 ICO 尺寸。
-- one-file、code signing 和 auto update 仍是后续工作；真实 AI provider、OpenAI/本地模型接入、模型安装、悬浮聊天 UI、RSS、vector search 和 mutation UI 继续后置。v2.1.1 仅新增 AI config loader / policy static tests，不代表 installer 已包含 AI 功能。
+- one-file、code signing 和 auto update 仍是后续工作；真实 AI provider、OpenAI/本地模型接入、模型安装、RSS、vector search 和 mutation UI 继续后置。v2.2.0 仅新增 mock AI assistant UI skeleton，不代表 installer 已包含真实 AI 功能。
 
 Phase 1 GUI skeleton 只读限制：
 
@@ -178,6 +178,13 @@ TaskQueue baseline / enhancement：
 - `knowledge_app/ai/capability_registry.py`: v2.1.1 AI capability example loader 和 schema validation，不执行 capability。
 - `knowledge_app/ai/permission_policy.py`: v2.1.1 PermissionPolicy 静态 evaluator，只返回 allow / confirm / deny 决策。
 - `knowledge_app/ai/models.py`: v2.1.1 `Capability`、`CapabilityAuditSpec`、`CapabilityLevel` 和 `PermissionDecision` 稳定模型。
+- `knowledge_app/ai/assistant_models.py`: v2.2.0 mock assistant request / response / citation / card 模型。
+- `knowledge_app/ai/provider.py`: AIProvider interface；当前只有 mock provider 实现。
+- `knowledge_app/ai/mock_provider.py`: deterministic offline MockAIProvider，不访问网络、不读文件、不读 SQLite、不执行 service。
+- `knowledge_app/ai/assistant_service.py`: AssistantService skeleton，负责 registry / policy / mock provider 串联，不执行 mutation。
+- `gui/assistant/`: v2.2.0 右下角悬浮 AI 助手 UI skeleton。
+- `gui/viewmodels/assistant_viewmodel.py`: assistant ViewModel，只调用 adapter，不直接调用 provider/service/core。
+- `gui/adapters/service_adapter.py`: `send_assistant_message_mock` 是 GUI 到 AssistantService skeleton 的唯一入口。
 - `knowledge_app/models/workspace_status.py`: `workspace-status` 稳定输出模型。
 - `knowledge_app/models/search_result.py`: service-layer search 输出模型。
 - `knowledge_app/models/operation_result.py`: service 层结构化结果模型。
@@ -881,7 +888,7 @@ knowledge/09-ai-agent/snippets/codex/agent-task-template.md
 
 ## 后续扩展方向
 
-- v2.1.1 AI Assistant Control Plane：在 v2.1.0 设计基础上增加 capability example loader、schema validation 和 PermissionPolicy 静态测试；不接真实 AI，不做 AI 聊天 UI，不做模型下载。
+- v2.2.0 AI Assistant Mock Skeleton：在 v2.1.x 控制平面基础上增加 MockAIProvider 和右下角悬浮 AI 助手 UI skeleton；不接真实 AI，不接 OpenAI/本地模型/ModelScope，不保存长期记忆，不执行 mutation。
 - RSS 和 GitHub Releases 受控采集，结果先进入 raw。
 - 自动摘要和人工审核队列。
 - 向量检索作为 FTS5 补充召回或 rerank。

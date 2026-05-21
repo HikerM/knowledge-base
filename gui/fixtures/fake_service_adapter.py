@@ -284,6 +284,25 @@ class FakeServiceAdapter:
         }
         return _envelope("workspace_creation_execute", "ready" if success else "error", result, ["WorkspaceCreationService"])
 
+    def send_assistant_message_mock(self, message: str, conversation_id: str = "mock-conversation", context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        self.calls.append(("send_assistant_message_mock", {"message": message, "conversation_id": conversation_id, "context": dict(context or {})}))
+        from knowledge_app.ai.assistant_models import AssistantRequest
+        from knowledge_app.ai.assistant_service import AssistantService
+
+        result = AssistantService.from_registry_path().send(
+            AssistantRequest(
+                message=message,
+                conversation_id=conversation_id,
+                context=dict(context or {}),
+            )
+        )
+        return _envelope(
+            "assistant_mock",
+            "ready",
+            result.to_dict(),
+            ["AssistantService", "CapabilityRegistry", "PermissionPolicy", "MockAIProvider"],
+        )
+
     def capabilities(self) -> Dict[str, bool]:
         self.calls.append(("capabilities", {}))
         return {

@@ -87,6 +87,104 @@ QFrame#softPanel {{
     border-radius: {RADIUS.medium}px;
 }}
 
+QWidget#assistantOverlay {{
+    background: transparent;
+}}
+
+QFrame#assistantPanel {{
+    background: {COLORS.card_bg};
+    border: 1px solid {COLORS.border_strong};
+    border-radius: {RADIUS.large}px;
+}}
+
+QLabel#assistantPanelTitle {{
+    font-size: {FONTS.section}px;
+    font-weight: 700;
+    color: {COLORS.text_primary};
+}}
+
+QPushButton#assistantLauncher {{
+    background: {COLORS.primary};
+    border: 1px solid {COLORS.primary};
+    border-radius: 28px;
+    color: white;
+    font-weight: 700;
+    min-height: 56px;
+    min-width: 56px;
+    padding: 0;
+}}
+
+QPushButton#assistantLauncher:hover {{
+    background: {COLORS.primary_hover};
+    border-color: {COLORS.primary_hover};
+}}
+
+QScrollArea#assistantConversationView,
+QWidget#assistantConversationContainer {{
+    background: {COLORS.card_bg};
+    border: 0;
+}}
+
+QFrame#userMessageBubble {{
+    background: {COLORS.selected};
+    border: 1px solid {COLORS.selected_border};
+    border-radius: {RADIUS.small}px;
+}}
+
+QFrame#assistantMessageBubble {{
+    background: {COLORS.subtle_bg};
+    border: {BORDERS.default};
+    border-radius: {RADIUS.small}px;
+}}
+
+QFrame#systemMessageBubble {{
+    background: {COLORS.info_bg};
+    border: 1px solid {COLORS.info_bg};
+    border-radius: {RADIUS.small}px;
+}}
+
+QLabel#messageAuthor {{
+    color: {COLORS.text_secondary};
+    font-size: {FONTS.small}px;
+    font-weight: 700;
+}}
+
+QLabel#messageContent {{
+    color: {COLORS.text_primary};
+}}
+
+QFrame#SystemNotice,
+QFrame#CitationCard,
+QFrame#SearchResultCard,
+QFrame#PlanCard,
+QFrame#ConfirmationCard,
+QFrame#TaskProgressCard,
+QFrame#MemoryCandidateCard,
+QFrame#DocumentSummaryCard {{
+    background: {COLORS.card_bg};
+    border: {BORDERS.default};
+    border-radius: {RADIUS.small}px;
+}}
+
+QFrame#RiskNoticeCard {{
+    background: {COLORS.danger_bg};
+    border: 1px solid {COLORS.danger_bg};
+    border-radius: {RADIUS.small}px;
+}}
+
+QLabel#assistantCardTitle {{
+    font-weight: 700;
+    color: {COLORS.text_primary};
+}}
+
+QLabel#assistantCardBody,
+QLabel#assistantCardItem,
+QLabel#assistantCitationMeta,
+QLabel#assistantActionText {{
+    color: {COLORS.text_secondary};
+    font-size: {FONTS.small}px;
+}}
+
 QLineEdit,
 QComboBox,
 QTextEdit,
