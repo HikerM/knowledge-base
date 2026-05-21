@@ -1,0 +1,27 @@
+{
+  "version": "2.0.0",
+  "commit": "04d694dec12f7b3b426443e86afd2203bf2a8b04",
+  "installer_filename": "PersonalKnowledgeBase-Setup-v2.0.0.exe",
+  "installer_size": 165713939,
+  "sha256": "fa0d7dfd18a6e5dbf3cb9ca3a1eb283dabaa6e47b60f12343895e9da44ce1b96",
+  "build_time": "2026-05-21T07:23:37Z",
+  "build_machine_info": {
+    "machine": "USER-20260318EX",
+    "os": "Microsoft Windows NT 10.0.26200.0",
+    "toolchain": {
+      "pyinstaller": "6.20.0",
+      "inno_setup": "6.7.1",
+      "python": "3.10.11"
+    }
+  },
+  "git_tag": "v2.0.0",
+  "known_limitations": [
+    "Installer is unsigned; Windows may show a security warning.",
+    "Package is installed from PyInstaller one-folder output, not one-file.",
+    "Auto update is not included.",
+    "AI assistant is not included.",
+    "RSS and vector search are not included.",
+    "Mutation UI and archive/delete/merge/template apply/restore/promote execute are not included.",
+    "Users still need to select or create a workspace."
+  ]
+}
