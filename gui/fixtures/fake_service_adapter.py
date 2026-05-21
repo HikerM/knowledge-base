@@ -5,6 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+from knowledge_app.models.operation_result import OperationResult
+from knowledge_app.models.search_result import SearchResult
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -284,16 +287,40 @@ class FakeServiceAdapter:
         }
         return _envelope("workspace_creation_execute", "ready" if success else "error", result, ["WorkspaceCreationService"])
 
-    def send_assistant_message_mock(self, message: str, conversation_id: str = "mock-conversation", context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        self.calls.append(("send_assistant_message_mock", {"message": message, "conversation_id": conversation_id, "context": dict(context or {})}))
+    def send_assistant_message_mock(
+        self,
+        message: str,
+        conversation_id: str = "mock-conversation",
+        context: Optional[Dict[str, Any]] = None,
+        ui_context: Optional[Dict[str, Any]] = None,
+        intent: str = "auto",
+    ) -> Dict[str, Any]:
+        self.calls.append(
+            (
+                "send_assistant_message_mock",
+                {"message": message, "conversation_id": conversation_id, "context": dict(context or {}), "ui_context": dict(ui_context or {}), "intent": intent},
+            )
+        )
         from knowledge_app.ai.assistant_models import AssistantRequest
         from knowledge_app.ai.assistant_service import AssistantService
 
-        result = AssistantService.from_registry_path().send(
+        result = AssistantService(
+            registry=AssistantService.from_registry_path().registry,
+            search_service_factory=lambda workspace: _FakeAssistantSearchService(),
+            document_service_factory=lambda workspace: _FakeAssistantDocumentService(),
+        ).send(
             AssistantRequest(
                 message=message,
+                intent=intent,
                 conversation_id=conversation_id,
                 context=dict(context or {}),
+                ui_context={
+                    "current_workspace": "D:/AI/personal-knowledge-base",
+                    "current_screen": "test",
+                    "provider_mode": "mock",
+                    "allowed_scope": "formal_only",
+                    **dict(ui_context or {}),
+                },
             )
         )
         return _envelope(
@@ -357,3 +384,56 @@ class FakeServiceAdapter:
                 "retry_root": None,
             }
         ]
+
+
+class _FakeAssistantSearchService:
+    def search(self, query: str, filters: Optional[Dict[str, Any]] = None, top_k: int = 5, include_options: Optional[Dict[str, Any]] = None, explain_score: bool = False) -> OperationResult:
+        if "index-missing" in query:
+            return OperationResult(success=False, errors=["index.sqlite missing; cannot search"])
+        rows = [] if "no-results" in query else [
+            {
+                "id": 101,
+                "path": "knowledge/09-ai-agent/rules/agentsmd-project-guidance-rule.md",
+                "title": "AGENTS.md Project Guidance Rule",
+                "category": "ai_agent",
+                "layer": "rules",
+                "status": "active",
+                "confidence": "medium",
+                "source_type": "official",
+                "review_required": False,
+                "snippet": "启动时不得自动 index；AI 和 GUI 必须遵守 service boundary。",
+            }
+        ]
+        return OperationResult(
+            success=True,
+            data=SearchResult(query=query, top_k=top_k, allowed_layers=["rules", "checklists", "snippets"], elapsed_ms=0, results=rows),
+        )
+
+
+class _FakeAssistantDocumentService:
+    def open_document(self, document_id: Optional[int] = None, path: Optional[str] = None) -> OperationResult:
+        return OperationResult(
+            success=True,
+            data={
+                "path": path or "knowledge/09-ai-agent/rules/agentsmd-project-guidance-rule.md",
+                "metadata": {
+                    "id": document_id or 101,
+                    "title": "AGENTS.md Project Guidance Rule",
+                    "category": "ai_agent",
+                    "layer": "rules",
+                    "status": "active",
+                    "confidence": "medium",
+                    "source_type": "official",
+                },
+                "frontmatter": {
+                    "title": "AGENTS.md Project Guidance Rule",
+                    "category": "ai_agent",
+                    "layer": "rules",
+                    "status": "active",
+                    "confidence": "medium",
+                    "source_type": "official",
+                    "review_required": False,
+                },
+                "body": "GUI 和 AI 助手必须通过 ViewModel、Adapter 和 service layer 工作。启动时不得自动 index。",
+            },
+        )

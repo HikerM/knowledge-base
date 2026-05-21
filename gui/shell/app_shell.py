@@ -55,7 +55,7 @@ class AppShell(QWidget):
         self.document_vm = DocumentViewModel(adapter)
         self.task_vm = TaskViewModel(adapter)
         self.settings_vm = SettingsViewModel(adapter)
-        self.assistant_vm = AssistantViewModel(adapter)
+        self.assistant_vm = AssistantViewModel(adapter, ui_context_provider=self._assistant_ui_context)
         self.workspace_creation_vm = WorkspaceCreationViewModel(self.creation_adapter)
         self.reset_window_layout = reset_window_layout
         self.loaded_routes: set[str] = set()
@@ -231,6 +231,37 @@ class AppShell(QWidget):
         self.statusbar.show_notice(message)
         if ok:
             self.settings_view.load_settings()
+
+    def _assistant_ui_context(self) -> dict[str, Any]:
+        context: dict[str, Any] = {
+            "current_workspace": str(getattr(self.adapter, "workspace_path", "") or ""),
+            "current_screen": self.current_route or "",
+            "provider_mode": "mock",
+            "allowed_scope": "formal_only",
+        }
+        if self.current_route == "search":
+            self._merge_reader_context(context, self.search_view.reader, self.search_view.main_stack.currentWidget() is self.search_view.reader)
+            item = self.search_view.results.currentItem()
+            row = item.data(Qt.UserRole) if item is not None else None
+            if row:
+                context["selected_search_result_id"] = str(row.get("document_id") or "")
+        elif self.current_route == "library":
+            self._merge_reader_context(context, self.library_view.reader, self.library_view.main_stack.currentWidget() is self.library_view.reader)
+            row = self.library_view._selected_row()
+            if row:
+                context["selected_library_item_id"] = str(row.get("document_id") or "")
+        return context
+
+    @staticmethod
+    def _merge_reader_context(context: dict[str, Any], reader: Any, is_open: bool) -> None:
+        if not is_open:
+            return
+        document_id = str(getattr(reader, "current_document_id", "") or "")
+        document_path = str(getattr(reader, "current_document_path", "") or "")
+        if document_id:
+            context["current_document_id"] = document_id
+        if document_path:
+            context["current_document_path"] = document_path
 
     def resizeEvent(self, event: Any) -> None:  # noqa: N802
         super().resizeEvent(event)

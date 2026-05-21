@@ -32,6 +32,9 @@ class AssistantComposer(QWidget):
     def focus_input(self) -> None:
         self.input.setFocus()
 
+    def current_text(self) -> str:
+        return self.input.text().strip()
+
     def _submit(self) -> None:
         text = self.input.text().strip()
         if not text:

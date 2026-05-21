@@ -245,17 +245,32 @@ class ServiceAdapter:
         errors = [ui_error(service, item) for item in result.errors]
         return envelope("workspace_creation_execute", state, data, [service], warnings=warnings, errors=errors, elapsed_ms=result.elapsed_ms)
 
-    def send_assistant_message_mock(self, message: str, conversation_id: str = "mock-conversation", context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def send_assistant_message_mock(
+        self,
+        message: str,
+        conversation_id: str = "mock-conversation",
+        context: Optional[Dict[str, Any]] = None,
+        ui_context: Optional[Dict[str, Any]] = None,
+        intent: str = "auto",
+    ) -> Dict[str, Any]:
         services = ["AssistantService", "CapabilityRegistry", "PermissionPolicy", "MockAIProvider"]
         try:
             from knowledge_app.ai.assistant_models import AssistantRequest
             from knowledge_app.ai.assistant_service import AssistantService
 
-            result = AssistantService.from_registry_path().send(
+            merged_ui_context = {
+                "current_workspace": str(self.workspace_path),
+                "provider_mode": "mock",
+                "allowed_scope": "formal_only",
+                **dict(ui_context or {}),
+            }
+            result = AssistantService.from_registry_path(workspace_path=self.workspace_path).send(
                 AssistantRequest(
                     message=message,
+                    intent=intent,
                     conversation_id=conversation_id,
                     context=dict(context or {}),
+                    ui_context=merged_ui_context,
                 )
             )
         except Exception as exc:  # noqa: BLE001

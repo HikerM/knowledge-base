@@ -21,14 +21,33 @@ def _notice(decision: str = "allow") -> PolicyNotice:
 
 
 def assert_deterministic_response(provider: MockAIProvider) -> None:
-    request = AssistantRequest(message="搜索 service layer", intent="search_knowledge", capability_id="search_knowledge")
+    request = AssistantRequest(
+        message="搜索 service layer",
+        intent="search_knowledge",
+        capability_id="search_knowledge",
+        context={
+            "search_results": [
+                {
+                    "rank": 1,
+                    "document_id": "fixture-rule",
+                    "path": "knowledge/09-ai-agent/rules/fixture.md",
+                    "title": "Fixture Rule",
+                    "layer": "rules",
+                    "status": "active",
+                    "confidence": "high",
+                    "source_type": "internal_practice",
+                    "snippet": "Fixture snippet.",
+                }
+            ]
+        },
+    )
     first = provider.generate(request, _notice()).to_dict()
     second = provider.generate(request, _notice()).to_dict()
     assert first == second
     assert first["network_accessed"] is False
     assert first["mutation_executed"] is False
     assert first["model_dependency"] == "none"
-    assert [card["card_type"] for card in first["messages"][0]["cards"]] == ["search_result", "search_result"]
+    assert [card["card_type"] for card in first["messages"][0]["cards"]] == ["search_result", "citation"]
 
 
 def assert_forbidden_returns_risk_notice(provider: MockAIProvider) -> None:
@@ -50,6 +69,14 @@ def assert_memory_candidate_not_saved(provider: MockAIProvider) -> None:
     assert response["mutation_executed"] is False
 
 
+def assert_plan_stays_mock(provider: MockAIProvider) -> None:
+    request = AssistantRequest(message="生成清单", intent="create_checklist_draft", capability_id="create_checklist_draft")
+    response = provider.generate(request, _notice()).to_dict()
+    card_types = [card["card_type"] for card in response["messages"][0]["cards"]]
+    assert card_types == ["plan", "task_progress"]
+    assert response["mutation_executed"] is False
+
+
 def assert_no_network_or_model_dependency() -> None:
     source = inspect.getsource(MockAIProvider).lower()
     for token in ["openai", "modelscope", "requests", "urllib", "socket", "sqlite3", "subprocess"]:
@@ -61,6 +88,7 @@ def main() -> int:
     assert_deterministic_response(provider)
     assert_forbidden_returns_risk_notice(provider)
     assert_memory_candidate_not_saved(provider)
+    assert_plan_stays_mock(provider)
     assert_no_network_or_model_dependency()
     print("AI mock provider tests passed")
     return 0

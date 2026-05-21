@@ -31,6 +31,7 @@ class AssistantOverlay(QWidget):
         self.launcher.clicked.connect(self.toggle_panel)
         self.panel.close_requested.connect(self.close_panel)
         self.panel.message_submitted.connect(self.send_message)
+        self.panel.quick_action_requested.connect(self.run_quick_action)
         self._sync_size()
         self.panel.render(self.assistant_vm.snapshot())
 
@@ -58,6 +59,13 @@ class AssistantOverlay(QWidget):
 
     def send_message(self, text: str) -> None:
         model = self.assistant_vm.send_message(text)
+        self.panel.render(model)
+        self._sync_size()
+        self.reposition()
+        self.raise_()
+
+    def run_quick_action(self, action_id: str, composer_text: str) -> None:
+        model = self.assistant_vm.run_quick_action(action_id, composer_text)
         self.panel.render(model)
         self._sync_size()
         self.reposition()

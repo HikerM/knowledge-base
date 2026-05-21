@@ -42,6 +42,8 @@ class DocumentReaderView(QWidget):
         self.body.setLineWrapMode(QTextEdit.WidgetWidth)
         self.body.hide()
         self.meta_card.hide()
+        self.current_document_id = ""
+        self.current_document_path = ""
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -75,6 +77,8 @@ class DocumentReaderView(QWidget):
         self.meta_card.hide()
         self.body.hide()
         self.body.setPlainText("")
+        self.current_document_id = ""
+        self.current_document_path = ""
 
     def render_document(self, model: Dict[str, Any]) -> None:
         if model.get("state") == "error":
@@ -85,6 +89,8 @@ class DocumentReaderView(QWidget):
             self.empty_state.show()
             self.meta_card.hide()
             self.body.hide()
+            self.current_document_id = ""
+            self.current_document_path = ""
             return
         data = model.get("data") or {}
         path = str(data.get("path") or "")
@@ -106,3 +112,5 @@ class DocumentReaderView(QWidget):
         self.body.show()
         self.body.setPlainText(body or "该文档没有内容。")
         self.body.moveCursor(QTextCursor.Start)
+        self.current_document_id = str(data.get("document_id") or path)
+        self.current_document_path = path

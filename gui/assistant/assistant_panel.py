@@ -17,6 +17,7 @@ from gui.widgets.status_chip import StatusChip
 class AssistantPanel(QFrame):
     close_requested = Signal()
     message_submitted = Signal(str)
+    quick_action_requested = Signal(str, str)
 
     def __init__(self):
         super().__init__()
@@ -29,6 +30,14 @@ class AssistantPanel(QFrame):
         self.close_button.setObjectName("assistantCloseButton")
         self.conversation = ConversationView()
         self.composer = AssistantComposer()
+        self.ask_button = ghost_button("问我的资料")
+        self.ask_button.setObjectName("assistantAskButton")
+        self.summary_button = ghost_button("总结当前文档")
+        self.summary_button.setObjectName("assistantSummarizeButton")
+        self.organize_button = ghost_button("整理建议")
+        self.organize_button.setObjectName("assistantOrganizeButton")
+        self.checklist_button = ghost_button("生成清单")
+        self.checklist_button.setObjectName("assistantChecklistButton")
 
         header = QHBoxLayout()
         header.setContentsMargins(12, 12, 12, 8)
@@ -43,13 +52,27 @@ class AssistantPanel(QFrame):
         layout.setSpacing(0)
         layout.addLayout(header)
         layout.addWidget(self.conversation, 1)
+        layout.addLayout(self._quick_action_row())
         layout.addWidget(self.composer)
 
         self.close_button.clicked.connect(self.close_requested.emit)
         self.composer.submitted.connect(self.message_submitted.emit)
+        self.ask_button.clicked.connect(lambda: self.quick_action_requested.emit("ask_my_knowledge", self.composer.current_text()))
+        self.summary_button.clicked.connect(lambda: self.quick_action_requested.emit("summarize_current_document", self.composer.current_text()))
+        self.organize_button.clicked.connect(lambda: self.quick_action_requested.emit("organize_suggestion", self.composer.current_text()))
+        self.checklist_button.clicked.connect(lambda: self.quick_action_requested.emit("generate_checklist", self.composer.current_text()))
 
     def render(self, model: Dict[str, Any]) -> None:
         self.conversation.render(model.get("messages") or [])
 
     def focus_composer(self) -> None:
         self.composer.focus_input()
+
+    def _quick_action_row(self) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(12, 8, 12, 4)
+        row.setSpacing(SPACING.compact)
+        for button in [self.ask_button, self.summary_button, self.organize_button, self.checklist_button]:
+            row.addWidget(button)
+        row.addStretch(1)
+        return row

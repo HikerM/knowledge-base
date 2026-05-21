@@ -10,7 +10,7 @@ from knowledge_app.ai.assistant_models import AssistantRequest, AssistantRespons
 class AIProvider(ABC):
     """Provider interface used by AssistantService.
 
-    v2.2.0 ships only MockAIProvider. Implementations must not be called
+    Current releases ship only MockAIProvider. Implementations must not be called
     directly from GUI views.
     """
 

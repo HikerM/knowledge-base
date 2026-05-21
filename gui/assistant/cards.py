@@ -19,6 +19,7 @@ CARD_OBJECT_NAMES = {
     "risk_notice": "RiskNoticeCard",
     "memory_candidate": "MemoryCandidateCard",
     "document_summary": "DocumentSummaryCard",
+    "error": "ErrorCard",
 }
 
 

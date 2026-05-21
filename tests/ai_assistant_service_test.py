@@ -48,6 +48,14 @@ def assert_memory_candidate_is_not_persisted(service: AssistantService) -> None:
     assert response["mutation_executed"] is False
 
 
+def assert_l3_confirm_not_executed(service: AssistantService) -> None:
+    response = service.send(AssistantRequest(message="更新分类描述", intent="update_category_description")).to_dict()
+    assert response["intent"] == "update_category_description"
+    assert response["policy_notice"]["decision"] == "confirm"
+    assert response["mutation_executed"] is False
+    assert response["memory_saved"] is False
+
+
 def assert_no_markdown_sqlite_or_cli_access() -> None:
     source = inspect.getsource(AssistantService)
     for token in ["sqlite3", "subprocess", "scripts/kb.py", ".rglob(", ".glob(\"*.md", ".read_text("]:
@@ -60,6 +68,7 @@ def main() -> int:
     assert_unknown_capability_denied(service)
     assert_high_risk_request_denied(service)
     assert_memory_candidate_is_not_persisted(service)
+    assert_l3_confirm_not_executed(service)
     assert_no_markdown_sqlite_or_cli_access()
     print("AI assistant service tests passed")
     return 0

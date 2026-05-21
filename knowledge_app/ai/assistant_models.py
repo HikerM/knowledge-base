@@ -145,6 +145,7 @@ class AssistantRequest:
     conversation_id: str = "mock-conversation"
     capability_id: Optional[str] = None
     context: Dict[str, Any] = field(default_factory=dict)
+    ui_context: Dict[str, Any] = field(default_factory=dict)
     history: List[AssistantMessage] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -154,6 +155,7 @@ class AssistantRequest:
             "conversation_id": self.conversation_id,
             "capability_id": self.capability_id,
             "context": dict(self.context),
+            "ui_context": dict(self.ui_context),
             "history": [message.to_dict() for message in self.history],
         }
 

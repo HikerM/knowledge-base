@@ -47,11 +47,14 @@ def main() -> int:
         assert overlay.panel.isVisible()
         assert overlay.panel.composer.input.placeholderText() == "问我的资料，或输入想整理的内容…"
         assert "你好，我是 AI 助手" in overlay.panel.conversation.findChild(QLabel, "messageContent").text()
+        for button in [overlay.panel.ask_button, overlay.panel.summary_button, overlay.panel.organize_button, overlay.panel.checklist_button]:
+            assert button.isVisible()
 
         overlay.panel.composer.input.setText("搜索 service layer")
-        QTest.mouseClick(overlay.panel.composer.send_button, Qt.MouseButton.LeftButton)
+        QTest.mouseClick(overlay.panel.ask_button, Qt.MouseButton.LeftButton)
         app.processEvents()
         assert adapter.calls[-1][0] == "send_assistant_message_mock"
+        assert adapter.calls[-1][1]["intent"] == "search_knowledge"
         user_bubbles = overlay.panel.conversation.findChildren(QFrame, "userMessageBubble")
         assistant_bubbles = overlay.panel.conversation.findChildren(QFrame, "assistantMessageBubble")
         assert user_bubbles
@@ -62,11 +65,42 @@ def main() -> int:
         assert "我" in authors
         assert "AI 助手" in authors
         assert overlay.panel.conversation.findChildren(QFrame, "SearchResultCard")
+        assert overlay.panel.conversation.findChildren(QFrame, "CitationCard")
 
-        for text in ["总结当前文档", "记住我只使用正式层", "给我一个整理计划", "删除这些资料"]:
+        QTest.mouseClick(overlay.panel.summary_button, Qt.MouseButton.LeftButton)
+        app.processEvents()
+        assert adapter.calls[-1][1]["intent"] == "summarize_document"
+        assert "请先打开一篇文档" in " ".join(label.text() for label in overlay.panel.conversation.findChildren(QLabel))
+
+        window.shell.current_route = "search"
+        window.shell.search_view.reader.render_document(
+            {
+                "state": "ready",
+                "data": {
+                    "document_id": "101",
+                    "path": "knowledge/09-ai-agent/rules/agentsmd-project-guidance-rule.md",
+                    "title": "AGENTS.md Project Guidance Rule",
+                    "layer": "rules",
+                    "status": "active",
+                    "confidence": "medium",
+                    "source_type": "official",
+                    "review_required": False,
+                    "body": "GUI 和 AI 助手必须通过 service layer 工作。",
+                },
+                "errors": [],
+            }
+        )
+        window.shell.search_view.main_stack.setCurrentWidget(window.shell.search_view.reader)
+        QTest.mouseClick(overlay.panel.summary_button, Qt.MouseButton.LeftButton)
+        app.processEvents()
+        assert overlay.panel.conversation.findChildren(QFrame, "DocumentSummaryCard")
+
+        for text in ["记住我只使用正式层", "给我一个整理计划", "删除这些资料"]:
             overlay.panel.composer.input.setText(text)
             QTest.mouseClick(overlay.panel.composer.send_button, Qt.MouseButton.LeftButton)
             app.processEvents()
+        QTest.mouseClick(overlay.panel.checklist_button, Qt.MouseButton.LeftButton)
+        app.processEvents()
 
         expected_cards = [
             "SystemNotice",

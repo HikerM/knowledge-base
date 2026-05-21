@@ -81,7 +81,7 @@ class MockAIProvider(AIProvider):
             card_type="risk_notice",
             title="当前请求不能执行",
             body=(
-                "v2.2.0 只提供模拟 AI 助手 UI skeleton。删除、归档、恢复、promote "
+                "当前版本只提供模拟 AI 助手 flow。删除、归档、恢复、promote "
                 "或任何 mutation 都不会执行。"
             ),
             items=[
@@ -99,79 +99,93 @@ class MockAIProvider(AIProvider):
         )
 
     def _search_response(self, request: AssistantRequest, policy_notice: PolicyNotice) -> AssistantResponse:
-        citations = [
-            Citation(
-                citation_id="mock-search-1",
-                title="正式规则：GUI 不得绕过 service layer",
-                document_id="mock-rule-service-boundary",
-                path="knowledge/09-ai-agent/rules/mock-service-boundary.md",
-                layer="rules",
-                status="active",
-                source_type="internal_practice",
-                confidence="high",
-                review_required=False,
-            ),
-            Citation(
-                citation_id="mock-search-2",
-                title="正式清单：AI capability 必须先过 policy",
-                document_id="mock-checklist-policy",
-                path="knowledge/09-ai-agent/checklists/mock-policy-checklist.md",
-                layer="checklists",
-                status="active",
-                source_type="internal_practice",
-                confidence="medium",
-                review_required=False,
-            ),
-        ]
+        service_error = request.context.get("service_error")
+        if service_error:
+            return self._error_response(request, policy_notice, service_error)
+        if request.context.get("empty_query"):
+            card = AssistantCard(
+                card_type="system_notice",
+                title="请输入问题",
+                body="问我的资料需要一个查询词；空输入不会访问搜索服务。",
+                metadata={"empty_query": True},
+            )
+            return self._response(request, policy_notice, "请输入要搜索的问题。", cards=[card])
+
+        rows = list(request.context.get("search_results") or [])
+        if not rows:
+            card = AssistantCard(
+                card_type="system_notice",
+                title="没有匹配的正式知识",
+                body="我没有在 rules / checklists / snippets 的正式索引中找到匹配结果。不会自动 index，也不会读取 Markdown 正文。",
+                items=[f"查询：{request.context.get('search_query') or request.message}"],
+                metadata={"empty_results": True},
+            )
+            return self._response(request, policy_notice, "没有找到匹配的正式知识。", cards=[card])
+
+        citations = [_citation_from_search(row) for row in rows]
         cards = [
             AssistantCard(
                 card_type="search_result",
                 title=citation.title,
-                body="模拟搜索结果卡片。真实搜索仍必须通过 SearchService，当前 provider 不读取索引。",
+                body=rows[index - 1].get("snippet") or "该结果没有摘要。",
                 citations=[citation],
-                metadata={"rank": index, "query": request.message},
+                metadata={"rank": index, "query": request.context.get("search_query") or request.message},
             )
             for index, citation in enumerate(citations, start=1)
         ]
+        cards.append(
+            AssistantCard(
+                card_type="citation",
+                title="引用来源",
+                body="以下引用来自 SearchService 返回的正式层 metadata；MockAIProvider 没有读取索引或正文。",
+                citations=citations,
+                metadata={"citation_count": len(citations)},
+            )
+        )
         return self._response(
             request,
             policy_notice,
-            "这是模拟搜索结果，用于验证消息卡片形态。",
+            "根据正式知识搜索结果，我生成了这条模拟回答。请以 citation cards 为准。",
             cards=cards,
             citations=citations,
         )
 
     def _summary_response(self, request: AssistantRequest, policy_notice: PolicyNotice) -> AssistantResponse:
-        citation = Citation(
-            citation_id="mock-summary-1",
-            title="当前文档（模拟）",
-            document_id="mock-current-document",
-            path="current-document://mock",
-            layer="rules",
-            status="active",
-            source_type="mock_context",
-            confidence="medium",
-            review_required=False,
-        )
+        service_error = request.context.get("service_error")
+        if service_error:
+            return self._error_response(request, policy_notice, service_error)
+        if request.context.get("missing_current_document"):
+            card = AssistantCard(
+                card_type="system_notice",
+                title="请先打开一篇文档",
+                body="总结当前文档需要明确的 current_document_id，AI 助手不会猜测或批量读取 Markdown。",
+                metadata={"missing_current_document": True},
+            )
+            return self._response(request, policy_notice, "请先打开一篇文档。", cards=[card])
+
+        document = dict(request.context.get("document") or {})
+        citation = _citation_from_document(document)
+        body = str(document.get("body") or "")
+        summary = _deterministic_summary(body)
         cards = [
             AssistantCard(
                 card_type="document_summary",
-                title="DocumentSummary mock",
-                body="这是一段固定摘要：当前阶段只验证总结卡片，不读取 Markdown 正文。",
-                items=["边界：不接真实模型", "边界：不发送云端", "边界：不保存结果"],
+                title=f"DocumentSummary mock: {citation.title}",
+                body=summary,
+                items=["通过 DocumentService.open_document 打开单篇文档", "不接真实模型", "不保存总结"],
                 citations=[citation],
             ),
             AssistantCard(
                 card_type="citation",
                 title=citation.title,
-                body="模拟引用元数据；不是从知识库正文读取。",
+                body="引用指向当前明确打开的单篇文档。",
                 citations=[citation],
             ),
         ]
         return self._response(
             request,
             policy_notice,
-            "已生成模拟摘要。",
+            "已生成当前文档的模拟摘要。",
             cards=cards,
             citations=[citation],
         )
@@ -248,3 +262,54 @@ class MockAIProvider(AIProvider):
             "我现在处于模拟模式，可以展示搜索、总结、风险和记忆候选卡片。",
             cards=[card],
         )
+
+    def _error_response(self, request: AssistantRequest, policy_notice: PolicyNotice, service_error: object) -> AssistantResponse:
+        payload = dict(service_error or {}) if isinstance(service_error, dict) else {"errors": [str(service_error)]}
+        service = str(payload.get("service") or "AssistantService")
+        errors = [str(item) for item in payload.get("errors") or ["service unavailable"]]
+        title = "索引不可用" if payload.get("index_missing") else "服务不可用"
+        card = AssistantCard(
+            card_type="error",
+            title=title,
+            body="; ".join(errors),
+            items=[f"service: {service}", "没有自动 index，没有执行 mutation。"],
+            metadata={"service": service, "index_missing": bool(payload.get("index_missing"))},
+        )
+        return self._response(request, policy_notice, "当前无法完成这个 mock flow。", cards=[card])
+
+
+def _citation_from_search(row: dict) -> Citation:
+    return Citation(
+        citation_id=f"search-{row.get('rank') or 0}",
+        title=str(row.get("title") or row.get("path") or "未命名文档"),
+        document_id=str(row.get("document_id") or ""),
+        path=str(row.get("path") or ""),
+        layer=str(row.get("layer") or ""),
+        status=str(row.get("status") or ""),
+        source_type=str(row.get("source_type") or ""),
+        confidence=str(row.get("confidence") or ""),
+        review_required=bool(row.get("review_required", False)),
+        source_url=str(row.get("source_url") or ""),
+    )
+
+
+def _citation_from_document(document: dict) -> Citation:
+    return Citation(
+        citation_id="current-document",
+        title=str(document.get("title") or document.get("path") or "当前文档"),
+        document_id=str(document.get("document_id") or ""),
+        path=str(document.get("path") or ""),
+        layer=str(document.get("layer") or ""),
+        status=str(document.get("status") or ""),
+        source_type=str(document.get("source_type") or ""),
+        confidence=str(document.get("confidence") or ""),
+        review_required=bool(document.get("review_required", False)),
+        source_url=str(document.get("source_url") or ""),
+    )
+
+
+def _deterministic_summary(body: str) -> str:
+    text = " ".join(body.strip().split())
+    if not text:
+        return "该文档没有可总结的正文。"
+    return f"模拟摘要：{text[:220]}{'...' if len(text) > 220 else ''}"

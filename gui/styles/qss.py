@@ -166,7 +166,8 @@ QFrame#DocumentSummaryCard {{
     border-radius: {RADIUS.small}px;
 }}
 
-QFrame#RiskNoticeCard {{
+QFrame#RiskNoticeCard,
+QFrame#ErrorCard {{
     background: {COLORS.danger_bg};
     border: 1px solid {COLORS.danger_bg};
     border-radius: {RADIUS.small}px;
