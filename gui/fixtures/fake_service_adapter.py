@@ -239,7 +239,7 @@ class FakeServiceAdapter:
             "would_create_files": ["workspace.yaml"],
             "would_write_configs": ["config/categories.yaml"],
             "blockers": blockers,
-            "warnings": ["target_path does not exist; the future create step would create it"] if target_path else [],
+            "warnings": ["target_path does not exist; confirmed create would create it"] if target_path else [],
             "requires_confirmation": True,
             "dry_run": True,
             "would_modify": False,
@@ -252,10 +252,37 @@ class FakeServiceAdapter:
                 "created_formal_knowledge": False,
                 "imported_existing_files": False,
                 "created_runtime_index": False,
+                "create_execute_available": True,
             },
             "elapsed_ms": 0,
         }
         return _envelope("workspace_creation_plan", "blocked" if blockers else "ready", plan, ["WorkspaceCreationPlanService"])
+
+    def create_workspace_from_plan(self, plan: Dict[str, Any], confirmed: bool) -> Dict[str, Any]:
+        self.calls.append(("create_workspace_from_plan", {"plan_id": plan.get("plan_id"), "confirmed": confirmed}))
+        target_path = str(plan.get("target_path") or "")
+        errors = []
+        if not confirmed:
+            errors.append("workspace creation requires confirmed=true")
+        if plan.get("blocked"):
+            errors.append("blocked workspace creation plans cannot be executed")
+        if "execute-error" in target_path:
+            errors.append("fixture execution failure")
+        success = not errors
+        result = {
+            "schema_version": "1.0",
+            "success": success,
+            "plan_id": str(plan.get("plan_id") or ""),
+            "workspace_path": target_path,
+            "created_dirs": [target_path, "knowledge", "config", "templates", "reports"] if success else [],
+            "created_files": ["workspace.yaml", "config/categories.yaml"] if success else [],
+            "skipped_existing": [],
+            "warnings": [],
+            "errors": errors,
+            "elapsed_ms": 0,
+            "next_steps": ["打开 workspace status，确认 index_status=missing"] if success else [],
+        }
+        return _envelope("workspace_creation_execute", "ready" if success else "error", result, ["WorkspaceCreationService"])
 
     def capabilities(self) -> Dict[str, bool]:
         self.calls.append(("capabilities", {}))

@@ -74,8 +74,8 @@ class WorkspaceCreationPlanService:
             "imported_existing_files": False,
             "created_runtime_index": False,
             "git_required": False,
-            "create_execute_available": False,
-            "message": "plan-only; execution will be supported in a later version",
+            "create_execute_available": True,
+            "message": "minimal creation execution is available after explicit confirmation",
         }
 
         return WorkspaceCreationPlan(
@@ -117,7 +117,7 @@ class WorkspaceCreationPlanService:
     def _path_warnings(target_path: Path) -> List[str]:
         warnings: List[str] = []
         if not target_path.exists():
-            warnings.append("target_path does not exist; the future create step would create it")
+            warnings.append("target_path does not exist; confirmed create would create it")
         return warnings
 
     @staticmethod

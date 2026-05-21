@@ -6,7 +6,7 @@ from .operation_result import OperationResult
 from .plan_result import PlanResult
 from .search_result import SearchResult
 from .task_models import ProgressEvent, TaskRecord, TaskResult, TaskStatus, TaskType
-from .workspace_creation_models import WorkspaceCreationPlan, WorkspaceCreationRequest, WorkspaceTemplateSummary
+from .workspace_creation_models import WorkspaceCreationPlan, WorkspaceCreationRequest, WorkspaceCreationResult, WorkspaceTemplateSummary
 from .workspace_status import WorkspaceStatus
 
 __all__ = [
@@ -25,6 +25,7 @@ __all__ = [
     "TaskType",
     "WorkspaceCreationPlan",
     "WorkspaceCreationRequest",
+    "WorkspaceCreationResult",
     "WorkspaceTemplateSummary",
     "WorkspaceStatus",
 ]

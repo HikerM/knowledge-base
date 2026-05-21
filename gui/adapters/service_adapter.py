@@ -11,6 +11,7 @@ from knowledge_app.services.document_service import DocumentService
 from knowledge_app.services.review_queue_service import ReviewQueueService
 from knowledge_app.services.search_service import SearchService
 from knowledge_app.services.task_queue_service import TaskQueueService
+from knowledge_app.services.workspace_creation_service import WorkspaceCreationService
 from knowledge_app.services.workspace_creation_plan_service import WorkspaceCreationPlanService
 from knowledge_app.services.workspace_status_service import WorkspaceStatusService
 
@@ -231,6 +232,18 @@ class ServiceAdapter:
         state = "blocked" if data.get("blocked") else "ready"
         warnings = [ui_warning(service, item) for item in data.get("warnings", [])]
         return envelope("workspace_creation_plan", state, data, [service], warnings=warnings, elapsed_ms=plan.elapsed_ms)
+
+    def create_workspace_from_plan(self, plan: Dict[str, Any], confirmed: bool) -> Dict[str, Any]:
+        service = "WorkspaceCreationService"
+        try:
+            result = WorkspaceCreationService().create_workspace_from_plan(plan, confirmed=confirmed)
+        except Exception as exc:  # noqa: BLE001
+            return envelope("workspace_creation_execute", "error", None, [service], errors=[ui_error(service, str(exc))])
+        data = result.to_dict()
+        state = "ready" if result.success else "error"
+        warnings = [ui_warning(service, item) for item in result.warnings]
+        errors = [ui_error(service, item) for item in result.errors]
+        return envelope("workspace_creation_execute", state, data, [service], warnings=warnings, errors=errors, elapsed_ms=result.elapsed_ms)
 
     def capabilities(self) -> Dict[str, bool]:
         names = ["mutation_ui", "category_execute", "archive_execute", "delete_execute", "merge_execute", "template_apply_execute", "restore_execute", "rss", "vector_search"]

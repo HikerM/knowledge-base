@@ -1,4 +1,4 @@
-"""First-run workspace selection and plan-only creation wizard."""
+"""First-run workspace selection and minimal creation wizard."""
 
 from __future__ import annotations
 
@@ -40,6 +40,7 @@ class WorkspaceGateView(QWidget):
         self._last_path = ""
         self._step_index = 0
         self._templates_loaded = False
+        self._create_confirmation_pending = False
 
         self.stack = QStackedWidget()
         self.entry_page = QWidget()
@@ -64,6 +65,7 @@ class WorkspaceGateView(QWidget):
         self.back_button.clicked.connect(self.previous_step)
         self.generate_button.clicked.connect(self.generate_plan)
         self.copy_button.clicked.connect(self.copy_plan_summary)
+        self.create_button.clicked.connect(self.handle_create_click)
 
     def _build_entry_page(self) -> None:
         self.message = QLabel("选择已有知识库后，应用只会读取工作区状态。未检测到搜索索引时，你可以稍后建立索引。")
@@ -145,14 +147,19 @@ class WorkspaceGateView(QWidget):
         self.plan_preview.setMinimumHeight(260)
         self.copy_button = secondary_button("复制计划摘要")
         self.copy_button.setObjectName("wizardCopyPlanButton")
-        self.create_disabled_button = secondary_button("执行创建将在后续版本支持")
-        self.create_disabled_button.setObjectName("wizardCreateDisabledButton")
-        self.create_disabled_button.setEnabled(False)
-        preview_layout.addWidget(Card("Step 5", "计划预览", "不会执行创建，不会自动 index。"))
+        self.create_confirm_label = QLabel("创建前请确认：只会写入预览中的最小目录、workspace.yaml 和 config，不会创建 .kb/index.sqlite，也不会自动 index 或导入资料。")
+        self.create_confirm_label.setObjectName("mutedText")
+        self.create_confirm_label.setWordWrap(True)
+        self.create_confirm_label.setVisible(False)
+        self.create_button = primary_button("创建知识库")
+        self.create_button.setObjectName("wizardCreateButton")
+        self.create_button.setEnabled(False)
+        preview_layout.addWidget(Card("Step 5", "计划预览", "确认后只执行最小创建，不会自动 index。"))
         preview_layout.addWidget(self.plan_status_chip)
         preview_layout.addWidget(self.plan_preview, 1)
         preview_layout.addWidget(self.copy_button)
-        preview_layout.addWidget(self.create_disabled_button)
+        preview_layout.addWidget(self.create_confirm_label)
+        preview_layout.addWidget(self.create_button)
 
         for page in [location, name, template, generate, preview]:
             self.wizard_stack.addWidget(page)
@@ -217,6 +224,35 @@ class WorkspaceGateView(QWidget):
 
     def copy_plan_summary(self) -> None:
         QApplication.clipboard().setText(self.plan_preview.toPlainText())
+
+    def handle_create_click(self) -> None:
+        if self.creation_vm is None:
+            self._show_create_error("当前环境暂不支持创建知识库。")
+            return
+        plan_data = self.creation_vm.plan_data
+        if not plan_data:
+            self._show_create_error("请先生成创建计划。")
+            return
+        if plan_data.get("blocked"):
+            self._show_create_error("计划被阻断，不能执行创建。")
+            return
+        if not self._create_confirmation_pending:
+            self._create_confirmation_pending = True
+            self.create_confirm_label.setVisible(True)
+            self.create_button.setText("确认创建知识库")
+            self.plan_status_chip.set_chip("等待创建确认", "warning")
+            return
+
+        result = self.creation_vm.create_workspace_from_current_plan(confirmed=True)
+        data = dict(result.get("data") or {})
+        if result.get("state") == "ready" and data.get("success"):
+            self.plan_status_chip.set_chip("创建成功", "ready")
+            self.create_button.setEnabled(False)
+            self.create_button.setText("已创建")
+            self.plan_preview.setPlainText(f"{self.plan_preview.toPlainText()}\n\ncreate_result:\n{_format_result(data)}")
+            self.workspace_selected.emit(str(data.get("workspace_path") or plan_data.get("target_path") or ""))
+            return
+        self._show_create_error(_format_errors(result) or "\n".join(data.get("errors", [])) or "创建失败。")
 
     def submit_workspace(self, path: str | Path) -> None:
         self._last_path = str(path)
@@ -283,10 +319,26 @@ class WorkspaceGateView(QWidget):
         blocked = bool(data.get("blocked"))
         self.plan_status_chip.set_chip("计划被阻断" if blocked else "计划可确认", "danger" if blocked else "ready")
         self.plan_preview.setPlainText(_format_plan(data))
+        self._create_confirmation_pending = False
+        self.create_confirm_label.setVisible(False)
+        self.create_button.setText("创建知识库")
+        self.create_button.setEnabled(not blocked)
 
     def _show_plan_error(self, message: str) -> None:
         self.plan_status_chip.set_chip("计划生成失败", "danger")
         self.plan_preview.setPlainText(message)
+        self._create_confirmation_pending = False
+        self.create_confirm_label.setVisible(False)
+        self.create_button.setText("创建知识库")
+        self.create_button.setEnabled(False)
+
+    def _show_create_error(self, message: str) -> None:
+        self.plan_status_chip.set_chip("创建失败", "danger")
+        self.create_button.setText("创建知识库")
+        self.create_button.setEnabled(True)
+        self._create_confirmation_pending = False
+        self.create_confirm_label.setVisible(False)
+        self.plan_preview.setPlainText(f"{self.plan_preview.toPlainText()}\n\ncreate_error:\n{message}")
 
     def _retry_last(self) -> None:
         if self._last_path:
@@ -330,6 +382,29 @@ def _format_plan(data: Dict[str, Any]) -> str:
 def _format_errors(model: Dict[str, Any]) -> str:
     errors = model.get("errors") or []
     return "\n".join(str(item.get("message") if isinstance(item, dict) else item) for item in errors) or "创建计划不可用。"
+
+
+def _format_result(data: Dict[str, Any]) -> str:
+    lines = [
+        f"success: {data.get('success')}",
+        f"workspace_path: {data.get('workspace_path', '')}",
+        "",
+        "created_dirs:",
+        *([f"- {item}" for item in data.get("created_dirs", [])] or ["- none"]),
+        "",
+        "created_files:",
+        *([f"- {item}" for item in data.get("created_files", [])] or ["- none"]),
+        "",
+        "skipped_existing:",
+        *([f"- {item}" for item in data.get("skipped_existing", [])] or ["- none"]),
+        "",
+        "errors:",
+        *([f"- {item}" for item in data.get("errors", [])] or ["- none"]),
+        "",
+        "next_steps:",
+        *([f"- {item}" for item in data.get("next_steps", [])] or ["- none"]),
+    ]
+    return "\n".join(lines)
 
 
 def _short_path(path: str, max_chars: int = 72) -> str:

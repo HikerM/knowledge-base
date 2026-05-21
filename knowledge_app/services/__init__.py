@@ -14,6 +14,7 @@ from .snapshot_service import SnapshotService
 from .task_queue_service import TaskQueueService
 from .template_plan_service import TemplatePlanService
 from .workspace_plan_service import WorkspacePlanService
+from .workspace_creation_service import WorkspaceCreationService
 from .workspace_creation_plan_service import WorkspaceCreationPlanService
 from .workspace_status_service import WorkspaceStatusService
 
@@ -32,6 +33,7 @@ __all__ = [
     "TaskQueueService",
     "TemplatePlanService",
     "WorkspacePlanService",
+    "WorkspaceCreationService",
     "WorkspaceCreationPlanService",
     "WorkspaceStatusService",
 ]

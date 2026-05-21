@@ -82,6 +82,10 @@ def assert_fake_viewmodels() -> None:
     assert plan["data"]["would_modify"] is False
     assert plan["data"]["estimated_result"]["auto_index_started"] is False
     assert adapter.calls[-1][0] == "create_workspace_plan"
+    create_result = creation.create_workspace_from_current_plan(confirmed=True)
+    assert create_result["data"]["success"] is True
+    assert create_result["data"]["workspace_path"] == "D:/Temp/planned-kb"
+    assert adapter.calls[-1][0] == "create_workspace_from_plan"
 
     caps = adapter.capabilities()
     assert all(value is False for value in caps.values())

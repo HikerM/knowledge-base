@@ -1,4 +1,4 @@
-"""Plan-only workspace creation models."""
+"""Workspace creation planning and execution models."""
 
 from __future__ import annotations
 
@@ -106,4 +106,39 @@ class WorkspaceCreationPlan:
             "validation_commands": list(self.validation_commands),
             "estimated_result": dict(self.estimated_result),
             "elapsed_ms": self.elapsed_ms,
+        }
+
+
+@dataclass(frozen=True)
+class WorkspaceCreationResult:
+    """Result returned after a confirmed minimal workspace creation attempt."""
+
+    success: bool
+    plan_id: str
+    workspace_path: str
+    created_dirs: List[str] = field(default_factory=list)
+    created_files: List[str] = field(default_factory=list)
+    skipped_existing: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
+    elapsed_ms: int = 0
+    next_steps: List[str] = field(default_factory=list)
+    schema_version: str = WORKSPACE_CREATION_SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "schema_version", WORKSPACE_CREATION_SCHEMA_VERSION)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "success": self.success,
+            "plan_id": self.plan_id,
+            "workspace_path": self.workspace_path,
+            "created_dirs": list(self.created_dirs),
+            "created_files": list(self.created_files),
+            "skipped_existing": list(self.skipped_existing),
+            "warnings": list(self.warnings),
+            "errors": list(self.errors),
+            "elapsed_ms": self.elapsed_ms,
+            "next_steps": list(self.next_steps),
         }

@@ -1,6 +1,6 @@
 # PyInstaller one-folder GUI packaging hardening
 
-This directory contains the `v2.0.0-beta.6` PyInstaller one-folder packaging hardening, icon branding, first-run workspace selection, and workspace creation plan preview baseline for the PySide6 GUI. It is not an installer, not a one-file executable, not a signed release, and not an auto-updater.
+This directory contains the `v2.0.0-beta.7` PyInstaller one-folder packaging hardening, icon branding, first-run workspace selection, and minimal confirmed workspace creation baseline for the PySide6 GUI. It is not an installer, not a one-file executable, not a signed release, and not an auto-updater.
 
 ## Install packaging dependencies
 
