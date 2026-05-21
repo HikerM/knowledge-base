@@ -21,6 +21,7 @@ from gui.viewmodels.library_viewmodel import LibraryViewModel
 from gui.viewmodels.search_viewmodel import SearchViewModel
 from gui.viewmodels.settings_viewmodel import SettingsViewModel
 from gui.viewmodels.task_viewmodel import TaskViewModel
+from gui.viewmodels.workspace_creation_viewmodel import WorkspaceCreationViewModel
 from gui.viewmodels.workspace_viewmodel import WorkspaceViewModel
 
 
@@ -72,6 +73,15 @@ def assert_fake_viewmodels() -> None:
     assert entry["data"]["mutation_actions_available"] is False
     assert all(section["editable"] is False for section in entry["data"]["sections"])
     assert adapter.calls[-1][0] == "load_settings_entry"
+
+    creation = WorkspaceCreationViewModel(adapter)
+    templates = creation.list_templates()
+    assert {item["template_id"] for item in templates["data"]["templates"]} == {"personal", "learning", "work", "developer", "custom"}
+    plan = creation.create_plan("D:/Temp/planned-kb", "计划知识库", "developer")
+    assert plan["data"]["dry_run"] is True
+    assert plan["data"]["would_modify"] is False
+    assert plan["data"]["estimated_result"]["auto_index_started"] is False
+    assert adapter.calls[-1][0] == "create_workspace_plan"
 
     caps = adapter.capabilities()
     assert all(value is False for value in caps.values())
@@ -128,7 +138,7 @@ def assert_service_adapter_startup_guards() -> None:
 
 
 def assert_viewmodels_do_not_import_services() -> None:
-    modules = [WorkspaceViewModel, DashboardViewModel, SearchViewModel, LibraryViewModel, DocumentViewModel, TaskViewModel, SettingsViewModel]
+    modules = [WorkspaceViewModel, WorkspaceCreationViewModel, DashboardViewModel, SearchViewModel, LibraryViewModel, DocumentViewModel, TaskViewModel, SettingsViewModel]
     for cls in modules:
         source = inspect.getsource(sys.modules[cls.__module__])
         assert "knowledge_app.services" not in source

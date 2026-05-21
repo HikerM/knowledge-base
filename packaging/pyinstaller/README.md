@@ -1,6 +1,6 @@
 # PyInstaller one-folder GUI packaging hardening
 
-This directory contains the `v2.0.0-beta.4` PyInstaller one-folder packaging hardening, icon branding, and first-run workspace selection baseline for the PySide6 read-only GUI. It is not an installer, not a one-file executable, not a signed release, and not an auto-updater.
+This directory contains the `v2.0.0-beta.6` PyInstaller one-folder packaging hardening, icon branding, first-run workspace selection, and workspace creation plan preview baseline for the PySide6 GUI. It is not an installer, not a one-file executable, not a signed release, and not an auto-updater.
 
 ## Install packaging dependencies
 
@@ -117,7 +117,7 @@ Manual checks:
 
 ## Version info and icon
 
-`version_info.txt` adds Windows metadata including `ProductName`, `FileDescription`, `ProductVersion`, and `CompanyName`. The current values identify the app as `Personal Knowledge Base` and use `ProductVersion` `2.0.0-beta.4`.
+`version_info.txt` adds Windows metadata including `ProductName`, `FileDescription`, `ProductVersion`, and `CompanyName`. The current values identify the app as `Personal Knowledge Base` and use `ProductVersion` `2.0.0-beta.6`.
 
 Icon assets live in `assets\app-icon\`:
 

@@ -18,6 +18,7 @@ from gui.viewmodels.library_viewmodel import LibraryViewModel
 from gui.viewmodels.search_viewmodel import SearchViewModel
 from gui.viewmodels.settings_viewmodel import SettingsViewModel
 from gui.viewmodels.task_viewmodel import TaskViewModel
+from gui.viewmodels.workspace_creation_viewmodel import WorkspaceCreationViewModel
 from gui.viewmodels.workspace_viewmodel import WorkspaceViewModel
 from gui.views.dashboard_view import DashboardView
 from gui.views.library_view import LibraryView
@@ -33,6 +34,7 @@ class AppShell(QWidget):
     def __init__(
         self,
         adapter: Any | None,
+        creation_adapter: Any | None = None,
         gui_settings_provider: Any | None = None,
         reset_window_layout: Any | None = None,
         workspace_selected: bool = True,
@@ -42,6 +44,7 @@ class AppShell(QWidget):
         super().__init__()
         self.setObjectName("AppShell")
         self.adapter = adapter
+        self.creation_adapter = creation_adapter or adapter
         self.select_workspace = select_workspace
         self.workspace_vm = WorkspaceViewModel(adapter)
         self.dashboard_vm = DashboardViewModel(adapter)
@@ -50,6 +53,7 @@ class AppShell(QWidget):
         self.document_vm = DocumentViewModel(adapter)
         self.task_vm = TaskViewModel(adapter)
         self.settings_vm = SettingsViewModel(adapter)
+        self.workspace_creation_vm = WorkspaceCreationViewModel(self.creation_adapter)
         self.reset_window_layout = reset_window_layout
         self.loaded_routes: set[str] = set()
         self.current_route: str | None = None
@@ -61,7 +65,7 @@ class AppShell(QWidget):
         self.stack = QStackedWidget()
         self.stack.setObjectName("contentStack")
 
-        self.workspace_gate_view = WorkspaceGateView()
+        self.workspace_gate_view = WorkspaceGateView(self.workspace_creation_vm)
         self.dashboard_view = DashboardView(self.dashboard_vm)
         self.search_view = SearchView(self.search_vm, self.document_vm)
         self.library_view = LibraryView(self.library_vm, self.document_vm)

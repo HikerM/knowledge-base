@@ -75,7 +75,7 @@ def main() -> int:
     for field in ["ProductName", "FileDescription", "ProductVersion", "CompanyName"]:
         assert field in version_info, f"version info missing {field}"
     assert "Personal Knowledge Base" in version_info, "version info must use the product name"
-    assert "2.0.0-beta.4" in version_info, "version info must match the beta.4 first-run baseline"
+    assert "2.0.0-beta.6" in version_info, "version info must match the beta.6 workspace creation plan baseline"
 
     forbidden_spec_tokens = [
         "knowledge/",

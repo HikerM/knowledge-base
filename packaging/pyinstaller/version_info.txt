@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(2, 0, 0, 4),
-    prodvers=(2, 0, 0, 4),
+    filevers=(2, 0, 0, 6),
+    prodvers=(2, 0, 0, 6),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -16,11 +16,11 @@ VSVersionInfo(
         [
           StringStruct('CompanyName', 'HikerM'),
           StringStruct('FileDescription', 'Personal Knowledge Base'),
-          StringStruct('FileVersion', '2.0.0.4'),
+          StringStruct('FileVersion', '2.0.0.6'),
           StringStruct('InternalName', 'pkb-gui'),
           StringStruct('OriginalFilename', 'pkb-gui.exe'),
           StringStruct('ProductName', 'Personal Knowledge Base'),
-          StringStruct('ProductVersion', '2.0.0-beta.4')
+          StringStruct('ProductVersion', '2.0.0-beta.6')
         ]
       )
     ]),

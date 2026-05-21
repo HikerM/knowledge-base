@@ -29,15 +29,24 @@ from gui.shell.app_shell import AppShell
 class MainWindow(QMainWindow):
     """Top-level window that only mounts the AppShell."""
 
-    def __init__(self, adapter: Any | None = None, workspace_path: Path | str | None = None, gui_settings_path: Path | str | None = None, log_path: Path | str | None = None):
+    def __init__(
+        self,
+        adapter: Any | None = None,
+        workspace_path: Path | str | None = None,
+        gui_settings_path: Path | str | None = None,
+        log_path: Path | str | None = None,
+        creation_adapter: Any | None = None,
+    ):
         super().__init__()
         self.gui_settings_path = resolve_settings_path(gui_settings_path)
         self.window_settings = load_window_settings(self.gui_settings_path)
         self.log_path = Path(log_path).resolve() if log_path else None
         self.workspace_path = self._resolve_initial_workspace(adapter, workspace_path)
         self.adapter = adapter or (ServiceAdapter(workspace_path=self.workspace_path) if self.workspace_path else None)
+        self.creation_adapter = creation_adapter or adapter or ServiceAdapter()
         self.shell = AppShell(
             self.adapter,
+            creation_adapter=self.creation_adapter,
             gui_settings_provider=self.gui_settings_snapshot,
             reset_window_layout=self.reset_window_layout,
             workspace_selected=bool(self.workspace_path),

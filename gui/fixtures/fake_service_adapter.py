@@ -206,6 +206,57 @@ class FakeServiceAdapter:
             ["WorkspaceStatusService"],
         )
 
+    def list_workspace_templates(self) -> Dict[str, Any]:
+        self.calls.append(("list_workspace_templates", {}))
+        templates = [
+            {"template_id": "personal", "display_name": "个人资料", "description": "私人笔记和长期收藏", "intended_use": ["私人笔记"], "not_intended_for": ["自动导入资料"], "default_dirs": ["knowledge", "config", "templates", "reports"], "default_files": ["workspace.yaml"], "default_configs": ["config/categories.yaml"]},
+            {"template_id": "learning", "display_name": "学习", "description": "课程、读书和主题学习", "intended_use": ["课程笔记"], "not_intended_for": ["未经审核直接正式化"], "default_dirs": ["knowledge", "config", "templates", "reports"], "default_files": ["workspace.yaml"], "default_configs": ["config/categories.yaml"]},
+            {"template_id": "work", "display_name": "工作", "description": "项目经验和流程记录", "intended_use": ["项目经验"], "not_intended_for": ["客户隐私"], "default_dirs": ["knowledge", "config", "templates", "reports"], "default_files": ["workspace.yaml"], "default_configs": ["config/categories.yaml"]},
+            {"template_id": "developer", "display_name": "开发者", "description": "工程规则和代码片段", "intended_use": ["工程规则"], "not_intended_for": ["把 raw 当正式规则"], "default_dirs": ["knowledge", "config", "templates", "reports"], "default_files": ["workspace.yaml"], "default_configs": ["config/categories.yaml"]},
+            {"template_id": "custom", "display_name": "自定义", "description": "最小结构", "intended_use": ["自定义分类"], "not_intended_for": ["迁移旧 workspace"], "default_dirs": ["knowledge", "config", "templates", "reports"], "default_files": ["workspace.yaml"], "default_configs": ["config/categories.yaml"]},
+        ]
+        return _envelope("workspace_creation_templates", "ready", {"templates": templates, "count": len(templates), "elapsed_ms": 0}, ["WorkspaceCreationPlanService"])
+
+    def create_workspace_plan(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        self.calls.append(("create_workspace_plan", dict(request)))
+        target_path = str(request.get("target_path") or "")
+        workspace_name = str(request.get("workspace_name") or "").strip()
+        template_id = str(request.get("template_id") or "")
+        blockers = []
+        if not workspace_name:
+            blockers.append("workspace_name must not be empty")
+        if template_id not in {"personal", "learning", "work", "developer", "custom"}:
+            blockers.append(f"unknown template_id: {template_id}")
+        if "non-empty" in target_path:
+            blockers.append("target_path exists and is not empty; non-empty initialization is blocked in this version")
+        plan = {
+            "schema_version": "1.0",
+            "plan_id": "fixture-workspace-create-plan",
+            "workspace_name": workspace_name,
+            "target_path": target_path,
+            "template_id": template_id,
+            "would_create_dirs": [target_path, "knowledge", "config", "templates", "reports", "backups"],
+            "would_create_files": ["workspace.yaml"],
+            "would_write_configs": ["config/categories.yaml"],
+            "blockers": blockers,
+            "warnings": ["target_path does not exist; the future create step would create it"] if target_path else [],
+            "requires_confirmation": True,
+            "dry_run": True,
+            "would_modify": False,
+            "blocked": bool(blockers),
+            "reversible": True,
+            "validation_commands": [f"python scripts/kb.py workspace-status --workspace \"{target_path}\""],
+            "estimated_result": {
+                "index_status": "missing",
+                "auto_index_started": False,
+                "created_formal_knowledge": False,
+                "imported_existing_files": False,
+                "created_runtime_index": False,
+            },
+            "elapsed_ms": 0,
+        }
+        return _envelope("workspace_creation_plan", "blocked" if blockers else "ready", plan, ["WorkspaceCreationPlanService"])
+
     def capabilities(self) -> Dict[str, bool]:
         self.calls.append(("capabilities", {}))
         return {

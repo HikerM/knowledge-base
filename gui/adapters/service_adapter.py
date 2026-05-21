@@ -11,6 +11,7 @@ from knowledge_app.services.document_service import DocumentService
 from knowledge_app.services.review_queue_service import ReviewQueueService
 from knowledge_app.services.search_service import SearchService
 from knowledge_app.services.task_queue_service import TaskQueueService
+from knowledge_app.services.workspace_creation_plan_service import WorkspaceCreationPlanService
 from knowledge_app.services.workspace_status_service import WorkspaceStatusService
 
 from gui.adapters.viewmodel_helpers import (
@@ -208,6 +209,28 @@ class ServiceAdapter:
             "sections": sections,
         }
         return envelope("settings_entry", "ready", payload, ["WorkspaceStatusService"], warnings=status.get("warnings", []), errors=status.get("errors", []), elapsed_ms=status.get("elapsed_ms", 0))
+
+    def list_workspace_templates(self) -> Dict[str, Any]:
+        service = "WorkspaceCreationPlanService"
+        try:
+            result = WorkspaceCreationPlanService().list_workspace_templates()
+        except Exception as exc:  # noqa: BLE001
+            return envelope("workspace_creation_templates", "error", None, [service], errors=[ui_error(service, str(exc))])
+        if not result.success or not result.data:
+            errors = result.errors or ["workspace templates unavailable"]
+            return envelope("workspace_creation_templates", "error", None, [service], errors=[ui_error(service, item) for item in errors], elapsed_ms=result.elapsed_ms)
+        return envelope("workspace_creation_templates", "ready", result.data, [service], warnings=[ui_warning(service, item) for item in result.warnings], elapsed_ms=result.elapsed_ms)
+
+    def create_workspace_plan(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        service = "WorkspaceCreationPlanService"
+        try:
+            plan = WorkspaceCreationPlanService().create_workspace_plan(request)
+        except Exception as exc:  # noqa: BLE001
+            return envelope("workspace_creation_plan", "error", None, [service], errors=[ui_error(service, str(exc))])
+        data = plan.to_dict()
+        state = "blocked" if data.get("blocked") else "ready"
+        warnings = [ui_warning(service, item) for item in data.get("warnings", [])]
+        return envelope("workspace_creation_plan", state, data, [service], warnings=warnings, elapsed_ms=plan.elapsed_ms)
 
     def capabilities(self) -> Dict[str, bool]:
         names = ["mutation_ui", "category_execute", "archive_execute", "delete_execute", "merge_execute", "template_apply_execute", "restore_execute", "rss", "vector_search"]
