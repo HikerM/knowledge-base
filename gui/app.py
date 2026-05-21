@@ -51,7 +51,7 @@ def _parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
 def main(argv: list[str] | None = None) -> int:
     raw_argv = list(argv or sys.argv)
     parsed, qt_argv = _parse_args(raw_argv)
-    workspace_path = (parsed.workspace or Path.cwd()).resolve()
+    workspace_path = parsed.workspace.resolve() if parsed.workspace else None
     log_path = _configure_logging()
     logging.getLogger(__name__).info("workspace=%s log=%s", workspace_path, log_path)
     configure_windows_app_id()
@@ -61,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationDisplayName(APP_NAME)
     apply_light_theme(app)
     apply_application_icon(app)
-    window = MainWindow(workspace_path=workspace_path)
+    window = MainWindow(workspace_path=workspace_path, log_path=log_path)
     app.aboutToQuit.connect(window.persist_window_settings)
     window.show()
     auto_close = os.environ.get("PKB_GUI_AUTO_CLOSE_MS")

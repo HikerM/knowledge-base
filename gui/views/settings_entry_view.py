@@ -31,6 +31,7 @@ class SettingsEntryView(QWidget):
         self.reset_window_button = secondary_button("重置窗口布局")
         self.reset_window_button.clicked.connect(self._confirm_reset_window_layout)
         self.window_card.add_body_widget(self.reset_window_button)
+        self.local_card = Card("本地文件", "当前用户目录", "")
         self.service_card = Card("只读状态", "未加载", "")
         self.service_chip = StatusChip("服务：未知", "muted")
         self.index_chip = StatusChip("索引：未知", "muted")
@@ -48,6 +49,7 @@ class SettingsEntryView(QWidget):
         root.addWidget(SectionHeader("设置", "查看工作区和只读能力边界。"))
         root.addWidget(self.workspace_card)
         root.addWidget(self.window_card)
+        root.addWidget(self.local_card)
         root.addWidget(self.service_card)
         root.addWidget(self.notice)
         section_title = QLabel("功能区域")
@@ -64,9 +66,13 @@ class SettingsEntryView(QWidget):
     def render_settings(self, model: Dict[str, Any]) -> None:
         data = model.get("data") or {}
         workspace_path = str(data.get("workspace_path") or "")
-        self.workspace_card.set_content("工作区", _short_path(workspace_path) or "未知", "完整路径见提示")
+        snapshot = self.gui_settings_provider() if self.gui_settings_provider else {}
+        current_workspace = str(snapshot.get("current_workspace") or workspace_path)
+        last_workspace = str(snapshot.get("last_opened_workspace") or "")
+        self.workspace_card.set_content("工作区", _short_path(current_workspace) or "未选择", f"上次打开：{_short_path(last_workspace, 48) or '无'}")
         self.workspace_card.setToolTip(workspace_path)
-        self._render_gui_settings()
+        self._render_gui_settings(snapshot)
+        self._render_local_paths(snapshot)
         service_status = data.get("service_status")
         index_status = data.get("index_status")
         self.service_card.set_content("只读状态", "服务边界正常", f"文档 {data.get('document_count', 0)} / 分块 {data.get('chunk_count', 0)}")
@@ -81,8 +87,7 @@ class SettingsEntryView(QWidget):
         if not rows:
             self.sections.addItem("没有可展示的设置区域。")
 
-    def _render_gui_settings(self) -> None:
-        snapshot = self.gui_settings_provider() if self.gui_settings_provider else {}
+    def _render_gui_settings(self, snapshot: Dict[str, Any]) -> None:
         size_text = f"{snapshot.get('window_width', 0)} x {snapshot.get('window_height', 0)}"
         if snapshot.get("maximized"):
             size_text = f"{size_text}（最大化）"
@@ -90,6 +95,13 @@ class SettingsEntryView(QWidget):
         caption = f"保存位置：{_short_path(path, 64)}" if path else "保存位置：当前用户目录"
         self.window_card.set_content("窗口布局", size_text, caption)
         self.window_card.setToolTip(path)
+
+    def _render_local_paths(self, snapshot: Dict[str, Any]) -> None:
+        settings_path = str(snapshot.get("settings_path") or "")
+        log_path = str(snapshot.get("log_path") or "")
+        caption = f"设置：{_short_path(settings_path, 56)}"
+        self.local_card.set_content("本地文件", "仅保存到当前用户目录", f"{caption} · 日志：{_short_path(log_path, 44) or '未配置'}")
+        self.local_card.setToolTip(f"GUI 设置：{settings_path}\n日志：{log_path}")
 
     def _confirm_reset_window_layout(self) -> None:
         if self.reset_window_layout is None:

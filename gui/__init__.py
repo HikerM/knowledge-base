@@ -3,4 +3,4 @@
 APP_NAME = "个人知识库"
 PRODUCT_NAME = "Personal Knowledge Base"
 ORGANIZATION_NAME = "HikerM"
-PHASE = "v2.0.0-beta.3 图标与品牌基线"
+PHASE = "v2.0.0-beta.4 首次运行与工作区选择"

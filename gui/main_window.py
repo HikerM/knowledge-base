@@ -29,13 +29,21 @@ from gui.shell.app_shell import AppShell
 class MainWindow(QMainWindow):
     """Top-level window that only mounts the AppShell."""
 
-    def __init__(self, adapter: Any | None = None, workspace_path: Path | str | None = None, gui_settings_path: Path | str | None = None):
+    def __init__(self, adapter: Any | None = None, workspace_path: Path | str | None = None, gui_settings_path: Path | str | None = None, log_path: Path | str | None = None):
         super().__init__()
-        self.workspace_path = Path(workspace_path).resolve() if workspace_path else Path.cwd().resolve()
         self.gui_settings_path = resolve_settings_path(gui_settings_path)
         self.window_settings = load_window_settings(self.gui_settings_path)
-        self.adapter = adapter or ServiceAdapter(workspace_path=self.workspace_path)
-        self.shell = AppShell(self.adapter, gui_settings_provider=self.gui_settings_snapshot, reset_window_layout=self.reset_window_layout)
+        self.log_path = Path(log_path).resolve() if log_path else None
+        self.workspace_path = self._resolve_initial_workspace(adapter, workspace_path)
+        self.adapter = adapter or (ServiceAdapter(workspace_path=self.workspace_path) if self.workspace_path else None)
+        self.shell = AppShell(
+            self.adapter,
+            gui_settings_provider=self.gui_settings_snapshot,
+            reset_window_layout=self.reset_window_layout,
+            workspace_selected=bool(self.workspace_path),
+            select_workspace=self.select_workspace,
+            unavailable_workspace=self._unavailable_last_workspace(workspace_path),
+        )
         self.setCentralWidget(self.shell)
         self.setWindowTitle(f"{APP_NAME} - {PHASE}")
         apply_window_icon(self)
@@ -51,7 +59,9 @@ class MainWindow(QMainWindow):
             "window_x": geometry.x(),
             "window_y": geometry.y(),
             "maximized": self.isMaximized(),
-            "last_opened_workspace": str(self.workspace_path),
+            "last_opened_workspace": str(self.workspace_path) if self.workspace_path else self.window_settings.last_opened_workspace,
+            "current_workspace": str(self.workspace_path) if self.workspace_path else "",
+            "log_path": str(self.log_path) if self.log_path else "",
             "schema_version": self.window_settings.schema_version,
         }
 
@@ -70,9 +80,41 @@ class MainWindow(QMainWindow):
             window_x=geometry.x(),
             window_y=geometry.y(),
             maximized=self.isMaximized(),
-            last_opened_workspace=str(self.workspace_path),
+            last_opened_workspace=str(self.workspace_path) if self.workspace_path else self.window_settings.last_opened_workspace,
         )
         return save_window_settings(self.window_settings, self.gui_settings_path)
+
+    def select_workspace(self, workspace_path: Path | str) -> tuple[bool, str]:
+        path = Path(workspace_path).expanduser()
+        if not path.exists() or not path.is_dir():
+            return False, "这个文件夹不可用，请选择一个存在的知识库文件夹。"
+        self.workspace_path = path.resolve()
+        self.adapter = ServiceAdapter(workspace_path=self.workspace_path)
+        self.window_settings.last_opened_workspace = str(self.workspace_path)
+        self.persist_window_settings()
+        self.shell.set_adapter(self.adapter)
+        return True, ""
+
+    def _resolve_initial_workspace(self, adapter: Any | None, workspace_path: Path | str | None) -> Path | None:
+        if adapter is not None and workspace_path is None:
+            return Path.cwd().resolve()
+        if workspace_path is not None:
+            return Path(workspace_path).resolve()
+        remembered = self.window_settings.last_opened_workspace
+        if remembered:
+            remembered_path = Path(remembered).expanduser()
+            if remembered_path.exists() and remembered_path.is_dir():
+                return remembered_path.resolve()
+        return None
+
+    def _unavailable_last_workspace(self, explicit_workspace: Path | str | None) -> str:
+        if explicit_workspace is not None:
+            return ""
+        remembered = self.window_settings.last_opened_workspace
+        if not remembered:
+            return ""
+        remembered_path = Path(remembered).expanduser()
+        return remembered if not remembered_path.exists() else ""
 
     def closeEvent(self, event: Any) -> None:  # noqa: N802
         self.persist_window_settings()

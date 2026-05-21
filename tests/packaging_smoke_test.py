@@ -63,7 +63,8 @@ def main() -> int:
     assert "collect_data_files(\"PySide6\")" in spec, "spec must include PySide6 data files"
     assert "console=False" in spec, "GUI executable should be windowed"
     assert "--workspace" in entrypoint, "GUI entrypoint must support explicit workspace selection"
-    assert "Path.cwd()" in entrypoint, "GUI entrypoint must default to the current working directory"
+    assert "workspace_path = parsed.workspace.resolve() if parsed.workspace else None" in entrypoint, "GUI entrypoint must not default first-run to cwd"
+    assert "MainWindow(workspace_path=workspace_path" in entrypoint, "GUI entrypoint must pass explicit or empty workspace state"
     assert "LOCALAPPDATA" in entrypoint, "GUI logs must default to a user-local data directory on Windows"
     assert "python -m PyInstaller" in build_script, "build script must run PyInstaller"
     assert "check_dist.py" in build_script, "build script must validate dist output"
@@ -74,7 +75,7 @@ def main() -> int:
     for field in ["ProductName", "FileDescription", "ProductVersion", "CompanyName"]:
         assert field in version_info, f"version info missing {field}"
     assert "Personal Knowledge Base" in version_info, "version info must use the product name"
-    assert "2.0.0-beta.3" in version_info, "version info must match the beta.3 branding baseline"
+    assert "2.0.0-beta.4" in version_info, "version info must match the beta.4 first-run baseline"
 
     forbidden_spec_tokens = [
         "knowledge/",
@@ -94,7 +95,7 @@ def main() -> int:
         "one-folder",
         "not an installer",
         "--workspace",
-        "current working directory",
+        "workspace gate",
         "Startup contract",
         "does not build a one-file executable",
         "does not require Git",

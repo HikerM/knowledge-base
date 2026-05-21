@@ -43,6 +43,10 @@ class Sidebar(QFrame):
             self.route_changed.emit(route)
         return True
 
+    def clear_active(self) -> None:
+        for button in self._buttons.values():
+            button.setChecked(False)
+
     @staticmethod
     def _tooltip(item: NavigationRoute) -> str:
         if item.enabled:

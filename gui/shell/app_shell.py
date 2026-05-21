@@ -24,15 +24,25 @@ from gui.views.library_view import LibraryView
 from gui.views.search_view import SearchView
 from gui.views.settings_entry_view import SettingsEntryView
 from gui.views.task_summary_view import TaskSummaryView
+from gui.views.workspace_gate_view import WorkspaceGateView
 
 
 class AppShell(QWidget):
     """Desktop shell with TopBar, Sidebar, main content, and StatusBar."""
 
-    def __init__(self, adapter: Any, gui_settings_provider: Any | None = None, reset_window_layout: Any | None = None):
+    def __init__(
+        self,
+        adapter: Any | None,
+        gui_settings_provider: Any | None = None,
+        reset_window_layout: Any | None = None,
+        workspace_selected: bool = True,
+        select_workspace: Any | None = None,
+        unavailable_workspace: str = "",
+    ):
         super().__init__()
         self.setObjectName("AppShell")
         self.adapter = adapter
+        self.select_workspace = select_workspace
         self.workspace_vm = WorkspaceViewModel(adapter)
         self.dashboard_vm = DashboardViewModel(adapter)
         self.search_vm = SearchViewModel(adapter)
@@ -51,6 +61,7 @@ class AppShell(QWidget):
         self.stack = QStackedWidget()
         self.stack.setObjectName("contentStack")
 
+        self.workspace_gate_view = WorkspaceGateView()
         self.dashboard_view = DashboardView(self.dashboard_vm)
         self.search_view = SearchView(self.search_vm, self.document_vm)
         self.library_view = LibraryView(self.library_vm, self.document_vm)
@@ -58,6 +69,7 @@ class AppShell(QWidget):
         self.settings_view = SettingsEntryView(self.settings_vm, gui_settings_provider=gui_settings_provider, reset_window_layout=self._reset_window_layout)
 
         self.routes = {
+            "workspace_gate": self.workspace_gate_view,
             "dashboard": self.dashboard_view,
             "search": self.search_view,
             "library": self.library_view,
@@ -79,11 +91,20 @@ class AppShell(QWidget):
         root.addWidget(self.statusbar)
 
         self._register_navigation_shortcuts()
+        self.workspace_gate_view.workspace_selected.connect(self._select_workspace)
         self.sidebar.route_changed.connect(self.navigate)
         self.topbar.settings_requested.connect(lambda: self.navigate("settings"))
         self.topbar.search_submitted.connect(self._run_global_search)
-        self._load_startup_status()
-        self.navigate("dashboard")
+        if workspace_selected:
+            self._load_startup_status()
+            self.navigate("dashboard")
+            self._show_index_missing_notice_if_needed()
+        else:
+            if unavailable_workspace:
+                self.workspace_gate_view.show_unavailable_last_workspace(unavailable_workspace)
+            else:
+                self.workspace_gate_view.show_unselected()
+            self._show_workspace_gate()
 
     def _load_startup_status(self) -> None:
         model = self.workspace_vm.load_status()
@@ -92,6 +113,10 @@ class AppShell(QWidget):
         self.dashboard_view.render_startup_status(model)
 
     def navigate(self, route: str) -> bool:
+        if self.adapter is None:
+            self._show_workspace_gate()
+            self.statusbar.show_notice("请先选择一个知识库文件夹")
+            return False
         route_config = NAVIGATION_ROUTE_BY_ID.get(route)
         if route_config is None or not route_config.enabled:
             self.statusbar.show_notice("该功能当前未启用")
@@ -108,6 +133,20 @@ class AppShell(QWidget):
     def show_route(self, route: str) -> bool:
         return self.navigate(route)
 
+    def set_adapter(self, adapter: Any) -> None:
+        self.adapter = adapter
+        self.workspace_vm = WorkspaceViewModel(adapter)
+        self.dashboard_vm.adapter = adapter
+        self.search_vm.adapter = adapter
+        self.library_vm.adapter = adapter
+        self.document_vm.adapter = adapter
+        self.task_vm.adapter = adapter
+        self.settings_vm.adapter = adapter
+        self.loaded_routes.clear()
+        self._load_startup_status()
+        self.navigate("dashboard")
+        self._show_index_missing_notice_if_needed()
+
     def _show_route(self, route: str, widget: QWidget) -> None:
         self.stack.setCurrentWidget(widget)
         self.current_route = route
@@ -123,6 +162,12 @@ class AppShell(QWidget):
         if hasattr(widget, "focus_primary"):
             widget.focus_primary()
 
+    def _show_workspace_gate(self) -> None:
+        self.stack.setCurrentWidget(self.workspace_gate_view)
+        self.current_route = "workspace_gate"
+        self.sidebar.clear_active()
+        self.workspace_gate_view.focus_primary()
+
     def _register_navigation_shortcuts(self) -> None:
         for item in NAVIGATION_ROUTES:
             shortcut = QShortcut(QKeySequence(item.shortcut), self)
@@ -134,6 +179,22 @@ class AppShell(QWidget):
     def _run_global_search(self, query: str) -> None:
         if self.navigate("search"):
             self.search_view.set_query_and_run(query)
+
+    def _select_workspace(self, path: str) -> None:
+        if self.select_workspace is None:
+            self.workspace_gate_view.show_error("当前环境暂不支持选择工作区。", path)
+            return
+        ok, message = self.select_workspace(path)
+        if not ok:
+            self.workspace_gate_view.show_error(message, path)
+            self.statusbar.show_notice(message)
+            return
+        if self.workspace_vm.data.get("index_status") == "missing":
+            self.workspace_gate_view.show_index_missing(path)
+
+    def _show_index_missing_notice_if_needed(self) -> None:
+        if self.workspace_vm.data.get("index_status") == "missing":
+            self.statusbar.show_notice("未检测到搜索索引，你可以稍后建立索引")
 
     def _reset_window_layout(self) -> None:
         if self.reset_window_layout is None:

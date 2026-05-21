@@ -50,6 +50,28 @@ def main() -> int:
         QTest.keyClick(window, key, Qt.KeyboardModifier.AltModifier)
         app.processEvents()
 
+    first_run_settings = Path(temp_dir.name) / "first-run-settings.json"
+    first_run_window = MainWindow(gui_settings_path=first_run_settings)
+    first_run_window.show()
+    app.processEvents()
+    assert first_run_window.shell.current_route == "workspace_gate"
+    assert "请选择一个知识库文件夹" in first_run_window.shell.workspace_gate_view.header.title.text()
+    assert not first_run_window.shell.sidebar._buttons["dashboard"].isChecked()
+    invalid_path = Path(temp_dir.name) / "does-not-exist"
+    first_run_window.shell.workspace_gate_view.submit_workspace(invalid_path)
+    app.processEvents()
+    assert first_run_window.shell.current_route == "workspace_gate"
+    assert "不可用" in first_run_window.shell.workspace_gate_view.status_chip.text()
+    empty_workspace = Path(temp_dir.name) / "empty-workspace"
+    empty_workspace.mkdir()
+    first_run_window.shell.workspace_gate_view.submit_workspace(empty_workspace)
+    app.processEvents()
+    assert first_run_window.shell.current_route == "dashboard"
+    assert "未检测到搜索索引" in first_run_window.shell.statusbar.notice.text()
+    assert not (empty_workspace / ".kb").exists()
+    first_run_window.close()
+    app.processEvents()
+
     nav_window, _nav_adapter = build_window()
     assert_route(nav_window, "dashboard")
     assert {route: shortcut.key().toString() for route, shortcut in nav_window.shell.navigation_shortcuts.items()} == {
@@ -170,6 +192,8 @@ def main() -> int:
     window.shell.sidebar._buttons["settings"].click()
     app.processEvents()
     assert adapter.calls[-1][0] == "load_settings_entry"
+    assert "当前用户目录" in window.shell.settings_view.local_card.value_label.text()
+    assert "上次打开" in window.shell.settings_view.workspace_card.caption_label.text()
     all_button_text = " ".join(button.text().lower() for button in window.findChildren(QPushButton))
     for forbidden in ["cancel", "retry", "cleanup", "archive", "delete", "merge", "restore"]:
         assert forbidden not in all_button_text

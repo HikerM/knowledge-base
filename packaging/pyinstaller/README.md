@@ -1,6 +1,6 @@
 # PyInstaller one-folder GUI packaging hardening
 
-This directory contains the `v2.0.0-beta.3` PyInstaller one-folder packaging hardening and icon branding baseline for the PySide6 read-only GUI. It is not an installer, not a one-file executable, not a signed release, and not an auto-updater.
+This directory contains the `v2.0.0-beta.4` PyInstaller one-folder packaging hardening, icon branding, and first-run workspace selection baseline for the PySide6 read-only GUI. It is not an installer, not a one-file executable, not a signed release, and not an auto-updater.
 
 ## Install packaging dependencies
 
@@ -56,7 +56,9 @@ Both icon files are bundled into `_internal\assets\app-icon\` for the packaged a
 
 ## Run the packaged GUI
 
-The packaged GUI treats the current working directory as the default workspace. Prefer passing `--workspace` explicitly:
+The packaged GUI can start without a workspace. First-run startup shows a workspace gate where the user can choose an existing knowledge-base folder. It does not treat the install directory or current working directory as a workspace automatically.
+
+You can still pass `--workspace` explicitly:
 
 ```powershell
 .\dist\pkb-gui\pkb-gui.exe --workspace D:\AI\personal-knowledge-base
@@ -102,19 +104,20 @@ python packaging\pyinstaller\exe_smoke.py --workspace D:\AI\personal-knowledge-b
 
 Manual checks:
 
-1. Start `pkb-gui.exe` with `--workspace`.
-2. Confirm startup only shows workspace and index status.
-3. Confirm the home summary remains unloaded until clicking `刷新首页摘要`.
-4. Confirm no index/reindex task starts automatically.
-5. Confirm an empty workspace shows `index_status=missing` and does not create `.kb\`.
-6. Resize the window, close it, and reopen to confirm the window size and position are remembered.
-7. Maximize the window, close it, and reopen to confirm maximized state is restored.
-8. Confirm the window, taskbar, and `pkb-gui.exe` show the application icon.
-9. Confirm the icon does not show a checkerboard background.
+1. Start `pkb-gui.exe` without `--workspace` and confirm the workspace gate appears.
+2. Choose an existing knowledge-base folder.
+3. Confirm startup only shows workspace and index status.
+4. Confirm the home summary remains unloaded until clicking `刷新首页摘要`.
+5. Confirm no index/reindex task starts automatically.
+6. Confirm an empty workspace shows a missing-index message and does not create `.kb\`.
+7. Resize the window, close it, and reopen to confirm the window size and position are remembered.
+8. Maximize the window, close it, and reopen to confirm maximized state is restored.
+9. Confirm the window, taskbar, and `pkb-gui.exe` show the application icon.
+10. Confirm the icon does not show a checkerboard background.
 
 ## Version info and icon
 
-`version_info.txt` adds Windows metadata including `ProductName`, `FileDescription`, `ProductVersion`, and `CompanyName`. The current values identify the app as `Personal Knowledge Base` and use `ProductVersion` `2.0.0-beta.3`.
+`version_info.txt` adds Windows metadata including `ProductName`, `FileDescription`, `ProductVersion`, and `CompanyName`. The current values identify the app as `Personal Knowledge Base` and use `ProductVersion` `2.0.0-beta.4`.
 
 Icon assets live in `assets\app-icon\`:
 
@@ -136,4 +139,4 @@ Do not use an image with a checkerboard background as a final icon. Checkerboard
 - This build does not perform code signing.
 - This build does not include an auto-update mechanism.
 - No mutation UI, RSS, vector search, or AI features are included.
-- A graphical workspace picker is future work; use `--workspace PATH` for now.
+- Creating a new workspace from the GUI is future work; choose an existing folder for now.

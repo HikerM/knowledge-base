@@ -70,6 +70,18 @@ def main() -> int:
         assert written.window_height >= MIN_HEIGHT
         assert written.last_opened_workspace == str(SOURCE_ROOT)
 
+        remembered_workspace = Path(tmp) / "remembered-workspace"
+        remembered_workspace.mkdir()
+        assert save_window_settings(GuiWindowSettings(last_opened_workspace=str(remembered_workspace)), settings_path)
+        restored_window = MainWindow(gui_settings_path=settings_path)
+        restored_window.show()
+        app.processEvents()
+        assert restored_window.workspace_path == remembered_workspace.resolve()
+        assert restored_window.shell.current_route == "dashboard"
+        assert not (remembered_workspace / ".kb").exists()
+        restored_window.close()
+        app.processEvents()
+
     print("gui settings tests passed")
     return 0
 

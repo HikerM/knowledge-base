@@ -64,7 +64,7 @@ python -m gui.app
 桌面 GUI / EXE 运行边界：
 
 - 当前是 one-folder packaging hardening，不是正式 installer。
-- 用户知识数据不放安装目录；workspace 由当前目录或 `--workspace PATH` 决定。
+- 用户知识数据不放安装目录；EXE 可通过 `--workspace PATH` 指定工作区；无参数首次启动会显示工作区入口，不会把安装目录或当前目录自动当作知识库。
 - GUI 本地设置写入 `%LOCALAPPDATA%\PersonalKnowledgeBase\settings\gui-settings.json`，用于记住窗口大小、位置和最大化状态。
 - GUI 日志写入 `%LOCALAPPDATA%\PersonalKnowledgeBase\logs\pkb-gui.log`。
 - GUI 设置不写入 workspace、`knowledge/`、`.kb/` 或 `config/`。

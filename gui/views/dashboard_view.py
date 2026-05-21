@@ -78,7 +78,9 @@ class DashboardView(QWidget):
         workspace_path = str(data.get("workspace_path") or "")
         self._set_card("workspace", "工作区", Path(workspace_path).name or "未选择", _short_path(workspace_path))
         self.cards["workspace"].setToolTip(workspace_path)
-        self._set_card("index", "索引状态", status_label(data.get("index_status")), "启动只读取索引元数据")
+        index_status = data.get("index_status")
+        caption = "未检测到搜索索引，你可以稍后建立索引" if index_status == "missing" else "启动只读取索引状态"
+        self._set_card("index", "索引状态", status_label(index_status), caption)
         self._set_card("documents", "文档数量", f"{data.get('document_count', 0)} 篇", f"分块 {data.get('chunk_count', 0)} 个")
         self._set_card("backup", "备份状态", "尚未加载", "刷新首页摘要后读取")
         self._set_card("tasks", "任务状态", "尚未加载", "刷新首页摘要后读取")
