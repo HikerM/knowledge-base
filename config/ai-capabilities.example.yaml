@@ -1,0 +1,347 @@
+schema_version: "0.1"
+stage: "design_only"
+description: "Draft AI assistant capability registry for v2.1.0 control-plane design. Not runtime configuration."
+
+global_rules:
+  unregistered_capability: "forbidden"
+  service_layer_only: true
+  direct_markdown_access: false
+  direct_sqlite_access: false
+  cli_command_construction: false
+  cloud_context_preview_required: true
+  long_term_memory_requires_confirmation: true
+  writes_require:
+    - "plan"
+    - "snapshot"
+    - "approval"
+    - "task_queue"
+    - "execute"
+
+levels:
+  L0:
+    name: "read_only"
+    description: "Read-only service capability."
+    can_execute: true
+    can_modify_workspace: false
+  L1:
+    name: "ai_suggestion"
+    description: "AI-generated response, summary, explanation, comparison, draft, or suggestion without persistence."
+    can_execute: false
+    can_modify_workspace: false
+  L2:
+    name: "plan_only"
+    description: "Structured plan generation only. No mutation execution."
+    can_execute: false
+    can_modify_workspace: false
+  L3:
+    name: "safe_execute"
+    description: "Low-risk safe execute behind plan, snapshot, approval, and TaskQueue."
+    can_execute: true
+    can_modify_workspace: true
+  L4:
+    name: "forbidden_destructive"
+    description: "Forbidden or destructive capability."
+    can_execute: false
+    can_modify_workspace: false
+
+capabilities:
+  - id: "search_knowledge"
+    intent: "search_knowledge"
+    level: "L0"
+    service: "knowledge_app.services.search_service.SearchService.search"
+    read_only: true
+    requires_ai: false
+    requires_confirmation: false
+    requires_cloud_context_preview: false
+    allowed_context:
+      - "formal_search_results"
+    default_filters:
+      layers:
+        - "rules"
+        - "checklists"
+        - "snippets"
+      status:
+        - "active"
+      review_required: false
+    audit:
+      record_intent: true
+      record_citations: true
+      record_context_ids: true
+      record_task_id: false
+    current_version: "design_only"
+
+  - id: "open_document"
+    intent: "open_document"
+    level: "L0"
+    service: "knowledge_app.services.document_service.DocumentService.open_document"
+    read_only: true
+    requires_ai: false
+    requires_confirmation: false
+    requires_cloud_context_preview: false
+    allowed_context:
+      - "explicit_selected_document"
+    audit:
+      record_intent: true
+      record_citations: true
+      record_context_ids: true
+      record_task_id: false
+    current_version: "design_only"
+
+  - id: "summarize_current_document"
+    intent: "summarize_document"
+    level: "L1"
+    service: "knowledge_app.services.document_service.DocumentService.open_document"
+    provider: "AIProvider.summarize"
+    read_only: true
+    requires_ai: true
+    requires_confirmation: false
+    requires_cloud_context_preview: true
+    allowed_context:
+      - "current_document"
+      - "explicit_selected_document"
+    audit:
+      record_intent: true
+      record_citations: true
+      record_context_ids: true
+      record_task_id: false
+    current_version: "design_only"
+
+  - id: "explain_current_document"
+    intent: "explain_document"
+    level: "L1"
+    service: "knowledge_app.services.document_service.DocumentService.open_document"
+    provider: "AIProvider.generate"
+    read_only: true
+    requires_ai: true
+    requires_confirmation: false
+    requires_cloud_context_preview: true
+    allowed_context:
+      - "current_document"
+      - "explicit_selected_document"
+    audit:
+      record_intent: true
+      record_citations: true
+      record_context_ids: true
+      record_task_id: false
+    current_version: "design_only"
+
+  - id: "compare_selected_documents"
+    intent: "compare_documents"
+    level: "L1"
+    service: "knowledge_app.services.document_service.DocumentService.open_document"
+    provider: "AIProvider.compare"
+    read_only: true
+    requires_ai: true
+    requires_confirmation: true
+    requires_cloud_context_preview: true
+    allowed_context:
+      - "explicit_selected_documents"
+    audit:
+      record_intent: true
+      record_citations: true
+      record_context_ids: true
+      record_task_id: false
+    current_version: "design_only"
+
+  - id: "create_checklist_draft"
+    intent: "create_checklist_draft"
+    level: "L1"
+    provider: "AIProvider.extract_checklist"
+    read_only: true
+    requires_ai: true
+    requires_confirmation: false
+    requires_cloud_context_preview: true
+    allowed_context:
+      - "current_document"
+      - "selected_search_results"
+      - "formal_search_results"
+    output_policy:
+      persistence: "conversation_only"
+      save_requires_future_plan: true
+    audit:
+      record_intent: true
+      record_citations: true
+      record_context_ids: true
+      record_task_id: false
+    current_version: "design_only"
+
+  - id: "suggest_category"
+    intent: "suggest_category"
+    level: "L1"
+    service: "knowledge_app.services.category_service.CategoryService"
+    provider: "AIProvider.classify"
+    read_only: true
+    requires_ai: true
+    requires_confirmation: false
+    requires_cloud_context_preview: true
+    allowed_context:
+      - "current_document"
+      - "category_metadata"
+    output_policy:
+      persistence: "conversation_only"
+      applying_suggestion_requires_separate_capability: true
+    audit:
+      record_intent: true
+      record_citations: true
+      record_context_ids: true
+      record_task_id: false
+    current_version: "design_only"
+
+  - id: "create_memory_candidate"
+    intent: "create_memory_candidate"
+    level: "L1"
+    service: "future_ai_memory_service.create_candidate"
+    read_only: false
+    requires_ai: true
+    requires_confirmation: true
+    requires_cloud_context_preview: false
+    allowed_context:
+      - "current_conversation"
+    output_policy:
+      persistence: "candidate_only"
+      save_requires_confirmation: true
+    audit:
+      record_intent: true
+      record_citations: false
+      record_context_ids: true
+      record_task_id: false
+    current_version: "design_only"
+
+  - id: "update_category_display_name"
+    intent: "update_category_display_name"
+    level: "L3"
+    service: "knowledge_app.services.safe_mutation_service.SafeMutationService"
+    read_only: false
+    requires_ai: false
+    requires_confirmation: true
+    requires_cloud_context_preview: false
+    allowed_context:
+      - "category_metadata"
+      - "safe_mutation_plan"
+    execution_contract:
+      requires_plan: true
+      requires_snapshot: true
+      requires_approval: true
+      requires_task_queue: true
+      allowed_files:
+        - "config/categories.yaml"
+      forbidden_changes:
+        - "category_id"
+        - "path"
+        - "slug"
+        - "knowledge_markdown"
+        - "sqlite_schema"
+    audit:
+      record_intent: true
+      record_citations: false
+      record_context_ids: true
+      record_task_id: true
+    current_version: "design_only"
+
+  - id: "update_category_description"
+    intent: "update_category_description"
+    level: "L3"
+    service: "knowledge_app.services.safe_mutation_service.SafeMutationService"
+    read_only: false
+    requires_ai: false
+    requires_confirmation: true
+    requires_cloud_context_preview: false
+    allowed_context:
+      - "category_metadata"
+      - "safe_mutation_plan"
+    execution_contract:
+      requires_plan: true
+      requires_snapshot: true
+      requires_approval: true
+      requires_task_queue: true
+      allow_empty_requires_explicit_flag: true
+      allowed_files:
+        - "config/categories.yaml"
+      forbidden_changes:
+        - "category_id"
+        - "path"
+        - "slug"
+        - "knowledge_markdown"
+        - "sqlite_schema"
+    audit:
+      record_intent: true
+      record_citations: false
+      record_context_ids: true
+      record_task_id: true
+    current_version: "design_only"
+
+  - id: "archive_documents_plan"
+    intent: "archive_documents"
+    level: "L2"
+    service: "future_archive_plan_service"
+    read_only: false
+    requires_ai: false
+    requires_confirmation: true
+    requires_cloud_context_preview: false
+    allowed_context:
+      - "explicit_selected_documents"
+      - "archive_plan"
+    output_policy:
+      execute_forbidden_current_stage: true
+    audit:
+      record_intent: true
+      record_citations: true
+      record_context_ids: true
+      record_task_id: false
+    current_version: "future_plan_only"
+
+  - id: "delete_document"
+    intent: "delete_documents"
+    level: "L4"
+    service: null
+    read_only: false
+    requires_ai: false
+    requires_confirmation: true
+    requires_cloud_context_preview: false
+    allowed_context: []
+    output_policy:
+      deny_message: "Deleting documents through the AI assistant is forbidden."
+    audit:
+      record_intent: true
+      record_citations: false
+      record_context_ids: false
+      record_task_id: false
+    current_version: "forbidden"
+
+  - id: "restore_backup_plan"
+    intent: "restore_backup"
+    level: "L2"
+    service: "knowledge_app.services.restore_plan_service.RestorePlanService"
+    read_only: false
+    requires_ai: false
+    requires_confirmation: true
+    requires_cloud_context_preview: false
+    allowed_context:
+      - "backup_manifest"
+      - "restore_plan"
+    output_policy:
+      execute_forbidden_current_stage: true
+    audit:
+      record_intent: true
+      record_citations: false
+      record_context_ids: true
+      record_task_id: false
+    current_version: "future_plan_only"
+
+  - id: "promote_knowledge"
+    intent: "promote_knowledge"
+    level: "L4"
+    service: null
+    read_only: false
+    requires_ai: false
+    requires_confirmation: true
+    requires_cloud_context_preview: false
+    allowed_context: []
+    output_policy:
+      deny_message: "AI must not promote knowledge automatically. Future plan-only flow must require human review metadata."
+    audit:
+      record_intent: true
+      record_citations: true
+      record_context_ids: true
+      record_task_id: false
+    current_version: "forbidden"

@@ -50,6 +50,17 @@ GUI Design Contract：
 - GUI Phase 1 只能做 read-only MVP：工作区入口、首页、搜索、知识库、文档预览、任务中心摘要、设置入口。
 - GUI Phase 1 不暴露 category `display_name` / `description` execute，不暴露 archive/delete/merge/template apply/restore execute，不暴露 RSS/vector search，不做真实 mutation UI。
 
+AI Assistant Control Plane：
+
+- v2.1.0 新增 AI 助手控制平面设计，见 [docs/ai-assistant-control-plane.md](D:/AI/personal-knowledge-base/docs/ai-assistant-control-plane.md)、[docs/ai-intent-taxonomy.md](D:/AI/personal-knowledge-base/docs/ai-intent-taxonomy.md)、[docs/ai-capability-registry.md](D:/AI/personal-knowledge-base/docs/ai-capability-registry.md)、[docs/ai-permission-policy.md](D:/AI/personal-knowledge-base/docs/ai-permission-policy.md)、[docs/ai-memory-design.md](D:/AI/personal-knowledge-base/docs/ai-memory-design.md)、[docs/ai-context-policy.md](D:/AI/personal-knowledge-base/docs/ai-context-policy.md) 和 [docs/ai-floating-assistant-ui-contract.md](D:/AI/personal-knowledge-base/docs/ai-floating-assistant-ui-contract.md)。
+- v2.1.0 只做设计文档、权限边界和能力注册表草案；示例配置见 [config/ai-capabilities.example.yaml](D:/AI/personal-knowledge-base/config/ai-capabilities.example.yaml)。
+- AI 助手不是当前 v2.0.0 Windows installer 基础版的功能；当前 EXE 不包含真实 AI、模型安装、OpenAI/本地模型接入、悬浮聊天 UI、RSS、vector search 或 mutation UI。
+- 下一阶段只允许控制平面设计：`用户自然语言 -> IntentRouter -> CapabilityRegistry -> PermissionPolicy -> ContextBuilder -> AIProvider -> Response / Plan -> Confirmation if needed -> Service / TaskQueue`。
+- AI 助手不得直接读写 Markdown，不得直接读写 SQLite，不得拼接 CLI 命令字符串，只能通过 `knowledge_app.services`。
+- AI 写操作必须遵守 `plan -> snapshot -> approval -> TaskQueue -> execute`；archive、delete、restore、promote、template apply 等破坏性能力当前 forbidden 或 future plan-only。
+- AI 长期记忆必须用户确认后保存；对话记录不等于长期记忆，用户必须能查看、删除和关闭记忆。
+- 云端 AI 发送资料前必须展示 context preview 并获得确认；基于知识库内容的 AI 输出必须带 citation。
+
 运行 GUI skeleton：
 
 ```bash
@@ -84,7 +95,7 @@ python -m gui.app
 - 软件安装目录不得作为 workspace；创建向导不得默认使用安装目录、当前工作目录或任何未经用户确认的目录。
 - 应用图标资源位于 `assets/app-icon/`；`app-icon.ico` 用于 Windows EXE，`app-icon.png` 用于 GUI 窗口和任务栏运行时图标。
 - 图标必须是真透明背景，不得使用棋盘格背景图伪装透明；可用 `python tests/icon_asset_test.py` 验证 PNG alpha 和 ICO 尺寸。
-- one-file、code signing 和 auto update 仍是后续工作；AI、RSS、vector search 和 mutation UI 继续后置。
+- one-file、code signing 和 auto update 仍是后续工作；真实 AI provider、模型安装、悬浮聊天 UI、RSS、vector search 和 mutation UI 继续后置。v2.1.0 仅记录 AI Assistant Control Plane 设计，不代表 installer 已包含 AI 功能。
 
 Phase 1 GUI skeleton 只读限制：
 
@@ -864,6 +875,7 @@ knowledge/09-ai-agent/snippets/codex/agent-task-template.md
 
 ## 后续扩展方向
 
+- v2.1.0 AI Assistant Control Plane：先固定 intent、capability、permission、memory、context、provider abstraction 和 floating assistant UI contract；不接真实 AI。
 - RSS 和 GitHub Releases 受控采集，结果先进入 raw。
 - 自动摘要和人工审核队列。
 - 向量检索作为 FTS5 补充召回或 rerank。
