@@ -57,12 +57,14 @@ AI Assistant Control Plane：
 - v2.1.1 新增 AI config loader / policy static tests：`knowledge_app/ai` 只负责 capability example loader、schema validation 和 PermissionPolicy 静态判定；测试覆盖 14 个示例 capability、unknown forbidden、L0/L1/L3/L4 决策和 service 字符串禁用 CLI/subprocess/shell。
 - v2.2.0 新增 MockAIProvider 和右下角悬浮 AI 助手 UI skeleton，用于验证 UI、registry、permission policy 和消息卡片形态；它不是真实 AI。
 - v2.3.0 新增 Ask My Knowledge / Summarize Current Document mock flow：问我的资料只通过 `SearchService.search` 搜索 formal 层；总结当前文档只通过 `DocumentService.open_document` 打开明确选中的单篇文档。
+- v2.4.0 新增 ConversationStore / MemoryService design-only 文档，见 [docs/ai-conversation-store-design.md](D:/AI/personal-knowledge-base/docs/ai-conversation-store-design.md)、[docs/ai-memory-service-design.md](D:/AI/personal-knowledge-base/docs/ai-memory-service-design.md) 和 [docs/ai-memory-privacy-retention-policy.md](D:/AI/personal-knowledge-base/docs/ai-memory-privacy-retention-policy.md)。
 - `config/ai-capabilities.example.yaml` 仍是 example contract，不是运行时自动执行入口；v2.3.0 只在用户发送 mock assistant 消息时显式加载它做白名单和 policy 判定，不会执行 capability。
-- v2.3.0 仍不接 OpenAI、本地模型、ModelScope，不下载模型，不做 RSS/vector，不实现真实 AI 问答，不保存长期记忆，不执行 mutation，不改变 search/index/audit 行为。
+- v2.4.0 仍不接 OpenAI、本地模型、ModelScope，不下载模型，不做 RSS/vector，不实现真实 AI 问答，不实现真实 ConversationStore，不实现持久化 MemoryService，不保存真实长期记忆，不执行 mutation，不改变 search/index/audit 行为。
 - AI 助手控制平面仍必须遵守：`用户自然语言 -> IntentRouter -> CapabilityRegistry -> PermissionPolicy -> ContextBuilder -> AIProvider -> Response / Plan -> Confirmation if needed -> Service / TaskQueue`。当前实现只到 MockAIProvider response，不进入真实 Service / TaskQueue 执行。
 - AI 助手不得直接读写 Markdown，不得直接读写 SQLite，不得拼接 CLI 命令字符串，只能通过 `knowledge_app.services`。
 - AI 写操作必须遵守 `plan -> snapshot -> approval -> TaskQueue -> execute`；archive、delete、restore、promote、template apply 等破坏性能力当前 forbidden 或 future plan-only。
 - AI 长期记忆必须用户确认后保存；对话记录不等于长期记忆，用户必须能查看、删除和关闭记忆。
+- AI memory 和 conversation 不得写入 `knowledge/`、不得放入 `.kb/`、不得放安装目录；未来推荐 workspace-scoped `ai/conversations/`、`ai/memory/` 和 `ai/drafts/`，并且必须先有 deletion / retention / backup policy。
 - 云端 AI 发送资料前必须展示 context preview 并获得确认；基于知识库内容的 AI 输出必须带 citation。
 
 运行 GUI skeleton：
@@ -889,7 +891,7 @@ knowledge/09-ai-agent/snippets/codex/agent-task-template.md
 
 ## 后续扩展方向
 
-- v2.3.0 AI Assistant Mock Ask/Summarize：在 v2.2.0 skeleton 基础上增加问我的资料和总结当前文档 mock flow；仍不接真实 AI，不接 OpenAI/本地模型/ModelScope，不联网，不保存长期记忆，不执行 mutation。
+- v2.4.0 AI ConversationStore / MemoryService Design：在 v2.3.0 mock ask/summarize 基础上设计对话记录、短期记忆、长期记忆候选、长期记忆保存/删除/禁用、保留周期、隐私模式、备份和云端 context preview 边界；仍不接真实 AI，不接 OpenAI/本地模型/ModelScope，不联网，不实现真实 ConversationStore，不实现持久化 MemoryService，不保存长期记忆，不执行 mutation。
 - RSS 和 GitHub Releases 受控采集，结果先进入 raw。
 - 自动摘要和人工审核队列。
 - 向量检索作为 FTS5 补充召回或 rerank。
