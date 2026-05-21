@@ -13,7 +13,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[3]
 INSTALLER_DIR = REPO_ROOT / "packaging" / "installer"
 OUTPUT_DIR = INSTALLER_DIR / "output"
-INSTALLER_PATH = OUTPUT_DIR / "PersonalKnowledgeBase-Setup-v2.0.0-rc.1.exe"
+INSTALLER_PATH = OUTPUT_DIR / "PersonalKnowledgeBase-Setup-v2.0.0-rc.2.exe"
 ISS_PATH = INSTALLER_DIR / "inno" / "pkb-gui.iss"
 DIST_DIR = REPO_ROOT / "dist" / "pkb-gui"
 DIST_EXE = DIST_DIR / "pkb-gui.exe"
@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
         details["installer_size_bytes"] = 0
         details["installer_size_reasonable"] = bool(args.allow_missing_installer)
 
-    check(INSTALLER_PATH.name == "PersonalKnowledgeBase-Setup-v2.0.0-rc.1.exe", "installer_filename", details, errors, "installer filename is incorrect")
+    check(INSTALLER_PATH.name == "PersonalKnowledgeBase-Setup-v2.0.0-rc.2.exe", "installer_filename", details, errors, "installer filename is incorrect")
     check(DIST_DIR.exists() and DIST_DIR.is_dir(), "dist_dir_exists", details, errors, f"dist directory is missing: {DIST_DIR}")
     check(DIST_EXE.exists(), "dist_exe_exists", details, errors, f"dist executable is missing: {DIST_EXE}")
     check(INTERNAL_DIR.exists() and INTERNAL_DIR.is_dir(), "dist_one_folder", details, errors, "dist is not a one-folder PyInstaller output")

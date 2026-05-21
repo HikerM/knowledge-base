@@ -11,7 +11,7 @@ from knowledge_app.models.workspace_creation_models import WorkspaceCreationPlan
 from knowledge_app.services.workspace_creation_plan_service import WorkspaceCreationPlanService
 
 
-APP_VERSION = "v2.0.0-beta.8"
+APP_VERSION = "v2.0.0-rc.2"
 VALID_TEMPLATE_IDS = {"personal", "learning", "work", "developer", "custom"}
 FORBIDDEN_CREATED_PARTS = {".git", ".kb"}
 
