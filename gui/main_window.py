@@ -9,6 +9,7 @@ from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QMainWindow
 
+from gui.app_icon import apply_window_icon
 from gui import APP_NAME, PHASE
 from gui.adapters.service_adapter import ServiceAdapter
 from gui.settings.gui_settings import (
@@ -37,6 +38,7 @@ class MainWindow(QMainWindow):
         self.shell = AppShell(self.adapter, gui_settings_provider=self.gui_settings_snapshot, reset_window_layout=self.reset_window_layout)
         self.setCentralWidget(self.shell)
         self.setWindowTitle(f"{APP_NAME} - {PHASE}")
+        apply_window_icon(self)
         self.setMinimumSize(MIN_WIDTH, MIN_HEIGHT)
         self._restore_window_geometry()
 

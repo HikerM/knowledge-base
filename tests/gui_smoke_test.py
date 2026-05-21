@@ -23,6 +23,7 @@ def main() -> int:
         return 0
 
     from gui.fixtures.fake_service_adapter import FakeServiceAdapter
+    from gui.app_icon import load_app_icon
     from gui.main_window import MainWindow
     from gui.styles.theme import apply_light_theme
     from gui.widgets.card import Card
@@ -32,6 +33,7 @@ def main() -> int:
     app = QApplication.instance() or QApplication(sys.argv)
     apply_light_theme(app)
     assert "QFrame#topbar" in app.styleSheet()
+    assert not load_app_icon().isNull()
     chip = StatusChip("索引：就绪", "ready")
     assert chip.text() == "索引：就绪"
     assert SearchInput("搜索").placeholderText() == "搜索"
@@ -67,7 +69,8 @@ def main() -> int:
         }
         assert not any(call[0] in startup_forbidden for call in adapter.calls)
         assert window.minimumWidth() >= 920
-        assert "v2.0.0-alpha.3" in window.windowTitle()
+        assert "v2.0.0-beta.3" in window.windowTitle()
+        assert not window.windowIcon().isNull()
         nav_labels = [button.text() for button in window.shell.sidebar._buttons.values()]
         for label in ["首页", "搜索", "知识库", "审核", "任务中心", "维护", "设置"]:
             assert label in nav_labels

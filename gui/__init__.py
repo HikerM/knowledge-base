@@ -1,4 +1,6 @@
 """PySide6 read-only GUI for the personal knowledge base."""
 
 APP_NAME = "个人知识库"
-PHASE = "v2.0.0-alpha.3 只读 MVP"
+PRODUCT_NAME = "Personal Knowledge Base"
+ORGANIZATION_NAME = "HikerM"
+PHASE = "v2.0.0-beta.3 图标与品牌基线"

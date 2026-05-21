@@ -19,6 +19,8 @@ CLEAN_SCRIPT_PATH = SOURCE_ROOT / "packaging" / "pyinstaller" / "clean.ps1"
 CHECK_DIST_PATH = SOURCE_ROOT / "packaging" / "pyinstaller" / "check_dist.py"
 EXE_SMOKE_PATH = SOURCE_ROOT / "packaging" / "pyinstaller" / "exe_smoke.py"
 VERSION_INFO_PATH = SOURCE_ROOT / "packaging" / "pyinstaller" / "version_info.txt"
+ICON_PNG_PATH = SOURCE_ROOT / "assets" / "app-icon" / "app-icon.png"
+ICON_ICO_PATH = SOURCE_ROOT / "assets" / "app-icon" / "app-icon.ico"
 REQUIREMENTS_PATH = SOURCE_ROOT / "requirements.txt"
 ENTRYPOINT_PATH = SOURCE_ROOT / "gui" / "app.py"
 
@@ -31,6 +33,8 @@ def main() -> int:
     assert CHECK_DIST_PATH.exists(), "check_dist.py is missing"
     assert EXE_SMOKE_PATH.exists(), "exe_smoke.py is missing"
     assert VERSION_INFO_PATH.exists(), "version_info.txt is missing"
+    assert ICON_PNG_PATH.exists(), "app-icon.png is missing"
+    assert ICON_ICO_PATH.exists(), "app-icon.ico is missing"
     assert ENTRYPOINT_PATH.exists(), "GUI entrypoint is missing"
 
     spec = SPEC_PATH.read_text(encoding="utf-8")
@@ -50,6 +54,9 @@ def main() -> int:
     assert "COLLECT(" in spec, "spec must use one-folder COLLECT output"
     assert "onefile" not in spec.lower(), "spec must not enable one-file mode"
     assert "version_info.txt" in spec, "spec must include Windows version info"
+    assert "app-icon.ico" in spec, "spec must include the Windows application icon"
+    assert "app-icon.png" in spec, "spec must include the runtime window icon"
+    assert "icon=str(icon_path)" in spec, "EXE must use app-icon.ico"
     assert "collect_submodules(\"gui\")" in spec, "spec must include gui modules"
     assert "collect_submodules(\"knowledge_app\")" in spec, "spec must include knowledge_app modules"
     assert "collect_submodules(\"knowledge_core\")" in spec, "spec must include knowledge_core modules"
@@ -66,6 +73,8 @@ def main() -> int:
     assert "gui-settings.json" in exe_smoke, "EXE smoke must validate GUI settings path"
     for field in ["ProductName", "FileDescription", "ProductVersion", "CompanyName"]:
         assert field in version_info, f"version info missing {field}"
+    assert "Personal Knowledge Base" in version_info, "version info must use the product name"
+    assert "2.0.0-beta.3" in version_info, "version info must match the beta.3 branding baseline"
 
     forbidden_spec_tokens = [
         "knowledge/",
@@ -92,6 +101,8 @@ def main() -> int:
         "GUI settings",
         "LocalAppData",
         "window size and position",
+        "app-icon.ico",
+        "checkerboard",
     ]
     for phrase in required_readme_phrases:
         assert phrase in readme, f"README missing required packaging note: {phrase}"

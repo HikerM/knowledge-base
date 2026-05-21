@@ -41,7 +41,7 @@ GUI Design Contract：
 - GUI Phase 1 Read-only MVP Screen Contract 见 [docs/gui-phase-1-read-only-mvp-contract.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-read-only-mvp-contract.md)。
 - GUI Phase 1 Engineering Preparation Contract 见 [docs/gui-phase-1-engineering-prep.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-engineering-prep.md)。
 - GUI Technology Selection 见 [docs/gui-technology-selection.md](D:/AI/personal-knowledge-base/docs/gui-technology-selection.md)。
-- 当前已完成 PySide6 GUI Phase 1 read-only MVP、控件级浅色视觉打磨、文档阅读布局修正，以及 PyInstaller one-folder packaging baseline。当前打包产物仍不是正式 installer。
+- 当前已完成 PySide6 GUI Phase 1 read-only MVP、控件级浅色视觉打磨、文档阅读布局修正、PyInstaller one-folder packaging hardening，以及 icon polish / app branding baseline。当前打包产物仍不是正式 installer。
 - 当前推荐路线：第一版 Read-only MVP 优先 PySide6 / Qt for Python，因为它可以直接复用 Python service layer，不需要 sidecar / local HTTP service / bridge；Tauri + React 作为后续 UI 质量增强路线。
 - GUI Phase 1 skeleton 已按 `View -> ViewModel -> Adapter -> knowledge_app.services` 建立边界；fake adapter 位于 `gui/fixtures/`，用于 GUI 测试和无真实 workspace 场景。
 - GUI 顶部栏不是主导航，只保留 workspace switch、global search / command search、index/task/backup status indicator 和 settings/user entry。
@@ -69,6 +69,8 @@ python -m gui.app
 - GUI 日志写入 `%LOCALAPPDATA%\PersonalKnowledgeBase\logs\pkb-gui.log`。
 - GUI 设置不写入 workspace、`knowledge/`、`.kb/` 或 `config/`。
 - EXE 不强制 Git，不自动 index；空 workspace 只显示 `index_status=missing`。
+- 应用图标资源位于 `assets/app-icon/`；`app-icon.ico` 用于 Windows EXE，`app-icon.png` 用于 GUI 窗口和任务栏运行时图标。
+- 图标必须是真透明背景，不得使用棋盘格背景图伪装透明；可用 `python tests/icon_asset_test.py` 验证 PNG alpha 和 ICO 尺寸。
 - one-file、installer、code signing 和 auto update 是后续工作。
 
 Phase 1 GUI skeleton 只读限制：
@@ -696,7 +698,7 @@ GUI 不应直接读写 Markdown 或 SQLite，也不应通过拼接 CLI 命令字
 
 v1.7.0 起，后台任务的稳定边界是 `TaskQueueService`。GUI / EXE 应调用 service API 创建、查询、取消和运行任务，UI 主线程不得直接执行 index/audit/backup/restore/archive/template apply。v1.8.x 当前安全执行只接入 `noop`、`workspace_status`、`backup_create`、`audit`、`index` 以及最低风险的 `category_update_display_name_execute`、`category_update_description_execute`；两者都必须先有 plan、snapshot、approval，并且只写 `config/categories.yaml` 的对应展示字段。GUI 可通过 task progress/log API 轮询或订阅任务状态。Task cleanup 必须 plan-first；retry 必须保留 `retry_of` 链路；cancellation 是 cooperative。restore/archive/delete/merge/template apply 等 destructive task 仍是 future work。
 
-当前已完成 PyInstaller one-folder EXE packaging spike / hardening；它仍不是 installer、不是 one-file 包、未签名、无自动更新。技术选型评估路线如下：
+当前已完成 PyInstaller one-folder EXE packaging spike / hardening，并补齐基础应用图标和品牌显示；它仍不是 installer、不是 one-file 包、未签名、无自动更新。技术选型评估路线如下：
 
 - 第一版 Read-only MVP 推荐：PySide6 / Qt for Python。
 - 第二选择 / 后续 UI 质量增强路线：Tauri + React + Python sidecar/service。

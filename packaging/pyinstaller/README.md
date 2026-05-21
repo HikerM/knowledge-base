@@ -1,6 +1,6 @@
 # PyInstaller one-folder GUI packaging hardening
 
-This directory contains the `v2.0.0-beta.2` PyInstaller one-folder packaging hardening for the PySide6 read-only GUI. It is not an installer, not a one-file executable, not a signed release, and not an auto-updater.
+This directory contains the `v2.0.0-beta.3` PyInstaller one-folder packaging hardening and icon branding baseline for the PySide6 read-only GUI. It is not an installer, not a one-file executable, not a signed release, and not an auto-updater.
 
 ## Install packaging dependencies
 
@@ -23,6 +23,7 @@ From the repository root:
 powershell -ExecutionPolicy Bypass -File packaging\pyinstaller\clean.ps1
 powershell -ExecutionPolicy Bypass -File packaging\pyinstaller\build.ps1
 python packaging\pyinstaller\check_dist.py
+python tests\icon_asset_test.py
 ```
 
 `build.ps1` runs `python -m PyInstaller packaging\pyinstaller\pkb-gui.spec --noconfirm` and then runs `check_dist.py`. `clean.ps1` removes only repository-local `build\` and `dist\`.
@@ -38,6 +39,20 @@ dist\pkb-gui\
 ```
 
 The spec uses `COLLECT`, does not enable one-file mode, and does not build an installer. The bundle must not contain workspace/runtime data such as `knowledge\`, `.kb\`, `backups\`, `.git\`, `tmp\`, or `exports\`.
+
+The executable icon is loaded from:
+
+```text
+assets\app-icon\app-icon.ico
+```
+
+The runtime window and taskbar icon uses:
+
+```text
+assets\app-icon\app-icon.png
+```
+
+Both icon files are bundled into `_internal\assets\app-icon\` for the packaged application. The `.ico` must be present before packaging; the spec fails clearly if it is missing.
 
 ## Run the packaged GUI
 
@@ -75,6 +90,7 @@ Before and after packaging, run:
 python tests\startup_smoke.py
 python tests\gui_smoke_test.py
 python tests\gui_interaction_test.py
+python tests\icon_asset_test.py
 python tests\packaging_smoke_test.py
 ```
 
@@ -93,10 +109,25 @@ Manual checks:
 5. Confirm an empty workspace shows `index_status=missing` and does not create `.kb\`.
 6. Resize the window, close it, and reopen to confirm the window size and position are remembered.
 7. Maximize the window, close it, and reopen to confirm maximized state is restored.
+8. Confirm the window, taskbar, and `pkb-gui.exe` show the application icon.
+9. Confirm the icon does not show a checkerboard background.
 
 ## Version info and icon
 
-`version_info.txt` adds Windows metadata including `ProductName`, `FileDescription`, `ProductVersion`, and `CompanyName`. A final transparent `.ico` is not bundled yet; icon polish is a later packaging task.
+`version_info.txt` adds Windows metadata including `ProductName`, `FileDescription`, `ProductVersion`, and `CompanyName`. The current values identify the app as `Personal Knowledge Base` and use `ProductVersion` `2.0.0-beta.3`.
+
+Icon assets live in `assets\app-icon\`:
+
+- `app-icon.png`: transparent-background runtime window icon.
+- `app-icon.ico`: Windows executable icon with 16, 32, 48, 64, 128, and 256 px entries.
+
+Validate icon transparency and ICO sizes with:
+
+```powershell
+python tests\icon_asset_test.py
+```
+
+Do not use an image with a checkerboard background as a final icon. Checkerboards are only editor previews for transparency and must not be baked into the PNG or ICO.
 
 ## Known limitations
 

@@ -7,6 +7,13 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 spec_dir = Path(SPECPATH).resolve()
 project_root = spec_dir.parents[1]
+icon_path = project_root / "assets" / "app-icon" / "app-icon.ico"
+icon_png_path = project_root / "assets" / "app-icon" / "app-icon.png"
+
+if not icon_path.exists():
+    raise FileNotFoundError(f"Application icon is missing: {icon_path}")
+if not icon_png_path.exists():
+    raise FileNotFoundError(f"Application PNG icon is missing: {icon_png_path}")
 
 hiddenimports = (
     collect_submodules("gui")
@@ -14,7 +21,10 @@ hiddenimports = (
     + collect_submodules("knowledge_core")
 )
 
-datas = collect_data_files("PySide6")
+datas = collect_data_files("PySide6") + [
+    (str(icon_path), "assets/app-icon"),
+    (str(icon_png_path), "assets/app-icon"),
+]
 
 a = Analysis(
     [str(project_root / "gui" / "app.py")],
@@ -47,6 +57,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(icon_path),
     version=str(spec_dir / "version_info.txt"),
 )
 
