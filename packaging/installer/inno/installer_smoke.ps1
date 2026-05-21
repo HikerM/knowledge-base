@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..\..\..")
-$installerPath = Join-Path $repoRoot "packaging\installer\output\PersonalKnowledgeBase-Setup-v2.0.0-rc.2.exe"
+$installerPath = Join-Path $repoRoot "packaging\installer\output\PersonalKnowledgeBase-Setup-v2.0.0.exe"
 $repoDrive = [System.IO.Path]::GetPathRoot($repoRoot.Path)
 $tempRoot = Join-Path $repoDrive ("pkb-smoke-" + [System.Guid]::NewGuid().ToString("N").Substring(0, 8))
 $installDir = Join-Path $tempRoot "app"

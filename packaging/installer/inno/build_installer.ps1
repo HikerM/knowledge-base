@@ -6,7 +6,7 @@ $repoRoot = Resolve-Path (Join-Path $scriptDir "..\..\..")
 $pyinstallerBuild = Join-Path $repoRoot "packaging\pyinstaller\build.ps1"
 $issPath = Join-Path $scriptDir "pkb-gui.iss"
 $distExe = Join-Path $repoRoot "dist\pkb-gui\pkb-gui.exe"
-$installerPath = Join-Path $repoRoot "packaging\installer\output\PersonalKnowledgeBase-Setup-v2.0.0-rc.2.exe"
+$installerPath = Join-Path $repoRoot "packaging\installer\output\PersonalKnowledgeBase-Setup-v2.0.0.exe"
 $checkScript = Join-Path $scriptDir "check_installer.py"
 
 function Resolve-Iscc {

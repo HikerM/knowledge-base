@@ -41,7 +41,7 @@ def assert_minimal_workspace(target: Path) -> None:
     workspace_yaml = (target / "workspace.yaml").read_text(encoding="utf-8")
     assert "workspace_name:" in workspace_yaml
     assert "template_id:" in workspace_yaml
-    assert "app_version: \"v2.0.0-rc.2\"" in workspace_yaml
+    assert "app_version: \"v2.0.0\"" in workspace_yaml
     assert "local_only: true" in workspace_yaml
     assert "git_required: false" in workspace_yaml
     assert "auto_index: false" in workspace_yaml

@@ -78,7 +78,7 @@ def main() -> int:
         }
         assert not any(call[0] in startup_forbidden for call in adapter.calls)
         assert window.minimumWidth() >= 920
-        assert "v2.0.0-rc.2" in window.windowTitle()
+        assert "v2.0.0" in window.windowTitle()
         assert not window.windowIcon().isNull()
         nav_labels = [button.text() for button in window.shell.sidebar._buttons.values()]
         for label in ["首页", "搜索", "知识库", "审核", "任务中心", "维护", "设置"]:

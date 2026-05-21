@@ -1,6 +1,6 @@
 # Windows installer spike
 
-This directory contains the `v2.0.0-rc.2` Windows installer acceptance baseline for the PySide6 one-folder GUI. It builds on the `v2.0.0-rc.1` installer spike and remains a release-candidate installer, not the final public release.
+This directory contains the `v2.0.0` Windows installer baseline for the PySide6 one-folder GUI. It builds on the `v2.0.0-rc.1` installer spike and `v2.0.0-rc.2` common-user acceptance polish.
 
 ## Technical choice
 
@@ -38,7 +38,7 @@ powershell -ExecutionPolicy Bypass -File packaging\installer\inno\build_installe
 The installer output is:
 
 ```text
-packaging\installer\output\PersonalKnowledgeBase-Setup-v2.0.0-rc.2.exe
+packaging\installer\output\PersonalKnowledgeBase-Setup-v2.0.0.exe
 ```
 
 The output directory is ignored by Git.
@@ -61,8 +61,8 @@ powershell -ExecutionPolicy Bypass -File packaging\installer\inno\installer_smok
 
 The smoke test verifies silent install, launch with selected workspaces, empty workspace startup without `.kb` creation, service-level minimal workspace creation, uninstall, reinstall, LocalAppData preservation, and workspace preservation. It also launches the packaged app with Git and Python removed from `PATH` to verify they are not runtime requirements.
 
-Manual checks still required for final common-user acceptance:
+Manual checks still tracked for post-release polish:
 
 - Double-click wizard copy and visual flow on a clean ordinary Windows profile.
 - First-run workspace picker wording and new-workspace wizard interaction with a human reviewer.
-- Windows SmartScreen / unsigned-installer wording, because rc.2 is still unsigned.
+- Windows SmartScreen / unsigned-installer wording, because v2.0.0 is still unsigned.

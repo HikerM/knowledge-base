@@ -1,5 +1,5 @@
 #define AppName "Personal Knowledge Base"
-#define AppVersion "2.0.0-rc.2"
+#define AppVersion "2.0.0"
 #define AppPublisher "HikerM"
 #define AppExeName "pkb-gui.exe"
 #define RepoRoot AddBackslash(SourcePath) + "..\..\..\"
@@ -16,7 +16,7 @@ DefaultGroupName={#AppName}
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir={#RepoRoot}packaging\installer\output
-OutputBaseFilename=PersonalKnowledgeBase-Setup-v2.0.0-rc.2
+OutputBaseFilename=PersonalKnowledgeBase-Setup-v2.0.0
 SetupIconFile={#IconPath}
 UninstallDisplayIcon={app}\{#AppExeName}
 Compression=lzma2
@@ -25,8 +25,8 @@ WizardStyle=modern
 VersionInfoCompany={#AppPublisher}
 VersionInfoDescription={#AppName} Installer
 VersionInfoProductName={#AppName}
-VersionInfoProductVersion=2.0.0.2
-VersionInfoVersion=2.0.0.2
+VersionInfoProductVersion=2.0.0.0
+VersionInfoVersion=2.0.0.0
 UsePreviousAppDir=yes
 
 [Languages]

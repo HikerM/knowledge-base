@@ -1,6 +1,6 @@
 # PyInstaller one-folder GUI packaging hardening
 
-This directory contains the PyInstaller one-folder packaging hardening, icon branding, first-run workspace selection, minimal confirmed workspace creation, and first-run polish baseline for the PySide6 GUI. The PyInstaller output is not an installer by itself, not one-file, not signed, and not an auto-updater. The `v2.0.0-rc.2` installer acceptance baseline lives separately under `packaging\installer\` and consumes this one-folder output.
+This directory contains the PyInstaller one-folder packaging hardening, icon branding, first-run workspace selection, minimal confirmed workspace creation, and first-run polish baseline for the PySide6 GUI. The PyInstaller output is not an installer by itself, not one-file, not signed, and not an auto-updater. The `v2.0.0` installer baseline lives separately under `packaging\installer\` and consumes this one-folder output.
 
 ## Install packaging dependencies
 
@@ -117,7 +117,7 @@ Manual checks:
 
 ## Version info and icon
 
-`version_info.txt` adds Windows metadata including `ProductName`, `FileDescription`, `ProductVersion`, and `CompanyName`. The current values identify the app as `Personal Knowledge Base` and use `ProductVersion` `2.0.0-rc.2`.
+`version_info.txt` adds Windows metadata including `ProductName`, `FileDescription`, `ProductVersion`, and `CompanyName`. The current values identify the app as `Personal Knowledge Base` and use `ProductVersion` `2.0.0`.
 
 Icon assets live in `assets\app-icon\`:
 
@@ -135,7 +135,7 @@ Do not use an image with a checkerboard background as a final icon. Checkerboard
 ## Known limitations
 
 - This build does not build a one-file executable.
-- This PyInstaller script does not create an installer by itself; use `packaging\installer\inno\build_installer.ps1` for the rc.2 installer acceptance baseline.
+- This PyInstaller script does not create an installer by itself; use `packaging\installer\inno\build_installer.ps1` for the v2.0.0 installer baseline.
 - This build does not perform code signing.
 - This build does not include an auto-update mechanism.
 - No mutation UI, RSS, vector search, or AI features are included.
