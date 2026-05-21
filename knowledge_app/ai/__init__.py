@@ -16,10 +16,27 @@ from knowledge_app.ai.assistant_models import (
 )
 from knowledge_app.ai.assistant_service import AssistantService
 from knowledge_app.ai.capability_registry import CapabilityRegistry, CapabilityRegistryValidationError
+from knowledge_app.ai.conversation_models import (
+    CitationRecord,
+    ConversationRecord,
+    ConversationSummary,
+    MessageRecord,
+    PolicyDecisionRecord,
+    TaskReference,
+)
+from knowledge_app.ai.memory_models import (
+    MemoryCandidate,
+    MemorySensitivity,
+    MemorySource,
+    MemoryStatus,
+    MemoryType,
+    SavedMemory,
+)
 from knowledge_app.ai.models import Capability, CapabilityAuditSpec, CapabilityLevel, PermissionDecision
 from knowledge_app.ai.mock_provider import MockAIProvider
 from knowledge_app.ai.permission_policy import PermissionPolicy
 from knowledge_app.ai.provider import AIProvider
+from knowledge_app.ai.retention_models import BackupInclusionPolicy, PrivacyModePolicy, RetentionPolicy
 
 __all__ = [
     "AIProvider",
@@ -34,9 +51,24 @@ __all__ = [
     "CapabilityRegistry",
     "CapabilityRegistryValidationError",
     "Citation",
+    "CitationRecord",
+    "ConversationRecord",
+    "ConversationSummary",
+    "MemoryCandidate",
+    "MemorySensitivity",
+    "MemorySource",
+    "MemoryStatus",
+    "MemoryType",
+    "MessageRecord",
     "MockAIProvider",
     "PermissionDecision",
     "PermissionPolicy",
+    "PolicyDecisionRecord",
     "PolicyNotice",
+    "BackupInclusionPolicy",
+    "PrivacyModePolicy",
+    "RetentionPolicy",
+    "SavedMemory",
     "SuggestedAction",
+    "TaskReference",
 ]
