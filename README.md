@@ -41,6 +41,7 @@ GUI Design Contract：
 - GUI Phase 1 Read-only MVP Screen Contract 见 [docs/gui-phase-1-read-only-mvp-contract.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-read-only-mvp-contract.md)。
 - GUI Phase 1 Engineering Preparation Contract 见 [docs/gui-phase-1-engineering-prep.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-engineering-prep.md)。
 - GUI Technology Selection 见 [docs/gui-technology-selection.md](D:/AI/personal-knowledge-base/docs/gui-technology-selection.md)。
+- Workspace Creation Wizard Design 见 [docs/workspace-creation-wizard-design.md](D:/AI/personal-knowledge-base/docs/workspace-creation-wizard-design.md)；v2.0.0-beta.5 只定义“新建知识库”向导和 GUI 合同，不实现真实创建逻辑。
 - 当前已完成 PySide6 GUI Phase 1 read-only MVP、控件级浅色视觉打磨、文档阅读布局修正、PyInstaller one-folder packaging hardening，以及 icon polish / app branding baseline。当前打包产物仍不是正式 installer。
 - 当前推荐路线：第一版 Read-only MVP 优先 PySide6 / Qt for Python，因为它可以直接复用 Python service layer，不需要 sidecar / local HTTP service / bridge；Tauri + React 作为后续 UI 质量增强路线。
 - GUI Phase 1 skeleton 已按 `View -> ViewModel -> Adapter -> knowledge_app.services` 建立边界；fake adapter 位于 `gui/fixtures/`，用于 GUI 测试和无真实 workspace 场景。
@@ -69,6 +70,8 @@ python -m gui.app
 - GUI 日志写入 `%LOCALAPPDATA%\PersonalKnowledgeBase\logs\pkb-gui.log`。
 - GUI 设置不写入 workspace、`knowledge/`、`.kb/` 或 `config/`。
 - EXE 不强制 Git，不自动 index；空 workspace 只显示 `index_status=missing`。
+- 新建知识库向导当前仍是设计阶段；未来创建必须先通过 `WorkspaceCreationPlanService` 生成 plan，用户确认后才允许 `WorkspaceCreateService` 写入 `workspace.yaml` 和目录结构。
+- 软件安装目录不得作为 workspace；创建向导不得默认使用安装目录、当前工作目录或任何未经用户确认的目录。
 - 应用图标资源位于 `assets/app-icon/`；`app-icon.ico` 用于 Windows EXE，`app-icon.png` 用于 GUI 窗口和任务栏运行时图标。
 - 图标必须是真透明背景，不得使用棋盘格背景图伪装透明；可用 `python tests/icon_asset_test.py` 验证 PNG alpha 和 ICO 尺寸。
 - one-file、installer、code signing 和 auto update 是后续工作。
@@ -89,6 +92,8 @@ Plan-only mutation services：
 - v1.5.0 起点阶段只提供 `CategoryPlanService`、`TemplatePlanService`、`WorkspacePlanService` 和对应 CLI wrappers；它们只生成 JSON plan，不执行写操作。
 - plan-only services 固定 `dry_run=true`、`would_modify=false`；`blocked` 只表示未来执行被阻塞，blocked plan 仍是可消费的 JSON 输出。
 - `actions` 是计划动作，不是已执行动作；`validation_commands` 必须始终存在，供未来 GUI 直接展示和执行前确认。
+- v2.0.0-beta.5 的 workspace creation wizard 仍是设计阶段；未来 `WorkspaceCreationPlanService` 只生成创建计划，不写文件、不创建 `.kb/index.sqlite`、不运行 index、不导入旧资料。
+- 未来 `WorkspaceCreateService` 必须只接受已确认 plan 或 plan hash，执行前重新校验路径和 blockers，并且只写 `workspace.yaml`、`knowledge/`、`config/`、`templates/`、`reports/`、可选 `backups/` 等创建产物。
 - v1.8.0 起点阶段建立 Safe Execute Mutation Framework：所有真实 execute mutation 必须经过 plan + local snapshot + approval + TaskQueue。
 - v1.8.0 只允许一个最低风险执行动作：`category_update_display_name_execute`，并且只能修改 `config/categories.yaml` 中的 `display_name`，不得 path rename，不得改 Markdown，不得改 SQLite schema。
 - v1.8.1 新增第二个低风险 config-only 执行动作：`category_update_description_execute`，并且只能修改 `config/categories.yaml` 中的 `description`。空 description 必须通过 `--allow-empty-description` 明确表示 intentional clear。
