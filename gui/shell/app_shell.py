@@ -96,6 +96,7 @@ class AppShell(QWidget):
 
         self._register_navigation_shortcuts()
         self.workspace_gate_view.workspace_selected.connect(self._select_workspace)
+        self.workspace_gate_view.workspace_created.connect(self._workspace_created)
         self.sidebar.route_changed.connect(self.navigate)
         self.topbar.settings_requested.connect(lambda: self.navigate("settings"))
         self.topbar.search_submitted.connect(self._run_global_search)
@@ -195,6 +196,20 @@ class AppShell(QWidget):
             return
         if self.workspace_vm.data.get("index_status") == "missing":
             self.workspace_gate_view.show_index_missing(path)
+
+    def _workspace_created(self, path: str) -> None:
+        if self.select_workspace is None:
+            self.workspace_gate_view.show_error("当前环境暂不支持选择工作区。", path)
+            return
+        ok, message = self.select_workspace(path)
+        if not ok:
+            self.workspace_gate_view.show_error(message, path)
+            self.statusbar.show_notice(message)
+            return
+        index_status = str(self.workspace_vm.data.get("index_status") or "missing")
+        self.workspace_gate_view.show_creation_success(path, index_status=index_status)
+        self._show_workspace_gate()
+        self.statusbar.show_notice("知识库已创建；搜索索引尚未建立，不会自动 index")
 
     def _show_index_missing_notice_if_needed(self) -> None:
         if self.workspace_vm.data.get("index_status") == "missing":

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -58,7 +59,10 @@ def main() -> int:
 
         gate = fake_window.shell.workspace_gate_view
         assert fake_window.shell.current_route == "workspace_gate"
-        assert gate.create_wizard_button.text() == "新建知识库"
+        assert "请选择一个知识库文件夹" in gate.header.title.text()
+        assert "不会自动扫描或修改你的文件" in gate.header.subtitle.text()
+        assert gate.select_button.text() == "打开已有知识库"
+        assert gate.create_wizard_button.text() == "新建一个知识库"
         assert fake_adapter.calls == []
 
         gate.create_wizard_button.click()
@@ -72,6 +76,11 @@ def main() -> int:
         assert fake_adapter.calls[-1][1]["workspace_name"] == "计划知识库"
         assert fake_adapter.calls[-1][1]["template_id"] == "developer"
         preview = gate.plan_preview.toPlainText()
+        assert "创建计划预览" in preview
+        assert "模板：开发者 (developer)" in preview
+        assert "将创建的文件夹" in preview
+        assert "将创建的文件" in preview
+        assert "将写入的配置" in preview
         assert "dry_run: True" in preview
         assert "would_modify: False" in preview
         assert "workspace.yaml" in preview
@@ -96,7 +105,7 @@ def main() -> int:
         gate.create_button.click()
         app.processEvents()
         assert fake_adapter.calls[-1][0] == "create_workspace_from_plan"
-        assert "create_error" in gate.plan_preview.toPlainText()
+        assert "创建失败" in gate.plan_preview.toPlainText()
         assert not error_target.exists()
 
         blocked_target = root / "non-empty-target"
@@ -106,10 +115,19 @@ def main() -> int:
         app.processEvents()
         blocked_preview = gate.plan_preview.toPlainText()
         assert "blocked: True" in blocked_preview
-        assert "not empty" in blocked_preview
-        assert "计划被阻断" in gate.plan_status_chip.text()
+        assert "非空目录" in blocked_preview or "已经有内容" in blocked_preview
+        assert "需要换一个位置" in gate.plan_status_chip.text()
         assert not gate.create_button.isEnabled()
         assert not blocked_target.exists()
+        for raw_error, friendly in [
+            ("target_path exists and is not empty; non-empty initialization is blocked in this version", "已经有内容"),
+            ("target_path is inside the application install directory: D:/App", "安装目录"),
+            ("target_path is inside a protected runtime/build directory: .git", "受保护目录"),
+            ("target_path cannot be inspected: access denied", "权限不足"),
+        ]:
+            gate._show_plan_error(raw_error)
+            app.processEvents()
+            assert friendly in gate.plan_preview.toPlainText()
         fake_window.close()
         app.processEvents()
 
@@ -139,12 +157,45 @@ def main() -> int:
         assert not (created_target / ".kb" / "index.sqlite").exists()
         assert not list((created_target / "knowledge").rglob("*.md"))
         assert real_window.workspace_path == created_target.resolve()
-        assert real_window.shell.current_route == "dashboard"
+        assert real_window.shell.current_route == "workspace_gate"
+        assert real_window.shell.stack.currentWidget() is real_window.shell.workspace_gate_view
+        assert real_gate.stack.currentWidget() is real_gate.success_page
+        assert "知识库已创建" in real_gate.success_card.value_label.text()
+        assert str(created_target.resolve()) in real_gate.success_path_label.text()
+        assert "index_status=missing" in real_gate.success_status_chip.text()
+        assert "添加资料" in real_gate.success_next_steps.toPlainText()
+        assert "建立搜索索引" in real_gate.success_next_steps.toPlainText()
+        assert "查看备份设置" in real_gate.success_next_steps.toPlainText()
         assert real_window.shell.workspace_vm.data["index_status"] == "missing"
         settings = json.loads(settings_path.read_text(encoding="utf-8"))
         assert settings["last_opened_workspace"] == str(created_target.resolve())
+        real_gate.success_dashboard_button.click()
+        app.processEvents()
+        assert real_window.shell.current_route == "dashboard"
+        assert real_window.shell.workspace_vm.data["index_status"] == "missing"
 
         real_window.close()
+        app.processEvents()
+
+        restored_window = MainWindow(gui_settings_path=settings_path)
+        restored_window.show()
+        app.processEvents()
+        assert restored_window.workspace_path == created_target.resolve()
+        assert restored_window.shell.current_route == "dashboard"
+        assert restored_window.shell.workspace_vm.data["index_status"] == "missing"
+        assert not (created_target / ".kb" / "index.sqlite").exists()
+        restored_window.close()
+        app.processEvents()
+
+        shutil.rmtree(created_target)
+        unavailable_window = MainWindow(gui_settings_path=settings_path)
+        unavailable_window.show()
+        app.processEvents()
+        unavailable_gate = unavailable_window.shell.workspace_gate_view
+        assert unavailable_window.shell.current_route == "workspace_gate"
+        assert "上次的知识库位置不可用" in unavailable_gate.card.value_label.text()
+        assert "恢复文件夹" in unavailable_gate.card.caption_label.text()
+        unavailable_window.close()
         app.processEvents()
 
     print("gui workspace creation tests passed")

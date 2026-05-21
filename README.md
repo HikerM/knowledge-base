@@ -41,7 +41,7 @@ GUI Design Contract：
 - GUI Phase 1 Read-only MVP Screen Contract 见 [docs/gui-phase-1-read-only-mvp-contract.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-read-only-mvp-contract.md)。
 - GUI Phase 1 Engineering Preparation Contract 见 [docs/gui-phase-1-engineering-prep.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-engineering-prep.md)。
 - GUI Technology Selection 见 [docs/gui-technology-selection.md](D:/AI/personal-knowledge-base/docs/gui-technology-selection.md)。
-- Workspace Creation Wizard Design 见 [docs/workspace-creation-wizard-design.md](D:/AI/personal-knowledge-base/docs/workspace-creation-wizard-design.md)；v2.0.0-beta.7 已实现 plan-first + confirm 的最小 workspace 创建执行。
+- Workspace Creation Wizard Design 见 [docs/workspace-creation-wizard-design.md](D:/AI/personal-knowledge-base/docs/workspace-creation-wizard-design.md)；v2.0.0-beta.8 已完成 plan-first + confirm 的最小 workspace 创建执行和 first-run 文案、错误态、成功态打磨。
 - 当前已完成 PySide6 GUI Phase 1 read-only MVP、控件级浅色视觉打磨、文档阅读布局修正、PyInstaller one-folder packaging hardening，以及 icon polish / app branding baseline。当前打包产物仍不是正式 installer。
 - 当前推荐路线：第一版 Read-only MVP 优先 PySide6 / Qt for Python，因为它可以直接复用 Python service layer，不需要 sidecar / local HTTP service / bridge；Tauri + React 作为后续 UI 质量增强路线。
 - GUI Phase 1 skeleton 已按 `View -> ViewModel -> Adapter -> knowledge_app.services` 建立边界；fake adapter 位于 `gui/fixtures/`，用于 GUI 测试和无真实 workspace 场景。
@@ -73,6 +73,7 @@ python -m gui.app
 - 新建知识库向导当前支持最小创建执行；GUI 必须先通过 `WorkspaceCreationPlanService` 生成 dry-run 计划并展示预览，不得绕过 service layer。
 - 真实创建必须由用户确认后通过 `WorkspaceCreationService` 执行，只允许写入 `workspace.yaml`、`knowledge/`、`config/`、`templates/`、`reports/` 和可选 `backups/` 等计划内产物。
 - 新建知识库仍不自动 index、不导入资料、不创建正式知识、不创建 sample knowledge、不初始化 Git，也不创建 `.kb/index.sqlite`。
+- v2.0.0-beta.8 first-run polish 会在创建成功后显示“知识库已创建”、workspace 路径、`index_status=missing` 和下一步建议；重启后通过本地 GUI 设置恢复 `last_opened_workspace`，路径不可用时回到 workspace gate。
 - 软件安装目录不得作为 workspace；创建向导不得默认使用安装目录、当前工作目录或任何未经用户确认的目录。
 - 应用图标资源位于 `assets/app-icon/`；`app-icon.ico` 用于 Windows EXE，`app-icon.png` 用于 GUI 窗口和任务栏运行时图标。
 - 图标必须是真透明背景，不得使用棋盘格背景图伪装透明；可用 `python tests/icon_asset_test.py` 验证 PNG alpha 和 ICO 尺寸。
@@ -94,7 +95,7 @@ Plan-only mutation services：
 - v1.5.0 起点阶段只提供 `CategoryPlanService`、`TemplatePlanService`、`WorkspacePlanService` 和对应 CLI wrappers；它们只生成 JSON plan，不执行写操作。
 - plan-only services 固定 `dry_run=true`、`would_modify=false`；`blocked` 只表示未来执行被阻塞，blocked plan 仍是可消费的 JSON 输出。
 - `actions` 是计划动作，不是已执行动作；`validation_commands` 必须始终存在，供未来 GUI 直接展示和执行前确认。
-- v2.0.0-beta.7 的 workspace creation wizard 支持最小安全执行；`WorkspaceCreationPlanService` 仍只生成 dry-run 计划，`WorkspaceCreationService` 只接受已确认且未 blocked 的 plan。
+- v2.0.0-beta.8 的 workspace creation wizard 支持最小安全执行和 first-run polish；`WorkspaceCreationPlanService` 仍只生成 dry-run 计划，`WorkspaceCreationService` 只接受已确认且未 blocked 的 plan。
 - `WorkspaceCreationService` 执行前必须重新校验路径和 blockers，并且只写 `workspace.yaml`、`knowledge/`、`config/`、`templates/`、`reports/`、可选 `backups/` 等计划内创建产物。
 - workspace creation execute 不得创建 `.kb/index.sqlite`、不得运行 index、不得导入旧资料、不得创建正式知识、不得依赖或初始化 Git。
 - v1.8.0 起点阶段建立 Safe Execute Mutation Framework：所有真实 execute mutation 必须经过 plan + local snapshot + approval + TaskQueue。

@@ -95,8 +95,13 @@ class MainWindow(QMainWindow):
 
     def select_workspace(self, workspace_path: Path | str) -> tuple[bool, str]:
         path = Path(workspace_path).expanduser()
-        if not path.exists() or not path.is_dir():
-            return False, "这个文件夹不可用，请选择一个存在的知识库文件夹。"
+        try:
+            if not path.exists():
+                return False, "路径不存在。请选择一个已经存在的知识库文件夹，或使用“新建一个知识库”。"
+            if not path.is_dir():
+                return False, "这个路径不是文件夹。请选择 workspace 文件夹。"
+        except OSError as exc:
+            return False, f"权限不足或路径不可访问：{exc}"
         self.workspace_path = path.resolve()
         self.adapter = ServiceAdapter(workspace_path=self.workspace_path)
         self.window_settings.last_opened_workspace = str(self.workspace_path)

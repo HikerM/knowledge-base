@@ -45,7 +45,7 @@ def main() -> int:
         app.processEvents()
         assert first_run_window.shell.current_route == "workspace_gate"
         assert first_run_window.shell.stack.currentWidget() is first_run_window.shell.workspace_gate_view
-        assert first_run_window.shell.workspace_gate_view.select_button.text() == "选择已有知识库"
+        assert first_run_window.shell.workspace_gate_view.select_button.text() == "打开已有知识库"
         first_run_window.close()
         app.processEvents()
 
@@ -78,7 +78,7 @@ def main() -> int:
         }
         assert not any(call[0] in startup_forbidden for call in adapter.calls)
         assert window.minimumWidth() >= 920
-        assert "v2.0.0-beta.7" in window.windowTitle()
+        assert "v2.0.0-beta.8" in window.windowTitle()
         assert not window.windowIcon().isNull()
         nav_labels = [button.text() for button in window.shell.sidebar._buttons.values()]
         for label in ["首页", "搜索", "知识库", "审核", "任务中心", "维护", "设置"]:
