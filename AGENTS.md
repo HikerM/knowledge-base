@@ -185,7 +185,12 @@ python scripts/kb.py research --query "react state" --category frontend
 - UI 主线程不得执行 index、audit、secret-scan、reindex、dedupe、conflicts、benchmark、maintenance、Optional Git Sync 或 backup/export。
 - 不得把 GUI 写成单文件巨型 `App.tsx`、`main.py` 或等价的大型入口文件。
 - EXE 相关开发必须保护 workspace 数据；软件安装目录不存用户知识数据，workspace 中的 Markdown 始终优先保护。
-- PyInstaller 打包默认只允许 one-folder baseline / hardening；one-file、installer、code signing、auto update 是后续独立阶段。
+- PyInstaller 打包默认只允许 one-folder baseline / hardening；Windows installer 必须作为独立 Inno Setup 6 spike 基于 one-folder 产物制作，不得切换 one-file。code signing、auto update 仍是后续独立阶段。
+- Installer 不得删除用户数据：卸载器只允许删除安装目录和快捷方式，不得删除 `%LOCALAPPDATA%\PersonalKnowledgeBase\`、GUI settings/logs、用户 workspace、用户 backups、`knowledge/`、`config/`、`templates/` 或 `reports/`。
+- Installer 不得要求普通用户安装 Git 或 Python；Git 仍是 optional，Python 只能是开发/构建环境依赖，不得成为已安装 EXE 的运行前置。
+- Installer 不得把 workspace 数据放入安装目录，不得把 workspace、`.kb/`、backups、LocalAppData settings/logs 或用户 runtime 数据打进安装包。
+- Installer smoke 必须验证 install、launch、empty workspace no auto index、uninstall、reinstall、LocalAppData preservation、workspace preservation、Git not required 和 Python not required。
+- 发布说明必须明确当前限制：候选版本、未签名、非 one-file、无 auto update、无 AI、无 RSS、无 vector search、无 mutation UI、无 archive/delete/merge/template apply/restore/promote execute。
 - GUI 本地窗口设置只能写入 `%LOCALAPPDATA%\PersonalKnowledgeBase\settings\gui-settings.json` 或等价用户目录，不得写入安装目录、workspace、`knowledge/`、`.kb/` 或 `config/`。
 - GUI 日志只能写入 `%LOCALAPPDATA%\PersonalKnowledgeBase\logs\pkb-gui.log` 或等价用户目录，不得写入安装目录或 workspace。
 - GUI 启动可以读取本地 GUI 设置以恢复窗口大小、位置和最大化状态；该读取不得触发 workspace index/search/library/task/document open。

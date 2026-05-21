@@ -1,6 +1,6 @@
 # PyInstaller one-folder GUI packaging hardening
 
-This directory contains the `v2.0.0-beta.8` PyInstaller one-folder packaging hardening, icon branding, first-run workspace selection, minimal confirmed workspace creation, and first-run polish baseline for the PySide6 GUI. It is not an installer, not a one-file executable, not a signed release, and not an auto-updater.
+This directory contains the `v2.0.0-beta.8` PyInstaller one-folder packaging hardening, icon branding, first-run workspace selection, minimal confirmed workspace creation, and first-run polish baseline for the PySide6 GUI. The PyInstaller output is not an installer by itself, not one-file, not signed, and not an auto-updater. The `v2.0.0-rc.1` installer spike lives separately under `packaging\installer\` and consumes this one-folder output.
 
 ## Install packaging dependencies
 
@@ -38,7 +38,7 @@ dist\pkb-gui\
   _internal\
 ```
 
-The spec uses `COLLECT`, does not enable one-file mode, and does not build an installer. The bundle must not contain workspace/runtime data such as `knowledge\`, `.kb\`, `backups\`, `.git\`, `tmp\`, or `exports\`.
+The spec uses `COLLECT`, does not enable one-file mode, and does not build an installer by itself. The bundle must not contain workspace/runtime data such as `knowledge\`, `.kb\`, `backups\`, `.git\`, `tmp\`, or `exports\`.
 
 The executable icon is loaded from:
 
@@ -135,8 +135,8 @@ Do not use an image with a checkerboard background as a final icon. Checkerboard
 ## Known limitations
 
 - This build does not build a one-file executable.
-- This build does not create an installer.
+- This PyInstaller script does not create an installer by itself; use `packaging\installer\inno\build_installer.ps1` for the rc.1 installer spike.
 - This build does not perform code signing.
 - This build does not include an auto-update mechanism.
 - No mutation UI, RSS, vector search, or AI features are included.
-- Creating a new workspace from the GUI is future work; choose an existing folder for now.
+- Minimal confirmed workspace creation is available in the GUI, but it remains plan-first, explicit-confirm, and no-auto-index.

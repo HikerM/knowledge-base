@@ -42,7 +42,7 @@ GUI Design Contract：
 - GUI Phase 1 Engineering Preparation Contract 见 [docs/gui-phase-1-engineering-prep.md](D:/AI/personal-knowledge-base/docs/gui-phase-1-engineering-prep.md)。
 - GUI Technology Selection 见 [docs/gui-technology-selection.md](D:/AI/personal-knowledge-base/docs/gui-technology-selection.md)。
 - Workspace Creation Wizard Design 见 [docs/workspace-creation-wizard-design.md](D:/AI/personal-knowledge-base/docs/workspace-creation-wizard-design.md)；v2.0.0-beta.8 已完成 plan-first + confirm 的最小 workspace 创建执行和 first-run 文案、错误态、成功态打磨。
-- 当前已完成 PySide6 GUI Phase 1 read-only MVP、控件级浅色视觉打磨、文档阅读布局修正、PyInstaller one-folder packaging hardening，以及 icon polish / app branding baseline。当前打包产物仍不是正式 installer。
+- 当前已完成 PySide6 GUI Phase 1 read-only MVP、控件级浅色视觉打磨、文档阅读布局修正、PyInstaller one-folder packaging hardening、icon polish / app branding baseline，以及 v2.0.0-rc.1 Windows installer spike。当前 installer 仍是候选安装包，不是最终正式发布。
 - 当前推荐路线：第一版 Read-only MVP 优先 PySide6 / Qt for Python，因为它可以直接复用 Python service layer，不需要 sidecar / local HTTP service / bridge；Tauri + React 作为后续 UI 质量增强路线。
 - GUI Phase 1 skeleton 已按 `View -> ViewModel -> Adapter -> knowledge_app.services` 建立边界；fake adapter 位于 `gui/fixtures/`，用于 GUI 测试和无真实 workspace 场景。
 - GUI 顶部栏不是主导航，只保留 workspace switch、global search / command search、index/task/backup status indicator 和 settings/user entry。
@@ -62,14 +62,20 @@ python -m gui.app
 .\dist\pkb-gui\pkb-gui.exe --workspace D:\AI\personal-knowledge-base
 ```
 
-桌面 GUI / EXE 运行边界：
+桌面 GUI / EXE / Installer 运行边界：
 
-- 当前是 one-folder packaging hardening，不是正式 installer。
+- 当前 installer 是 v2.0.0-rc.1 release-candidate spike，不是最终正式发布；它基于 PyInstaller one-folder 产物制作，不切换 one-file。
 - 用户知识数据不放安装目录；EXE 可通过 `--workspace PATH` 指定工作区；无参数首次启动会显示工作区入口，不会把安装目录或当前目录自动当作知识库。
 - GUI 本地设置写入 `%LOCALAPPDATA%\PersonalKnowledgeBase\settings\gui-settings.json`，用于记住窗口大小、位置和最大化状态。
 - GUI 日志写入 `%LOCALAPPDATA%\PersonalKnowledgeBase\logs\pkb-gui.log`。
 - GUI 设置不写入 workspace、`knowledge/`、`.kb/` 或 `config/`。
 - EXE 不强制 Git，不自动 index；空 workspace 只显示 `index_status=missing`。
+- Installer 默认安装到 `%LOCALAPPDATA%\Programs\PersonalKnowledgeBase`，不需要管理员权限，不要求用户安装 Git 或 Python。
+- Installer 不得包含 workspace 数据，不得把 workspace 放进安装目录，不得把 LocalAppData 用户设置或日志打进安装包。
+- 卸载器只删除安装目录和快捷方式；不得删除 `%LOCALAPPDATA%\PersonalKnowledgeBase\`、用户 workspace、用户 backups、`knowledge/`、`config/`、`templates/` 或 `reports/`。
+- 重装必须保留 LocalAppData 设置/日志和用户 workspace；installer smoke 必须覆盖 install、launch、uninstall、reinstall 和 user data preservation。
+- 普通用户验收文档见 [packaging/installer/acceptance/common-user-acceptance-v2.0.0-rc.1.md](D:/AI/personal-knowledge-base/packaging/installer/acceptance/common-user-acceptance-v2.0.0-rc.1.md)。
+- v2.0.0-rc.1 发布说明见 [packaging/installer/release-notes/v2.0.0-rc.1.md](D:/AI/personal-knowledge-base/packaging/installer/release-notes/v2.0.0-rc.1.md)。
 - 新建知识库向导当前支持最小创建执行；GUI 必须先通过 `WorkspaceCreationPlanService` 生成 dry-run 计划并展示预览，不得绕过 service layer。
 - 真实创建必须由用户确认后通过 `WorkspaceCreationService` 执行，只允许写入 `workspace.yaml`、`knowledge/`、`config/`、`templates/`、`reports/` 和可选 `backups/` 等计划内产物。
 - 新建知识库仍不自动 index、不导入资料、不创建正式知识、不创建 sample knowledge、不初始化 Git，也不创建 `.kb/index.sqlite`。
@@ -77,7 +83,7 @@ python -m gui.app
 - 软件安装目录不得作为 workspace；创建向导不得默认使用安装目录、当前工作目录或任何未经用户确认的目录。
 - 应用图标资源位于 `assets/app-icon/`；`app-icon.ico` 用于 Windows EXE，`app-icon.png` 用于 GUI 窗口和任务栏运行时图标。
 - 图标必须是真透明背景，不得使用棋盘格背景图伪装透明；可用 `python tests/icon_asset_test.py` 验证 PNG alpha 和 ICO 尺寸。
-- one-file、installer、code signing 和 auto update 是后续工作。
+- one-file、code signing 和 auto update 仍是后续工作；AI、RSS、vector search 和 mutation UI 继续后置。
 
 Phase 1 GUI skeleton 只读限制：
 
@@ -707,7 +713,7 @@ GUI 不应直接读写 Markdown 或 SQLite，也不应通过拼接 CLI 命令字
 
 v1.7.0 起，后台任务的稳定边界是 `TaskQueueService`。GUI / EXE 应调用 service API 创建、查询、取消和运行任务，UI 主线程不得直接执行 index/audit/backup/restore/archive/template apply。v1.8.x 当前安全执行只接入 `noop`、`workspace_status`、`backup_create`、`audit`、`index` 以及最低风险的 `category_update_display_name_execute`、`category_update_description_execute`；两者都必须先有 plan、snapshot、approval，并且只写 `config/categories.yaml` 的对应展示字段。GUI 可通过 task progress/log API 轮询或订阅任务状态。Task cleanup 必须 plan-first；retry 必须保留 `retry_of` 链路；cancellation 是 cooperative。restore/archive/delete/merge/template apply 等 destructive task 仍是 future work。
 
-当前已完成 PyInstaller one-folder EXE packaging spike / hardening，并补齐基础应用图标和品牌显示；它仍不是 installer、不是 one-file 包、未签名、无自动更新。技术选型评估路线如下：
+当前已完成 PyInstaller one-folder EXE packaging spike / hardening，并补齐基础应用图标和品牌显示；v2.0.0-rc.1 新增 Inno Setup 6 Windows installer spike，用于验证安装、启动、卸载、重装和用户数据保留。该 installer 仍是候选安装包，不是最终正式发布，不是 one-file 包，未签名，无自动更新。技术选型评估路线如下：
 
 - 第一版 Read-only MVP 推荐：PySide6 / Qt for Python。
 - 第二选择 / 后续 UI 质量增强路线：Tauri + React + Python sidecar/service。

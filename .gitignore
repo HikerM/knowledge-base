@@ -10,6 +10,7 @@ secrets.*
 private/
 tmp/
 exports/
+packaging/installer/output/
 backups/
 *.sqlite
 *.sqlite-wal
