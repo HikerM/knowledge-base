@@ -93,6 +93,24 @@ def assert_cloud_memory_send_default_false() -> None:
         raise AssertionError("cloud context must require preview by default")
 
 
+def assert_privacy_mode_can_disable_memory_candidate_creation() -> None:
+    privacy = PrivacyModePolicy.from_dict(
+        {
+            "privacy_mode": True,
+            "memory_candidate_creation_allowed": False,
+            "cloud_memory_send_allowed": False,
+            "cloud_conversation_send_allowed": False,
+        }
+    )
+    payload = privacy.to_dict()
+    if payload["privacy_mode"] is not True:
+        raise AssertionError("privacy_mode flag not preserved")
+    if payload["memory_candidate_creation_allowed"] is not False:
+        raise AssertionError("privacy mode policy must be able to disable memory candidates")
+    if payload["cloud_memory_send_allowed"] is not False:
+        raise AssertionError("privacy mode must not allow cloud memory send by default")
+
+
 def assert_invalid_retention_values_rejected() -> None:
     expect_retention_error(lambda: RetentionPolicy(conversation_retention_days=0).validate())
     expect_retention_error(lambda: RetentionPolicy(memory_candidate_expiry_days=0).validate())
@@ -140,6 +158,7 @@ def main() -> int:
     assert_retention_policy_round_trip()
     assert_defaults_exclude_ai_data_from_backup()
     assert_cloud_memory_send_default_false()
+    assert_privacy_mode_can_disable_memory_candidate_creation()
     assert_invalid_retention_values_rejected()
     assert_strict_bool_validation_rejects_string_and_int_bools()
     assert_strict_int_validation_rejects_string_and_bool_ints()

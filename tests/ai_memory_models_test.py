@@ -177,6 +177,30 @@ def assert_saved_memory_not_formal_knowledge() -> None:
     expect_memory_error(lambda: SavedMemory.from_dict(payload))
 
 
+def assert_memory_cannot_allow_cloud_send() -> None:
+    payload = valid_candidate_payload()
+    payload["metadata"]["cloud_send_allowed"] = True
+    expect_memory_error(lambda: MemoryCandidate.from_dict(payload))
+
+    payload = valid_saved_memory_payload()
+    payload["metadata"]["cloud_send_allowed"] = True
+    expect_memory_error(lambda: SavedMemory.from_dict(payload))
+
+
+def assert_deleted_memory_can_redact_text() -> None:
+    payload = valid_saved_memory_payload()
+    payload["status"] = "deleted"
+    payload["text"] = ""
+    payload["metadata"]["deleted_at"] = "2026-05-21T10:07:00+08:00"
+    payload["metadata"]["text_redacted"] = True
+    deleted = SavedMemory.from_dict(payload)
+    serialized = deleted.to_dict()
+    if serialized["status"] != "deleted":
+        raise AssertionError("deleted memory status must round-trip")
+    if serialized["text"] != "":
+        raise AssertionError("deleted memory may redact text")
+
+
 def assert_valid_saved_memory_round_trip() -> None:
     saved = SavedMemory.from_dict(valid_saved_memory_payload())
     serialized = saved.to_dict()
@@ -218,6 +242,8 @@ def main() -> int:
     assert_invalid_list_and_dict_types_rejected()
     assert_saved_memory_requires_confirmation_metadata()
     assert_saved_memory_not_formal_knowledge()
+    assert_memory_cannot_allow_cloud_send()
+    assert_deleted_memory_can_redact_text()
     assert_valid_saved_memory_round_trip()
     assert_models_do_not_create_workspace_ai_files()
 

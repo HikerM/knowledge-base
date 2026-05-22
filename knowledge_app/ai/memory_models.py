@@ -128,10 +128,15 @@ class MemoryCandidate:
         _require_choice(self.status, CANDIDATE_STATUSES, "status")
         _require_bool(self.requires_confirmation, "requires_confirmation")
         _require_dict(self.metadata, "metadata")
+        _validate_known_metadata_bools(self.metadata)
         if self.requires_confirmation is not True:
             raise MemoryModelValidationError("MemoryCandidate requires requires_confirmation=true")
         if _enum_value(self.sensitivity) == MemorySensitivity.BLOCKED.value and _enum_value(self.status) == MemoryStatus.ACCEPTED.value:
             raise MemoryModelValidationError("blocked sensitivity candidate cannot be accepted")
+        if _metadata_marks_formal_knowledge(self.metadata):
+            raise MemoryModelValidationError("MemoryCandidate cannot be formal knowledge")
+        if self.metadata.get("cloud_send_allowed") is True:
+            raise MemoryModelValidationError("MemoryCandidate cannot allow cloud send")
         return self
 
     def to_dict(self) -> Dict[str, Any]:
@@ -203,7 +208,6 @@ class SavedMemory:
         _require_text(self.memory_id, "memory_id")
         _require_text(self.workspace_id, "workspace_id")
         _require_choice(self.type, MEMORY_TYPE_VALUES, "type")
-        _require_text(self.text, "text")
         _require_text(self.created_at, "created_at")
         _require_text(self.updated_at, "updated_at")
         if not isinstance(self.source, MemorySource):
@@ -211,6 +215,8 @@ class SavedMemory:
         self.source.validate()
         _require_choice(self.sensitivity, SENSITIVITY_VALUES, "sensitivity")
         _require_choice(self.status, SAVED_MEMORY_STATUSES, "status")
+        if _enum_value(self.status) != MemoryStatus.DELETED.value:
+            _require_text(self.text, "text")
         _require_dict(self.metadata, "metadata")
         _validate_known_metadata_bools(self.metadata)
         if _enum_value(self.sensitivity) == MemorySensitivity.BLOCKED.value:
@@ -220,6 +226,8 @@ class SavedMemory:
             raise MemoryModelValidationError("SavedMemory requires metadata.confirmed_by=user")
         if _metadata_marks_formal_knowledge(self.metadata):
             raise MemoryModelValidationError("SavedMemory cannot be formal knowledge")
+        if self.metadata.get("cloud_send_allowed") is True:
+            raise MemoryModelValidationError("SavedMemory cannot allow cloud send")
         return self
 
     def to_dict(self) -> Dict[str, Any]:

@@ -118,7 +118,7 @@ def assert_delete_conversation_does_not_delete_memory() -> None:
         type="preference",
         source_message_ids=["msg_1"],
     )
-    memory = memory_service.accept_candidate(candidate.candidate_id)
+    memory = memory_service.accept_candidate(candidate.candidate_id, confirmed=True)
     conversation_store.delete_conversation(conversation.conversation_id)
     memories = memory_service.list_memories("workspace_01")
     assert [item.memory_id for item in memories] == [memory.memory_id]

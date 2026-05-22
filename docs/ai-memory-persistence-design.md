@@ -4,6 +4,44 @@
 
 MemoryService 的持久化目标是让未来 AI 助手只在用户确认后保存少量、可见、可删除、可禁用、可导出的长期偏好，同时保证 memory 不是 formal knowledge，不能绕过 `SearchService`。
 
+## v2.6.0 In-memory Harness Boundary
+
+v2.6.0 只实现长期记忆的最小安全 harness，用 process-local in-memory store 验证生命周期和策略边界，不实现真实磁盘持久化。
+
+允许范围：
+
+- `MemoryCandidate` lifecycle：`pending` -> `accepted` / `rejected` / `expired`。
+- `SavedMemory` lifecycle：`active` -> `disabled` / `deleted`。
+- `accept_candidate` 必须显式 `confirmed=True`，否则不得创建 `SavedMemory`。
+- `retention` mock 只会把过期 pending candidate 标记为 `expired`，不得自动保存或自动删除 saved memory。
+- `privacy_mode=true` 或 `memory_candidate_creation_allowed=false` 时，不创建 candidate，不保存 memory。
+- `backup_policy_preview` 只返回结构化预览，不写文件；默认 `include_ai_memory=false`、`include_ai_drafts=false`。
+- `export_memory_preview` 只返回 JSON-ready payload，不写文件、不发送云端，且标记 `not_formal_knowledge=true`。
+
+禁止范围：
+
+- 不写 `workspace/ai/memory/*.jsonl`。
+- 不创建 `workspace/ai`。
+- 不保存真实长期记忆到磁盘。
+- 不接真实 AI / OpenAI / 本地模型 / ModelScope。
+- 不下载模型。
+- 不接 RSS/vector。
+- 不读取或修改 `knowledge/**/*.md`。
+- 不修改 SQLite schema。
+- 不改变 `search` / `index` / `audit` 行为。
+- 不把 memory 注入 formal search。
+- 不把 memory 当 `rules` / `checklists` / `snippets`。
+- 不进入默认 backup。
+- 不发送云端。
+
+Harness 接受标准：
+
+- MemoryService 不 import `sqlite3`、`knowledge_core`、provider、OpenAI、ModelScope 或 `SearchService`。
+- 模型和 service 测试必须证明不会创建 `workspace/ai` 或 memory JSONL 文件。
+- 导出和备份 mock 必须显示 `writes_file=false`。
+- 所有 memory payload 必须显示 `not_formal_knowledge=true` 和 `cloud_send_allowed=false`。
+- Deleted memory tombstone 在 harness 中保留 lifecycle 状态，但 text 必须 redacted。
+
 ## 1. Scope
 
 本阶段只设计：
