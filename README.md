@@ -61,13 +61,15 @@ AI Assistant Control Plane：
 - v2.4.1 新增 ConversationStore / MemoryService / retention policy static models 和 schema validation，见 `knowledge_app/ai/conversation_models.py`、`knowledge_app/ai/memory_models.py` 和 `knowledge_app/ai/retention_models.py`；这些模型只做内存中的 `to_dict()` / `from_dict()` / `validate()`，不做文件 IO。
 - v2.4.2 新增 ConversationStore / MemoryService in-memory service harness，见 `knowledge_app/ai/conversation_store.py` 和 `knowledge_app/ai/memory_service.py`；它们只用进程内 dict/list 验证 service-layer 行为，不做真实持久化，不写 conversation 文件，不创建 `workspace/ai`，不把 memory 写入磁盘。
 - v2.4.2 schema validation 进一步收紧：bool / int / list / dict 字段必须是真实类型，字符串 `"true"` / `"false"` 和 `0` / `1` 不能替代 bool，provider kind、role、message type、memory status 和 sensitivity 必须匹配枚举。
+- v2.5.0 新增 Persistent ConversationStore / MemoryService design-only 文档，见 [docs/ai-conversation-persistence-design.md](D:/AI/personal-knowledge-base/docs/ai-conversation-persistence-design.md)、[docs/ai-memory-persistence-design.md](D:/AI/personal-knowledge-base/docs/ai-memory-persistence-design.md)、[docs/ai-persistence-migration-rollback.md](D:/AI/personal-knowledge-base/docs/ai-persistence-migration-rollback.md) 和 [docs/ai-backup-export-clear-policy.md](D:/AI/personal-knowledge-base/docs/ai-backup-export-clear-policy.md)。
+- v2.5.0 只设计未来持久化：推荐 workspace-scoped `ai/conversations/`、`ai/memory/`、`ai/drafts/`、`ai/indexes/`，JSONL / JSON records 作为 source of truth，SQLite 只能作为可重建 derived index；每个 record 和目录 manifest 必须有 `schema_version`，并且必须先有 atomic writes、migration/rollback、retention、deletion、export、backup、privacy mode 和 audit gates。
 - `config/ai-capabilities.example.yaml` 仍是 example contract，不是运行时自动执行入口；v2.3.0 只在用户发送 mock assistant 消息时显式加载它做白名单和 policy 判定，不会执行 capability。
-- v2.4.2 仍不接 OpenAI、本地模型、ModelScope，不下载模型，不做 RSS/vector，不实现真实 AI 问答，不实现持久化 ConversationStore / MemoryService，不创建 `workspace/ai`，不保存真实长期记忆到磁盘，不执行 mutation，不改变 search/index/audit 行为。
+- v2.5.0 仍不接 OpenAI、本地模型、ModelScope，不下载模型，不做 RSS/vector，不实现真实 AI 问答，不实现持久化 ConversationStore / MemoryService，不创建 `workspace/ai`，不创建 conversation 文件，不保存真实长期记忆到磁盘，不执行 mutation，不改变 search/index/audit 行为。
 - AI 助手控制平面仍必须遵守：`用户自然语言 -> IntentRouter -> CapabilityRegistry -> PermissionPolicy -> ContextBuilder -> AIProvider -> Response / Plan -> Confirmation if needed -> Service / TaskQueue`。当前实现只到 MockAIProvider response，不进入真实 Service / TaskQueue 执行。
 - AI 助手不得直接读写 Markdown，不得直接读写 SQLite，不得拼接 CLI 命令字符串，只能通过 `knowledge_app.services`。
 - AI 写操作必须遵守 `plan -> snapshot -> approval -> TaskQueue -> execute`；archive、delete、restore、promote、template apply 等破坏性能力当前 forbidden 或 future plan-only。
 - AI 长期记忆必须用户确认后保存；对话记录不等于长期记忆，用户必须能查看、删除和关闭记忆。
-- AI memory 和 conversation 不得写入 `knowledge/`、不得放入 `.kb/`、不得放安装目录；未来推荐 workspace-scoped `ai/conversations/`、`ai/memory/` 和 `ai/drafts/`，并且必须先有 deletion / retention / backup policy。
+- AI memory 和 conversation 不得写入 `knowledge/`、不得放入 `.kb/`、不得放安装目录；未来推荐 workspace-scoped `ai/conversations/`、`ai/memory/`、`ai/drafts/` 和可重建 `ai/indexes/`，并且必须由 service layer 管理 IO，先有 deletion / retention / backup / export / migration / rollback / privacy policy。
 - Memory candidate score 只允许用于排序和提示，不能自动保存长期记忆；AI assistant intent、capability、retrieval、memory、privacy 和 performance 评估指标必须在实现持久化或真实 provider 前固化。
 - 云端 AI 发送资料前必须展示 context preview 并获得确认；基于知识库内容的 AI 输出必须带 citation。
 
@@ -897,6 +899,7 @@ knowledge/09-ai-agent/snippets/codex/agent-task-template.md
 
 - v2.4.1 AI ConversationStore / MemoryService Static Models：把 v2.4.0 对话、长期记忆候选、已确认记忆、保留周期、备份和隐私策略设计落为 IO-free 静态模型与 schema validation；仍不接真实 AI，不接 OpenAI/本地模型/ModelScope，不联网，不实现真实 ConversationStore 写入，不实现持久化 MemoryService，不创建 `workspace/ai`，不保存真实长期记忆，不执行 mutation。
 - v2.4.2 AI ConversationStore / MemoryService In-memory Harness：新增进程内 service harness 和严格 schema hardening，用于验证未来持久化接口前的 service-layer 行为；仍不写文件、不创建 `workspace/ai`、不保存磁盘长期记忆、不接真实 AI、不改变 search/index/audit。
+- v2.5.0 Persistent ConversationStore / MemoryService Design：新增真实持久化设计文档，明确 storage layout、JSONL / JSON source of truth、schema version、manifest、atomic writes、migration/rollback、retention、deletion、export、backup、privacy mode、audit gates、performance 和 future tests；仍是 design-only，不创建 `workspace/ai`，不写 conversation/memory 文件，不实现真实持久化。
 - RSS 和 GitHub Releases 受控采集，结果先进入 raw。
 - 自动摘要和人工审核队列。
 - 向量检索作为 FTS5 补充召回或 rerank。
