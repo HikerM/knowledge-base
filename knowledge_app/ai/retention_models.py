@@ -27,6 +27,7 @@ class BackupInclusionPolicy:
         _require_bool(self.include_ai_conversations, "include_ai_conversations")
         _require_bool(self.include_ai_memory, "include_ai_memory")
         _require_bool(self.include_ai_drafts, "include_ai_drafts")
+        _require_dict(self.metadata, "metadata")
         return self
 
     def to_dict(self) -> Dict[str, Any]:
@@ -42,11 +43,12 @@ class BackupInclusionPolicy:
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "BackupInclusionPolicy":
+        _require_dict(payload, "BackupInclusionPolicy")
         return cls(
-            include_ai_conversations=bool(payload.get("include_ai_conversations", False)),
-            include_ai_memory=bool(payload.get("include_ai_memory", False)),
-            include_ai_drafts=bool(payload.get("include_ai_drafts", False)),
-            metadata=dict(payload.get("metadata") or {}),
+            include_ai_conversations=_optional_bool(payload, "include_ai_conversations", False),
+            include_ai_memory=_optional_bool(payload, "include_ai_memory", False),
+            include_ai_drafts=_optional_bool(payload, "include_ai_drafts", False),
+            metadata=_optional_dict(payload, "metadata", {}),
         ).validate()
 
 
@@ -71,6 +73,7 @@ class PrivacyModePolicy:
         _require_bool(self.cloud_conversation_send_allowed, "cloud_conversation_send_allowed")
         _require_bool(self.context_preview_required_for_cloud, "context_preview_required_for_cloud")
         _require_bool(self.secret_scan_blocks_cloud_send, "secret_scan_blocks_cloud_send")
+        _require_dict(self.metadata, "metadata")
         if self.cloud_memory_send_allowed and not self.context_preview_required_for_cloud:
             raise RetentionModelValidationError("cloud memory send requires context preview")
         return self
@@ -92,15 +95,16 @@ class PrivacyModePolicy:
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "PrivacyModePolicy":
+        _require_dict(payload, "PrivacyModePolicy")
         return cls(
-            privacy_mode=bool(payload.get("privacy_mode", False)),
-            persistent_conversation_allowed=bool(payload.get("persistent_conversation_allowed", True)),
-            memory_candidate_creation_allowed=bool(payload.get("memory_candidate_creation_allowed", True)),
-            cloud_memory_send_allowed=bool(payload.get("cloud_memory_send_allowed", False)),
-            cloud_conversation_send_allowed=bool(payload.get("cloud_conversation_send_allowed", False)),
-            context_preview_required_for_cloud=bool(payload.get("context_preview_required_for_cloud", True)),
-            secret_scan_blocks_cloud_send=bool(payload.get("secret_scan_blocks_cloud_send", True)),
-            metadata=dict(payload.get("metadata") or {}),
+            privacy_mode=_optional_bool(payload, "privacy_mode", False),
+            persistent_conversation_allowed=_optional_bool(payload, "persistent_conversation_allowed", True),
+            memory_candidate_creation_allowed=_optional_bool(payload, "memory_candidate_creation_allowed", True),
+            cloud_memory_send_allowed=_optional_bool(payload, "cloud_memory_send_allowed", False),
+            cloud_conversation_send_allowed=_optional_bool(payload, "cloud_conversation_send_allowed", False),
+            context_preview_required_for_cloud=_optional_bool(payload, "context_preview_required_for_cloud", True),
+            secret_scan_blocks_cloud_send=_optional_bool(payload, "secret_scan_blocks_cloud_send", True),
+            metadata=_optional_dict(payload, "metadata", {}),
         ).validate()
 
 
@@ -132,7 +136,12 @@ class RetentionPolicy:
             raise RetentionModelValidationError("long_term_memory_retention must be until_user_deletion")
         _require_bool(self.conversation_retention_configurable, "conversation_retention_configurable")
         _require_bool(self.memory_candidate_expiry_configurable, "memory_candidate_expiry_configurable")
+        _require_dict(self.metadata, "metadata")
         _require_text(self.schema_version, "metadata.schema_version")
+        if not isinstance(self.backup, BackupInclusionPolicy):
+            raise RetentionModelValidationError("backup must be a BackupInclusionPolicy")
+        if not isinstance(self.privacy, PrivacyModePolicy):
+            raise RetentionModelValidationError("privacy must be a PrivacyModePolicy")
         self.backup.validate()
         self.privacy.validate()
         return self
@@ -156,19 +165,20 @@ class RetentionPolicy:
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "RetentionPolicy":
+        _require_dict(payload, "RetentionPolicy")
         return cls(
             policy_id=str(payload.get("policy_id") or "default_local"),
-            conversation_retention_days=int(payload.get("conversation_retention_days", 365)),
-            memory_candidate_expiry_days=int(payload.get("memory_candidate_expiry_days", 30)),
-            rejected_candidate_suppression_days=int(payload.get("rejected_candidate_suppression_days", 180)),
+            conversation_retention_days=_optional_int(payload, "conversation_retention_days", 365),
+            memory_candidate_expiry_days=_optional_int(payload, "memory_candidate_expiry_days", 30),
+            rejected_candidate_suppression_days=_optional_int(payload, "rejected_candidate_suppression_days", 180),
             long_term_memory_retention=str(
                 payload.get("long_term_memory_retention") or LONG_TERM_MEMORY_UNTIL_USER_DELETION
             ),
-            conversation_retention_configurable=bool(payload.get("conversation_retention_configurable", True)),
-            memory_candidate_expiry_configurable=bool(payload.get("memory_candidate_expiry_configurable", True)),
-            backup=BackupInclusionPolicy.from_dict(payload.get("backup") or {}),
-            privacy=PrivacyModePolicy.from_dict(payload.get("privacy") or {}),
-            metadata=dict(payload.get("metadata") or {}),
+            conversation_retention_configurable=_optional_bool(payload, "conversation_retention_configurable", True),
+            memory_candidate_expiry_configurable=_optional_bool(payload, "memory_candidate_expiry_configurable", True),
+            backup=BackupInclusionPolicy.from_dict(_optional_dict(payload, "backup", {})),
+            privacy=PrivacyModePolicy.from_dict(_optional_dict(payload, "privacy", {})),
+            metadata=_optional_dict(payload, "metadata", {}),
         ).validate()
 
 
@@ -178,10 +188,36 @@ def _require_text(value: Any, field_name: str) -> None:
 
 
 def _require_bool(value: Any, field_name: str) -> None:
-    if not isinstance(value, bool):
+    if type(value) is not bool:
         raise RetentionModelValidationError(f"{field_name} must be a boolean")
 
 
 def _require_positive_int(value: Any, field_name: str) -> None:
-    if not isinstance(value, int) or value <= 0:
+    if type(value) is not int or value <= 0:
         raise RetentionModelValidationError(f"{field_name} must be a positive integer")
+
+
+def _optional_bool(payload: Dict[str, Any], field_name: str, default: bool) -> bool:
+    if field_name not in payload:
+        return default
+    _require_bool(payload[field_name], field_name)
+    return payload[field_name]
+
+
+def _optional_int(payload: Dict[str, Any], field_name: str, default: int) -> int:
+    if field_name not in payload:
+        return default
+    _require_positive_int(payload[field_name], field_name)
+    return payload[field_name]
+
+
+def _require_dict(value: Any, field_name: str) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        raise RetentionModelValidationError(f"{field_name} must be a dictionary")
+    return value
+
+
+def _optional_dict(payload: Dict[str, Any], field_name: str, default: Dict[str, Any]) -> Dict[str, Any]:
+    if field_name not in payload:
+        return dict(default)
+    return dict(_require_dict(payload[field_name], field_name))

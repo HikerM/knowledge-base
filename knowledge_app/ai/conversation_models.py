@@ -58,6 +58,7 @@ class CitationRecord:
         _require_text(self.status, "status")
         _require_text(self.source_type, "source_type")
         _require_text(self.confidence, "confidence")
+        _require_bool(self.review_required, "review_required")
         return self
 
     def to_dict(self) -> Dict[str, Any]:
@@ -77,6 +78,7 @@ class CitationRecord:
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "CitationRecord":
+        _require_dict(payload, "CitationRecord")
         _require_keys(
             payload,
             ["citation_id", "document_id", "title", "layer", "status", "source_type", "confidence"],
@@ -90,7 +92,7 @@ class CitationRecord:
             status=str(payload["status"]),
             source_type=str(payload["source_type"]),
             confidence=str(payload["confidence"]),
-            review_required=bool(payload.get("review_required", False)),
+            review_required=_optional_bool(payload, "review_required", False),
             chunk_id=_optional_string(payload.get("chunk_id")),
             warning=_optional_string(payload.get("warning")),
         ).validate()
@@ -111,8 +113,12 @@ class TaskReference:
         _require_text(self.task_id, "task_id")
         _require_text(self.capability_id, "capability_id")
         _require_choice(self.status_at_last_render, ALLOWED_TASK_STATUSES, "status_at_last_render")
-        if not 0 <= int(self.progress_percent_at_last_render) <= 100:
+        _require_int(self.progress_percent_at_last_render, "progress_percent_at_last_render")
+        if not 0 <= self.progress_percent_at_last_render <= 100:
             raise ConversationModelValidationError("progress_percent_at_last_render must be between 0 and 100")
+        if self.message_id is not None:
+            _require_text(self.message_id, "message_id")
+        _require_dict(self.metadata, "metadata")
         _reject_task_log_keys(self.metadata)
         return self
 
@@ -122,22 +128,23 @@ class TaskReference:
             "task_id": self.task_id,
             "capability_id": self.capability_id,
             "status_at_last_render": self.status_at_last_render,
-            "progress_percent_at_last_render": int(self.progress_percent_at_last_render),
+            "progress_percent_at_last_render": self.progress_percent_at_last_render,
             "message_id": self.message_id,
             "metadata": dict(self.metadata),
         }
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "TaskReference":
+        _require_dict(payload, "TaskReference")
         _require_keys(payload, ["task_id", "capability_id", "status_at_last_render"], "TaskReference")
         _reject_task_log_keys(payload)
         return cls(
             task_id=str(payload["task_id"]),
             capability_id=str(payload["capability_id"]),
-            status_at_last_render=str(payload["status_at_last_render"]),
-            progress_percent_at_last_render=int(payload.get("progress_percent_at_last_render", 0)),
+            status_at_last_render=payload["status_at_last_render"],
+            progress_percent_at_last_render=_optional_int(payload, "progress_percent_at_last_render", 0),
             message_id=_optional_string(payload.get("message_id")),
-            metadata=dict(payload.get("metadata") or {}),
+            metadata=_optional_dict(payload, "metadata", {}),
         ).validate()
 
 
@@ -164,6 +171,7 @@ class PolicyDecisionRecord:
         _require_choice(self.decision, ALLOWED_POLICY_DECISIONS, "decision")
         _require_text(self.reason, "reason")
         _require_choice(self.provider_kind, ALLOWED_PROVIDER_KINDS, "provider_kind")
+        _require_dict(self.metadata, "metadata")
         return self
 
     def to_dict(self) -> Dict[str, Any]:
@@ -183,6 +191,7 @@ class PolicyDecisionRecord:
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "PolicyDecisionRecord":
+        _require_dict(payload, "PolicyDecisionRecord")
         _require_keys(
             payload,
             ["policy_decision_id", "created_at", "capability_id", "level", "decision", "reason", "provider_kind"],
@@ -192,13 +201,13 @@ class PolicyDecisionRecord:
             policy_decision_id=str(payload["policy_decision_id"]),
             created_at=str(payload["created_at"]),
             capability_id=str(payload["capability_id"]),
-            level=str(payload["level"]),
-            decision=str(payload["decision"]),
+            level=payload["level"],
+            decision=payload["decision"],
             reason=str(payload["reason"]),
-            provider_kind=str(payload["provider_kind"]),
+            provider_kind=payload["provider_kind"],
             context_preview_id=_optional_string(payload.get("context_preview_id")),
             confirmation_id=_optional_string(payload.get("confirmation_id")),
-            metadata=dict(payload.get("metadata") or {}),
+            metadata=_optional_dict(payload, "metadata", {}),
         ).validate()
 
 
@@ -214,8 +223,12 @@ class ConversationSummary:
     def validate(self) -> "ConversationSummary":
         _require_text(self.text, "text")
         _require_text(self.created_at, "created_at")
+        _require_list(self.source_message_ids, "source_message_ids")
         if not self.source_message_ids:
             raise ConversationModelValidationError("source_message_ids is required")
+        for index, message_id in enumerate(self.source_message_ids):
+            _require_text(message_id, f"source_message_ids[{index}]")
+        _require_bool(self.not_long_term_memory, "not_long_term_memory")
         if self.not_long_term_memory is not True:
             raise ConversationModelValidationError("conversation summary must set not_long_term_memory=true")
         return self
@@ -231,12 +244,14 @@ class ConversationSummary:
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "ConversationSummary":
+        _require_dict(payload, "ConversationSummary")
         _require_keys(payload, ["text", "created_at", "source_message_ids", "not_long_term_memory"], "ConversationSummary")
+        source_message_ids = _require_list(payload["source_message_ids"], "source_message_ids")
         return cls(
             text=str(payload["text"]),
             created_at=str(payload["created_at"]),
-            source_message_ids=[str(item) for item in payload["source_message_ids"]],
-            not_long_term_memory=bool(payload["not_long_term_memory"]),
+            source_message_ids=[str(item) for item in source_message_ids],
+            not_long_term_memory=_require_bool(payload["not_long_term_memory"], "not_long_term_memory"),
         ).validate()
 
 
@@ -259,8 +274,11 @@ class MessageRecord:
         _require_choice(self.role, ALLOWED_ROLES, "role")
         _require_choice(self.type, ALLOWED_MESSAGE_TYPES, "type")
         _require_text(self.created_at, "created_at")
-        if not isinstance(self.content, dict):
-            raise ConversationModelValidationError("content must be a dictionary")
+        _require_dict(self.content, "content")
+        _require_list(self.citations, "citations")
+        for index, citation_id in enumerate(self.citations):
+            _require_text(citation_id, f"citations[{index}]")
+        _require_dict(self.metadata, "metadata")
         return self
 
     def to_dict(self) -> Dict[str, Any]:
@@ -279,20 +297,20 @@ class MessageRecord:
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "MessageRecord":
+        _require_dict(payload, "MessageRecord")
         _require_keys(payload, ["message_id", "role", "type", "created_at", "content"], "MessageRecord")
-        content = payload["content"]
-        if not isinstance(content, dict):
-            raise ConversationModelValidationError("MessageRecord.content must be a dictionary")
+        content = _require_dict(payload["content"], "content")
+        citations = _optional_list(payload, "citations", [])
         return cls(
             message_id=str(payload["message_id"]),
-            role=str(payload["role"]),
-            type=str(payload["type"]),
+            role=payload["role"],
+            type=payload["type"],
             created_at=str(payload["created_at"]),
             content=dict(content),
-            citations=[str(item) for item in payload.get("citations") or []],
+            citations=[str(item) for item in citations],
             policy_decision_id=_optional_string(payload.get("policy_decision_id")),
             task_id=_optional_string(payload.get("task_id")),
-            metadata=dict(payload.get("metadata") or {}),
+            metadata=_optional_dict(payload, "metadata", {}),
         ).validate()
 
 
@@ -324,18 +342,31 @@ class ConversationRecord:
         _require_text(self.updated_at, "updated_at")
         _require_text(self.title, "title")
         _require_choice(self.provider_kind, ALLOWED_PROVIDER_KINDS, "provider_kind")
-        if not isinstance(self.metadata, dict):
-            raise ConversationModelValidationError("metadata must be a dictionary")
+        _require_list(self.messages, "messages")
+        _require_list(self.citations, "citations")
+        _require_list(self.tasks, "tasks")
+        _require_list(self.policy_decisions, "policy_decisions")
+        _require_dict(self.metadata, "metadata")
         _require_text(self.schema_version, "metadata.schema_version")
         for message in self.messages:
+            if not isinstance(message, MessageRecord):
+                raise ConversationModelValidationError("messages must contain MessageRecord items")
             message.validate()
         for citation in self.citations:
+            if not isinstance(citation, CitationRecord):
+                raise ConversationModelValidationError("citations must contain CitationRecord items")
             citation.validate()
         for task in self.tasks:
+            if not isinstance(task, TaskReference):
+                raise ConversationModelValidationError("tasks must contain TaskReference items")
             task.validate()
         for decision in self.policy_decisions:
+            if not isinstance(decision, PolicyDecisionRecord):
+                raise ConversationModelValidationError("policy_decisions must contain PolicyDecisionRecord items")
             decision.validate()
         if self.summary is not None:
+            if not isinstance(self.summary, ConversationSummary):
+                raise ConversationModelValidationError("summary must be a ConversationSummary")
             self.summary.validate()
         return self
 
@@ -360,6 +391,7 @@ class ConversationRecord:
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "ConversationRecord":
+        _require_dict(payload, "ConversationRecord")
         _require_keys(
             payload,
             [
@@ -377,26 +409,32 @@ class ConversationRecord:
             ],
             "ConversationRecord",
         )
-        metadata = dict(payload.get("metadata") or {})
+        metadata = dict(_require_dict(payload["metadata"], "metadata"))
         if "schema_version" not in metadata and payload.get("schema_version"):
             metadata["schema_version"] = str(payload["schema_version"])
+        messages = _require_list(payload["messages"], "messages")
+        citations = _require_list(payload["citations"], "citations")
+        tasks = _require_list(payload["tasks"], "tasks")
+        policy_decisions = _require_list(payload["policy_decisions"], "policy_decisions")
+        summary_payload = payload.get("summary")
         return cls(
             conversation_id=str(payload["conversation_id"]),
             workspace_id=str(payload["workspace_id"]),
             created_at=str(payload["created_at"]),
             updated_at=str(payload["updated_at"]),
             title=str(payload["title"]),
-            messages=[MessageRecord.from_dict(item) for item in payload["messages"]],
-            citations=[CitationRecord.from_dict(item) for item in payload["citations"]],
-            tasks=[TaskReference.from_dict(item) for item in payload["tasks"]],
-            policy_decisions=[PolicyDecisionRecord.from_dict(item) for item in payload["policy_decisions"]],
-            provider_kind=str(payload["provider_kind"]),
-            summary=ConversationSummary.from_dict(payload["summary"]) if payload.get("summary") else None,
+            messages=[MessageRecord.from_dict(item) for item in messages],
+            citations=[CitationRecord.from_dict(item) for item in citations],
+            tasks=[TaskReference.from_dict(item) for item in tasks],
+            policy_decisions=[PolicyDecisionRecord.from_dict(item) for item in policy_decisions],
+            provider_kind=payload["provider_kind"],
+            summary=ConversationSummary.from_dict(summary_payload) if summary_payload is not None else None,
             metadata=metadata,
         ).validate()
 
 
 def _require_keys(payload: Dict[str, Any], keys: List[str], model_name: str) -> None:
+    _require_dict(payload, model_name)
     missing = [key for key in keys if key not in payload]
     if missing:
         raise ConversationModelValidationError(f"{model_name} missing required fields: {', '.join(missing)}")
@@ -408,10 +446,59 @@ def _require_text(value: Any, field_name: str) -> None:
 
 
 def _require_choice(value: Any, allowed: set[str], field_name: str) -> None:
-    text = str(value)
-    if text not in allowed:
+    if not isinstance(value, str):
+        raise ConversationModelValidationError(f"{field_name} must be a string enum value")
+    if value not in allowed:
         allowed_text = ", ".join(sorted(allowed))
         raise ConversationModelValidationError(f"{field_name} must be one of: {allowed_text}")
+
+
+def _require_bool(value: Any, field_name: str) -> bool:
+    if type(value) is not bool:
+        raise ConversationModelValidationError(f"{field_name} must be a boolean")
+    return value
+
+
+def _optional_bool(payload: Dict[str, Any], field_name: str, default: bool) -> bool:
+    if field_name not in payload:
+        return default
+    return _require_bool(payload[field_name], field_name)
+
+
+def _require_int(value: Any, field_name: str) -> int:
+    if type(value) is not int:
+        raise ConversationModelValidationError(f"{field_name} must be an integer")
+    return value
+
+
+def _optional_int(payload: Dict[str, Any], field_name: str, default: int) -> int:
+    if field_name not in payload:
+        return default
+    return _require_int(payload[field_name], field_name)
+
+
+def _require_list(value: Any, field_name: str) -> List[Any]:
+    if not isinstance(value, list):
+        raise ConversationModelValidationError(f"{field_name} must be a list")
+    return value
+
+
+def _optional_list(payload: Dict[str, Any], field_name: str, default: List[Any]) -> List[Any]:
+    if field_name not in payload:
+        return list(default)
+    return _require_list(payload[field_name], field_name)
+
+
+def _require_dict(value: Any, field_name: str) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ConversationModelValidationError(f"{field_name} must be a dictionary")
+    return value
+
+
+def _optional_dict(payload: Dict[str, Any], field_name: str, default: Dict[str, Any]) -> Dict[str, Any]:
+    if field_name not in payload:
+        return dict(default)
+    return dict(_require_dict(payload[field_name], field_name))
 
 
 def _optional_string(value: Any) -> Optional[str]:

@@ -102,6 +102,25 @@ def assert_invalid_retention_values_rejected() -> None:
     )
 
 
+def assert_strict_bool_validation_rejects_string_and_int_bools() -> None:
+    expect_retention_error(lambda: BackupInclusionPolicy.from_dict({"include_ai_memory": "false"}))
+    expect_retention_error(lambda: BackupInclusionPolicy.from_dict({"include_ai_memory": "true"}))
+    expect_retention_error(lambda: BackupInclusionPolicy.from_dict({"include_ai_memory": 1}))
+    expect_retention_error(lambda: PrivacyModePolicy.from_dict({"cloud_memory_send_allowed": "false"}))
+    expect_retention_error(lambda: RetentionPolicy.from_dict({"conversation_retention_configurable": "true"}))
+
+
+def assert_strict_int_validation_rejects_string_and_bool_ints() -> None:
+    expect_retention_error(lambda: RetentionPolicy.from_dict({"conversation_retention_days": "365"}))
+    expect_retention_error(lambda: RetentionPolicy.from_dict({"conversation_retention_days": True}))
+
+
+def assert_invalid_dict_types_rejected() -> None:
+    expect_retention_error(lambda: BackupInclusionPolicy.from_dict({"metadata": [("schema_version", "0.1")]}))
+    expect_retention_error(lambda: RetentionPolicy.from_dict({"backup": "not-a-dict"}))
+    expect_retention_error(lambda: RetentionPolicy.from_dict({"privacy": ["not-a-dict"]}))
+
+
 def assert_models_do_not_create_workspace_ai_files() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         workspace = Path(temp_dir) / "workspace"
@@ -122,6 +141,9 @@ def main() -> int:
     assert_defaults_exclude_ai_data_from_backup()
     assert_cloud_memory_send_default_false()
     assert_invalid_retention_values_rejected()
+    assert_strict_bool_validation_rejects_string_and_int_bools()
+    assert_strict_int_validation_rejects_string_and_bool_ints()
+    assert_invalid_dict_types_rejected()
     assert_models_do_not_create_workspace_ai_files()
 
     print("AI retention model tests passed")

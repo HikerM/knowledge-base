@@ -175,6 +175,58 @@ def assert_provider_kind_rejected() -> None:
     expect_validation_error(payload)
 
 
+def assert_strict_bool_validation_rejects_string_bools() -> None:
+    payload = valid_conversation_payload()
+    payload["citations"][0]["review_required"] = "false"
+    expect_validation_error(payload)
+
+    payload = valid_conversation_payload()
+    payload["citations"][0]["review_required"] = "true"
+    expect_validation_error(payload)
+
+    payload = valid_conversation_payload()
+    payload["summary"]["not_long_term_memory"] = "true"
+    expect_validation_error(payload)
+
+
+def assert_strict_bool_validation_rejects_int_bools() -> None:
+    payload = valid_conversation_payload()
+    payload["citations"][0]["review_required"] = 0
+    expect_validation_error(payload)
+
+    payload = valid_conversation_payload()
+    payload["summary"]["not_long_term_memory"] = 1
+    expect_validation_error(payload)
+
+
+def assert_strict_int_validation_rejects_string_ints() -> None:
+    payload = valid_conversation_payload()
+    payload["tasks"][0]["progress_percent_at_last_render"] = "60"
+    expect_validation_error(payload)
+
+    payload = valid_conversation_payload()
+    payload["tasks"][0]["progress_percent_at_last_render"] = True
+    expect_validation_error(payload)
+
+
+def assert_invalid_list_and_dict_types_rejected() -> None:
+    payload = valid_conversation_payload()
+    payload["messages"] = {"message_id": "msg_1"}
+    expect_validation_error(payload)
+
+    payload = valid_conversation_payload()
+    payload["messages"][0]["citations"] = "citation_1"
+    expect_validation_error(payload)
+
+    payload = valid_conversation_payload()
+    payload["messages"][0]["content"] = ["not", "a", "dict"]
+    expect_validation_error(payload)
+
+    payload = valid_conversation_payload()
+    payload["metadata"] = [("schema_version", "0.1")]
+    expect_validation_error(payload)
+
+
 def assert_models_do_not_create_workspace_ai_files() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         workspace = Path(temp_dir) / "workspace"
@@ -198,6 +250,10 @@ def main() -> int:
     assert_citation_fields_required()
     assert_task_reference_does_not_include_logs()
     assert_provider_kind_rejected()
+    assert_strict_bool_validation_rejects_string_bools()
+    assert_strict_bool_validation_rejects_int_bools()
+    assert_strict_int_validation_rejects_string_ints()
+    assert_invalid_list_and_dict_types_rejected()
     assert_models_do_not_create_workspace_ai_files()
 
     print("AI conversation model tests passed")

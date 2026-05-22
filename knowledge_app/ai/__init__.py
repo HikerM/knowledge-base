@@ -24,6 +24,7 @@ from knowledge_app.ai.conversation_models import (
     PolicyDecisionRecord,
     TaskReference,
 )
+from knowledge_app.ai.conversation_store import ConversationStore, ConversationStoreError
 from knowledge_app.ai.memory_models import (
     MemoryCandidate,
     MemorySensitivity,
@@ -32,6 +33,7 @@ from knowledge_app.ai.memory_models import (
     MemoryType,
     SavedMemory,
 )
+from knowledge_app.ai.memory_service import MemoryService, MemoryServiceError
 from knowledge_app.ai.models import Capability, CapabilityAuditSpec, CapabilityLevel, PermissionDecision
 from knowledge_app.ai.mock_provider import MockAIProvider
 from knowledge_app.ai.permission_policy import PermissionPolicy
@@ -54,7 +56,11 @@ __all__ = [
     "CitationRecord",
     "ConversationRecord",
     "ConversationSummary",
+    "ConversationStore",
+    "ConversationStoreError",
     "MemoryCandidate",
+    "MemoryService",
+    "MemoryServiceError",
     "MemorySensitivity",
     "MemorySource",
     "MemoryStatus",

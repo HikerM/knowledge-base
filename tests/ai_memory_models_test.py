@@ -106,6 +106,52 @@ def assert_invalid_memory_type_rejected() -> None:
     expect_memory_error(lambda: SavedMemory.from_dict(payload))
 
 
+def assert_invalid_memory_status_and_sensitivity_rejected() -> None:
+    payload = valid_candidate_payload()
+    payload["status"] = "saved"
+    expect_memory_error(lambda: MemoryCandidate.from_dict(payload))
+
+    payload = valid_candidate_payload()
+    payload["sensitivity"] = "secret"
+    expect_memory_error(lambda: MemoryCandidate.from_dict(payload))
+
+    payload = valid_saved_memory_payload()
+    payload["status"] = "pending"
+    expect_memory_error(lambda: SavedMemory.from_dict(payload))
+
+
+def assert_strict_bool_validation_rejects_string_and_int_bools() -> None:
+    payload = valid_candidate_payload()
+    payload["requires_confirmation"] = "false"
+    expect_memory_error(lambda: MemoryCandidate.from_dict(payload))
+
+    payload = valid_candidate_payload()
+    payload["requires_confirmation"] = "true"
+    expect_memory_error(lambda: MemoryCandidate.from_dict(payload))
+
+    payload = valid_candidate_payload()
+    payload["requires_confirmation"] = 1
+    expect_memory_error(lambda: MemoryCandidate.from_dict(payload))
+
+    payload = valid_saved_memory_payload()
+    payload["metadata"]["not_formal_knowledge"] = "false"
+    expect_memory_error(lambda: SavedMemory.from_dict(payload))
+
+
+def assert_invalid_list_and_dict_types_rejected() -> None:
+    payload = valid_candidate_payload()
+    payload["source_message_ids"] = "msg_1"
+    expect_memory_error(lambda: MemoryCandidate.from_dict(payload))
+
+    payload = valid_candidate_payload()
+    payload["metadata"] = [("schema_version", "0.1")]
+    expect_memory_error(lambda: MemoryCandidate.from_dict(payload))
+
+    payload = valid_saved_memory_payload()
+    payload["source"] = "memcand_01"
+    expect_memory_error(lambda: SavedMemory.from_dict(payload))
+
+
 def assert_saved_memory_requires_confirmation_metadata() -> None:
     payload = valid_saved_memory_payload()
     payload["metadata"] = dict(payload["metadata"])
@@ -167,6 +213,9 @@ def main() -> int:
     assert_requires_confirmation_must_be_true()
     assert_blocked_candidate_cannot_be_accepted()
     assert_invalid_memory_type_rejected()
+    assert_invalid_memory_status_and_sensitivity_rejected()
+    assert_strict_bool_validation_rejects_string_and_int_bools()
+    assert_invalid_list_and_dict_types_rejected()
     assert_saved_memory_requires_confirmation_metadata()
     assert_saved_memory_not_formal_knowledge()
     assert_valid_saved_memory_round_trip()
