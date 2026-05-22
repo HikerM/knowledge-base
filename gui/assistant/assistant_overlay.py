@@ -5,10 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QVBoxLayout, QWidget
+from PySide6.QtWidgets import QMessageBox, QVBoxLayout, QWidget
 
 from gui.assistant.assistant_launcher import AssistantLauncher
 from gui.assistant.assistant_panel import AssistantPanel
+from gui.viewmodels.conversation_history_viewmodel import ConversationHistoryViewModel
 
 
 class AssistantOverlay(QWidget):
@@ -18,6 +19,7 @@ class AssistantOverlay(QWidget):
         super().__init__(parent)
         self.setObjectName("assistantOverlay")
         self.assistant_vm = assistant_vm
+        self.history_vm = ConversationHistoryViewModel(getattr(assistant_vm, "adapter", None))
         self.panel = AssistantPanel()
         self.launcher = AssistantLauncher()
         self.panel.hide()
@@ -32,6 +34,13 @@ class AssistantOverlay(QWidget):
         self.panel.close_requested.connect(self.close_panel)
         self.panel.message_submitted.connect(self.send_message)
         self.panel.quick_action_requested.connect(self.run_quick_action)
+        self.panel.history_requested.connect(self.open_history)
+        self.panel.history_back_requested.connect(self.show_chat)
+        self.panel.history_previous_page_requested.connect(self.previous_history_page)
+        self.panel.history_next_page_requested.connect(self.next_history_page)
+        self.panel.history_open_requested.connect(self.open_history_conversation)
+        self.panel.history_delete_requested.connect(self.delete_history_conversation)
+        self.panel.history_export_requested.connect(self.export_history_conversation)
         self._sync_size()
         self.panel.render(self.assistant_vm.snapshot())
 
@@ -73,6 +82,63 @@ class AssistantOverlay(QWidget):
 
     def set_adapter(self, adapter: Any | None) -> None:
         self.assistant_vm.set_adapter(adapter)
+        self.history_vm.set_adapter(adapter)
+
+    def open_history(self) -> None:
+        model = self.history_vm.load_page()
+        self.panel.render_history(model)
+        self._sync_size()
+        self.reposition()
+        self.raise_()
+
+    def show_chat(self) -> None:
+        self.panel.render(self.assistant_vm.snapshot())
+        self._sync_size()
+        self.reposition()
+        self.raise_()
+
+    def previous_history_page(self) -> None:
+        self.panel.render_history(self.history_vm.previous_page())
+        self._sync_size()
+        self.reposition()
+        self.raise_()
+
+    def next_history_page(self) -> None:
+        self.panel.render_history(self.history_vm.next_page())
+        self._sync_size()
+        self.reposition()
+        self.raise_()
+
+    def open_history_conversation(self, conversation_id: str) -> None:
+        self.panel.render_history(self.history_vm.open_conversation(conversation_id))
+        self._sync_size()
+        self.reposition()
+        self.raise_()
+
+    def delete_history_conversation(self, conversation_id: str) -> None:
+        answer = QMessageBox.question(
+            self.panel,
+            "删除对话",
+            "确定删除这个 AI 对话记录？这不会删除其他资料或索引数据。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            self.panel.render_history(self.history_vm.delete_conversation(conversation_id, confirmed=False))
+            self._sync_size()
+            self.reposition()
+            self.raise_()
+            return
+        self.panel.render_history(self.history_vm.delete_conversation(conversation_id, confirmed=True))
+        self._sync_size()
+        self.reposition()
+        self.raise_()
+
+    def export_history_conversation(self, conversation_id: str) -> None:
+        self.panel.render_history(self.history_vm.export_conversation(conversation_id))
+        self._sync_size()
+        self.reposition()
+        self.raise_()
 
     def reposition(self) -> None:
         parent = self.parentWidget()

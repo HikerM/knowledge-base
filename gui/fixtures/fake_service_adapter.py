@@ -30,8 +30,10 @@ def _envelope(view_id: str, state: str, data: Dict[str, Any] | None, services: l
 class FakeServiceAdapter:
     """Fixture adapter that exposes only first-stage read-only capabilities."""
 
-    def __init__(self):
+    def __init__(self, ai_storage_bootstrapped: bool = True):
         self.calls: list[tuple[str, Dict[str, Any]]] = []
+        self.ai_storage_bootstrapped = ai_storage_bootstrapped
+        self.ai_conversations = self._ai_conversation_rows()
 
     def load_workspace_status(self) -> Dict[str, Any]:
         self.calls.append(("load_workspace_status", {}))
@@ -330,6 +332,79 @@ class FakeServiceAdapter:
             ["AssistantService", "CapabilityRegistry", "PermissionPolicy", "MockAIProvider"],
         )
 
+    def list_ai_conversations(self, limit: int = 25, offset: int = 0) -> Dict[str, Any]:
+        self.calls.append(("list_ai_conversations", {"limit": limit, "offset": offset}))
+        limit = max(1, min(int(limit), 50))
+        offset = max(0, int(offset))
+        if not self.ai_storage_bootstrapped:
+            return _envelope(
+                "ai_conversation_history",
+                "not_bootstrapped",
+                {
+                    "message": "尚未启用 AI 对话记录存储",
+                    "detail": "fixture AI storage missing; no bootstrap started",
+                    "conversations": [],
+                    "page": {"limit": limit, "offset": offset, "count": 0, "has_more": False},
+                    "storage": {"bootstrapped": False, "auto_bootstrap_started": False},
+                },
+                ["ConversationPersistenceService"],
+            )
+        rows = self.ai_conversations[offset : offset + limit]
+        return _envelope(
+            "ai_conversation_history",
+            "ready" if rows else "empty",
+            {
+                "conversations": [self._ai_summary(row) for row in rows],
+                "page": {"limit": limit, "offset": offset, "count": len(rows), "has_more": offset + limit < len(self.ai_conversations)},
+                "storage": {"bootstrapped": True, "not_formal_knowledge": True, "not_long_term_memory": True},
+            },
+            ["ConversationPersistenceService"],
+        )
+
+    def get_ai_conversation(self, conversation_id: str) -> Dict[str, Any]:
+        self.calls.append(("get_ai_conversation", {"conversation_id": conversation_id}))
+        if not self.ai_storage_bootstrapped:
+            return self._ai_not_bootstrapped("ai_conversation_detail")
+        row = self._find_ai_conversation(conversation_id)
+        if row is None:
+            return _envelope("ai_conversation_detail", "error", None, ["ConversationPersistenceService"])
+        return _envelope("ai_conversation_detail", "ready", dict(row), ["ConversationPersistenceService"])
+
+    def delete_ai_conversation(self, conversation_id: str) -> Dict[str, Any]:
+        self.calls.append(("delete_ai_conversation", {"conversation_id": conversation_id}))
+        if not self.ai_storage_bootstrapped:
+            return self._ai_not_bootstrapped("ai_conversation_delete")
+        self.ai_conversations = [row for row in self.ai_conversations if row["conversation_id"] != conversation_id]
+        return _envelope(
+            "ai_conversation_delete",
+            "ready",
+            {"conversation_id": conversation_id, "deleted": True, "cleanup_pending": False},
+            ["ConversationPersistenceService"],
+        )
+
+    def export_ai_conversation(self, conversation_id: str) -> Dict[str, Any]:
+        self.calls.append(("export_ai_conversation", {"conversation_id": conversation_id}))
+        if not self.ai_storage_bootstrapped:
+            return self._ai_not_bootstrapped("ai_conversation_export")
+        row = self._find_ai_conversation(conversation_id) or {}
+        return _envelope(
+            "ai_conversation_export",
+            "ready",
+            {
+                "conversation_id": conversation_id,
+                "export_mode": "preview",
+                "writes_file": False,
+                "not_formal_knowledge": True,
+                "export_payload": {
+                    "schema_version": "0.1",
+                    "conversation": dict(row),
+                    "not_formal_knowledge": True,
+                    "includes": {"memory": False, "formal_search_records": False, "task_logs": False},
+                },
+            },
+            ["ConversationPersistenceService"],
+        )
+
     def capabilities(self) -> Dict[str, bool]:
         self.calls.append(("capabilities", {}))
         return {
@@ -343,6 +418,148 @@ class FakeServiceAdapter:
             "rss": False,
             "vector_search": False,
         }
+
+    def _find_ai_conversation(self, conversation_id: str) -> Dict[str, Any] | None:
+        for row in self.ai_conversations:
+            if row["conversation_id"] == conversation_id:
+                return row
+        return None
+
+    @staticmethod
+    def _ai_not_bootstrapped(view_id: str) -> Dict[str, Any]:
+        return _envelope(
+            view_id,
+            "not_bootstrapped",
+            {
+                "message": "尚未启用 AI 对话记录存储",
+                "detail": "fixture AI storage missing; no bootstrap started",
+                "conversations": [],
+                "page": {"limit": 25, "offset": 0, "count": 0, "has_more": False},
+                "storage": {"bootstrapped": False, "auto_bootstrap_started": False},
+            },
+            ["ConversationPersistenceService"],
+        )
+
+    @staticmethod
+    def _ai_summary(row: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            key: row[key]
+            for key in [
+                "conversation_id",
+                "workspace_id",
+                "title",
+                "updated_at",
+                "created_at",
+                "provider_kind",
+                "message_count",
+                "citation_count",
+                "policy_decision_count",
+                "status",
+                "summary_preview",
+                "not_formal_knowledge",
+                "not_long_term_memory",
+            ]
+        }
+
+    @staticmethod
+    def _ai_conversation_rows() -> list[Dict[str, Any]]:
+        return [
+            {
+                "conversation_id": "conv_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "workspace_id": "personal_knowledge_base",
+                "title": "Ask My Knowledge",
+                "created_at": "2026-05-22T08:00:00Z",
+                "updated_at": "2026-05-22T08:05:00Z",
+                "provider_kind": "mock",
+                "message_count": 2,
+                "citation_count": 1,
+                "policy_decision_count": 1,
+                "status": "saved",
+                "summary_preview": "搜索正式知识并返回引用。",
+                "not_formal_knowledge": True,
+                "not_long_term_memory": True,
+                "messages": [
+                    {
+                        "message_id": "msg_user_1",
+                        "role": "user",
+                        "type": "user_text",
+                        "created_at": "2026-05-22T08:00:00Z",
+                        "content_text": "搜索 service layer",
+                        "citations": [],
+                    },
+                    {
+                        "message_id": "msg_assistant_1",
+                        "role": "assistant",
+                        "type": "assistant_text",
+                        "created_at": "2026-05-22T08:05:00Z",
+                        "content_text": "GUI 必须通过 ViewModel 和 ServiceAdapter 访问 service layer。",
+                        "citations": ["cit_1"],
+                        "policy_decision_id": "policy_1",
+                        "task_id": "task_snapshot_1",
+                    },
+                ],
+                "citations": [
+                    {
+                        "citation_id": "cit_1",
+                        "document_id": "101",
+                        "title": "AGENTS.md Project Guidance Rule",
+                        "layer": "rules",
+                        "status": "active",
+                        "source_type": "official",
+                        "confidence": "medium",
+                        "review_required": False,
+                    }
+                ],
+                "policy_decisions": [
+                    {
+                        "policy_decision_id": "policy_1",
+                        "created_at": "2026-05-22T08:05:00Z",
+                        "capability_id": "ask_my_knowledge",
+                        "level": "L1",
+                        "decision": "allow",
+                        "reason": "formal search only",
+                        "provider_kind": "mock",
+                    }
+                ],
+                "tasks": [
+                    {
+                        "task_id": "task_snapshot_1",
+                        "capability_id": "ask_my_knowledge",
+                        "status_at_last_render": "succeeded",
+                        "progress_percent_at_last_render": 100,
+                        "message_id": "msg_assistant_1",
+                    }
+                ],
+            },
+            {
+                "conversation_id": "conv_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "workspace_id": "personal_knowledge_base",
+                "title": "Document summary",
+                "created_at": "2026-05-21T08:00:00Z",
+                "updated_at": "2026-05-21T08:03:00Z",
+                "provider_kind": "mock",
+                "message_count": 1,
+                "citation_count": 0,
+                "policy_decision_count": 0,
+                "status": "saved",
+                "summary_preview": "",
+                "not_formal_knowledge": True,
+                "not_long_term_memory": True,
+                "messages": [
+                    {
+                        "message_id": "msg_assistant_2",
+                        "role": "assistant",
+                        "type": "system_notice",
+                        "created_at": "2026-05-21T08:03:00Z",
+                        "content_text": "请先打开一篇文档。",
+                        "citations": [],
+                    }
+                ],
+                "citations": [],
+                "policy_decisions": [],
+                "tasks": [],
+            },
+        ]
 
     @staticmethod
     def _search_row(layer: str, index: int = 1) -> Dict[str, Any]:

@@ -116,7 +116,7 @@ def main() -> int:
             assert overlay.panel.conversation.findChildren(QFrame, object_name), f"missing {object_name}"
 
         button_text = " ".join(button.text().lower() for button in window.findChildren(QPushButton))
-        for forbidden in ["delete", "archive", "restore", "promote", "删除", "归档", "恢复"]:
+        for forbidden in ["delete", "archive", "restore", "promote", "归档", "恢复"]:
             assert forbidden not in button_text
 
         assert_no_boundary_bypass()

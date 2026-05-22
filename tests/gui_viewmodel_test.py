@@ -16,6 +16,7 @@ if str(SOURCE_ROOT) not in sys.path:
 from gui.adapters.service_adapter import ServiceAdapter
 from gui.fixtures.fake_service_adapter import FakeServiceAdapter
 from gui.viewmodels.assistant_viewmodel import AssistantViewModel
+from gui.viewmodels.conversation_history_viewmodel import ConversationHistoryViewModel
 from gui.viewmodels.dashboard_viewmodel import DashboardViewModel
 from gui.viewmodels.document_viewmodel import DocumentViewModel
 from gui.viewmodels.library_viewmodel import LibraryViewModel
@@ -96,6 +97,21 @@ def assert_fake_viewmodels() -> None:
     assert assistant_result["messages"][-1]["author"] == "AI 助手"
     assert adapter.calls[-1][0] == "send_assistant_message_mock"
 
+    history = ConversationHistoryViewModel(adapter)
+    initial_history = history.snapshot()
+    assert initial_history["state"] == "idle"
+    assert not any(call[0] == "list_ai_conversations" for call in adapter.calls)
+    history_page = history.load_page(limit=25, offset=0)
+    assert history_page["conversations"]
+    assert history_page["page"]["limit"] <= 50
+    assert adapter.calls[-1][0] == "list_ai_conversations"
+    detail = history.open_conversation(history_page["conversations"][0]["conversation_id"])
+    assert detail["selected_conversation"]["messages"]
+    assert adapter.calls[-1][0] == "get_ai_conversation"
+    export = history.export_conversation(history_page["conversations"][0]["conversation_id"])
+    assert '"not_formal_knowledge": true' in export["export_preview"]
+    assert adapter.calls[-1][0] == "export_ai_conversation"
+
     caps = adapter.capabilities()
     assert all(value is False for value in caps.values())
     assert not hasattr(adapter, "execute_mutation")
@@ -151,7 +167,7 @@ def assert_service_adapter_startup_guards() -> None:
 
 
 def assert_viewmodels_do_not_import_services() -> None:
-    modules = [WorkspaceViewModel, WorkspaceCreationViewModel, DashboardViewModel, SearchViewModel, LibraryViewModel, DocumentViewModel, TaskViewModel, SettingsViewModel, AssistantViewModel]
+    modules = [WorkspaceViewModel, WorkspaceCreationViewModel, DashboardViewModel, SearchViewModel, LibraryViewModel, DocumentViewModel, TaskViewModel, SettingsViewModel, AssistantViewModel, ConversationHistoryViewModel]
     for cls in modules:
         source = inspect.getsource(sys.modules[cls.__module__])
         assert "knowledge_app.services" not in source

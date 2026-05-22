@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from knowledge_app.ai.conversation_persistence_service import ConversationPersistenceService, ConversationPersistenceServiceError
 from knowledge_app.services.backup_service import BackupService
 from knowledge_app.services.category_service import CategoryService
 from knowledge_app.services.document_service import DocumentService
@@ -277,9 +278,175 @@ class ServiceAdapter:
             return envelope("assistant_mock", "error", None, services, errors=[ui_error("AssistantService", str(exc))])
         return envelope("assistant_mock", "ready", result.to_dict(), services)
 
+    def list_ai_conversations(self, limit: int = 25, offset: int = 0) -> Dict[str, Any]:
+        limit = max(1, min(int(limit), 50))
+        offset = max(0, int(offset))
+        service = "ConversationPersistenceService"
+        try:
+            rows = ConversationPersistenceService().list_conversations(
+                self.workspace_path,
+                self._ai_workspace_id(),
+                limit=limit,
+                offset=offset,
+            )
+        except ConversationPersistenceServiceError as exc:
+            return self._conversation_error("ai_conversation_history", service, str(exc), limit, offset)
+        except Exception as exc:  # noqa: BLE001
+            return envelope("ai_conversation_history", "error", None, [service], errors=[ui_error(service, str(exc))])
+        conversations = [self._conversation_summary(row.to_dict()) for row in rows]
+        data = {
+            "conversations": conversations,
+            "page": {"limit": limit, "offset": offset, "count": len(conversations), "has_more": len(conversations) == limit},
+            "storage": {"bootstrapped": True, "not_formal_knowledge": True, "not_long_term_memory": True},
+        }
+        return envelope("ai_conversation_history", "ready" if conversations else "empty", data, [service])
+
+    def get_ai_conversation(self, conversation_id: str) -> Dict[str, Any]:
+        service = "ConversationPersistenceService"
+        try:
+            record = ConversationPersistenceService().get_conversation(self.workspace_path, conversation_id)
+        except ConversationPersistenceServiceError as exc:
+            return self._conversation_error("ai_conversation_detail", service, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return envelope("ai_conversation_detail", "error", None, [service], errors=[ui_error(service, str(exc))])
+        data = self._conversation_detail(record.to_dict())
+        return envelope("ai_conversation_detail", "ready", data, [service])
+
+    def delete_ai_conversation(self, conversation_id: str) -> Dict[str, Any]:
+        service = "ConversationPersistenceService"
+        try:
+            cleanup_complete = ConversationPersistenceService().delete_conversation(self.workspace_path, conversation_id)
+        except ConversationPersistenceServiceError as exc:
+            return self._conversation_error("ai_conversation_delete", service, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return envelope("ai_conversation_delete", "error", None, [service], errors=[ui_error(service, str(exc))])
+        warnings = []
+        if not cleanup_complete:
+            warnings.append(ui_warning(service, "对话已从 active manifest 删除，trash cleanup pending", code="cleanup_pending"))
+        return envelope(
+            "ai_conversation_delete",
+            "ready" if cleanup_complete else "partial",
+            {"conversation_id": conversation_id, "deleted": True, "cleanup_pending": not cleanup_complete},
+            [service],
+            warnings=warnings,
+        )
+
+    def export_ai_conversation(self, conversation_id: str) -> Dict[str, Any]:
+        service = "ConversationPersistenceService"
+        try:
+            payload = ConversationPersistenceService().export_conversation(self.workspace_path, conversation_id)
+        except ConversationPersistenceServiceError as exc:
+            return self._conversation_error("ai_conversation_export", service, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return envelope("ai_conversation_export", "error", None, [service], errors=[ui_error(service, str(exc))])
+        return envelope(
+            "ai_conversation_export",
+            "ready",
+            {
+                "conversation_id": conversation_id,
+                "export_payload": payload,
+                "export_mode": "preview",
+                "not_formal_knowledge": True,
+                "writes_file": False,
+            },
+            [service],
+        )
+
     def capabilities(self) -> Dict[str, bool]:
         names = ["mutation_ui", "category_execute", "archive_execute", "delete_execute", "merge_execute", "template_apply_execute", "restore_execute", "rss", "vector_search"]
         return {name: False for name in names}
+
+    def _ai_workspace_id(self) -> str:
+        text = self.workspace_path.name.strip().lower()
+        safe = "".join(character if character.isalnum() else "_" for character in text).strip("_")
+        return safe or "workspace"
+
+    @staticmethod
+    def _conversation_summary(payload: Dict[str, Any]) -> Dict[str, Any]:
+        metadata = dict(payload.get("metadata") or {})
+        summary = payload.get("summary") or {}
+        return {
+            "conversation_id": str(payload.get("conversation_id") or ""),
+            "workspace_id": str(payload.get("workspace_id") or ""),
+            "title": str(payload.get("title") or "Conversation"),
+            "updated_at": str(payload.get("updated_at") or ""),
+            "created_at": str(payload.get("created_at") or ""),
+            "provider_kind": str(payload.get("provider_kind") or ""),
+            "message_count": int(metadata.get("message_count") or len(payload.get("messages") or [])),
+            "citation_count": len(payload.get("citations") or []),
+            "policy_decision_count": len(payload.get("policy_decisions") or []),
+            "status": "saved",
+            "summary_preview": str(summary.get("text") or "")[:160] if isinstance(summary, dict) else "",
+            "not_formal_knowledge": True,
+            "not_long_term_memory": True,
+        }
+
+    def _conversation_detail(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        summary = self._conversation_summary(payload)
+        return {
+            **summary,
+            "messages": [self._conversation_message(item) for item in payload.get("messages") or []],
+            "citations": [dict(item) for item in payload.get("citations") or []],
+            "policy_decisions": [self._policy_decision(item) for item in payload.get("policy_decisions") or []],
+            "tasks": [self._task_reference(item) for item in payload.get("tasks") or []],
+        }
+
+    @staticmethod
+    def _conversation_message(payload: Dict[str, Any]) -> Dict[str, Any]:
+        content = dict(payload.get("content") or {})
+        text = content.get("text") or content.get("body") or content.get("message") or ""
+        if not text:
+            text = " ".join(str(value) for value in content.values() if isinstance(value, (str, int, float)))
+        return {
+            "message_id": str(payload.get("message_id") or ""),
+            "role": str(payload.get("role") or ""),
+            "type": str(payload.get("type") or ""),
+            "created_at": str(payload.get("created_at") or ""),
+            "content_text": str(text),
+            "citations": [str(item) for item in payload.get("citations") or []],
+            "policy_decision_id": payload.get("policy_decision_id"),
+            "task_id": payload.get("task_id"),
+        }
+
+    @staticmethod
+    def _policy_decision(payload: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "policy_decision_id": str(payload.get("policy_decision_id") or ""),
+            "created_at": str(payload.get("created_at") or ""),
+            "capability_id": str(payload.get("capability_id") or ""),
+            "level": str(payload.get("level") or ""),
+            "decision": str(payload.get("decision") or ""),
+            "reason": str(payload.get("reason") or ""),
+            "provider_kind": str(payload.get("provider_kind") or ""),
+        }
+
+    @staticmethod
+    def _task_reference(payload: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "task_id": str(payload.get("task_id") or ""),
+            "capability_id": str(payload.get("capability_id") or ""),
+            "status_at_last_render": str(payload.get("status_at_last_render") or ""),
+            "progress_percent_at_last_render": int(payload.get("progress_percent_at_last_render") or 0),
+            "message_id": payload.get("message_id"),
+        }
+
+    @staticmethod
+    def _conversation_error(view_id: str, service: str, message: str, limit: int = 25, offset: int = 0) -> Dict[str, Any]:
+        if "not bootstrapped" in message or "manifest.json is required" in message:
+            return envelope(
+                view_id,
+                "not_bootstrapped",
+                {
+                    "message": "尚未启用 AI 对话记录存储",
+                    "detail": "当前工作区没有已 bootstrap 的 workspace/ai 存储；这里不会自动启用或创建。",
+                    "conversations": [],
+                    "page": {"limit": limit, "offset": offset, "count": 0, "has_more": False},
+                    "storage": {"bootstrapped": False, "auto_bootstrap_started": False},
+                },
+                [service],
+                warnings=[ui_warning(service, message, code="ai_storage_not_bootstrapped")],
+            )
+        return envelope(view_id, "error", None, [service], errors=[ui_error(service, message)])
 
     def _index_status(self) -> str:
         model = self.load_workspace_status()
