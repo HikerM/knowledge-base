@@ -27,13 +27,21 @@ def _envelope(view_id: str, state: str, data: Dict[str, Any] | None, services: l
     }
 
 
+def _error_envelope(view_id: str, service: str, message: str, code: str = "fixture_error") -> Dict[str, Any]:
+    payload = _envelope(view_id, "error", None, [service])
+    payload["errors"] = [{"service": service, "message": message, "code": code}]
+    return payload
+
+
 class FakeServiceAdapter:
     """Fixture adapter that exposes only first-stage read-only capabilities."""
 
-    def __init__(self, ai_storage_bootstrapped: bool = True):
+    def __init__(self, ai_storage_bootstrapped: bool = True, include_corrupt_conversation: bool = False):
         self.calls: list[tuple[str, Dict[str, Any]]] = []
         self.ai_storage_bootstrapped = ai_storage_bootstrapped
         self.ai_conversations = self._ai_conversation_rows()
+        if include_corrupt_conversation:
+            self.ai_conversations.append(self._ai_corrupt_conversation_row())
 
     def load_workspace_status(self) -> Dict[str, Any]:
         self.calls.append(("load_workspace_status", {}))
@@ -367,7 +375,14 @@ class FakeServiceAdapter:
             return self._ai_not_bootstrapped("ai_conversation_detail")
         row = self._find_ai_conversation(conversation_id)
         if row is None:
-            return _envelope("ai_conversation_detail", "error", None, ["ConversationPersistenceService"])
+            return _error_envelope("ai_conversation_detail", "ConversationPersistenceService", "读取对话失败：conversation not found", "conversation_missing")
+        if row.get("corrupt_fixture"):
+            return _error_envelope(
+                "ai_conversation_detail",
+                "ConversationPersistenceService",
+                "读取对话失败：conversation fixture is corrupt；未自动修复、未自动删除、未自动 bootstrap。",
+                "conversation_corrupt",
+            )
         return _envelope("ai_conversation_detail", "ready", dict(row), ["ConversationPersistenceService"])
 
     def delete_ai_conversation(self, conversation_id: str) -> Dict[str, Any]:
@@ -387,6 +402,13 @@ class FakeServiceAdapter:
         if not self.ai_storage_bootstrapped:
             return self._ai_not_bootstrapped("ai_conversation_export")
         row = self._find_ai_conversation(conversation_id) or {}
+        if row.get("corrupt_fixture"):
+            return _error_envelope(
+                "ai_conversation_export",
+                "ConversationPersistenceService",
+                "对话导出失败：conversation fixture is corrupt；不会写文件。",
+                "conversation_corrupt",
+            )
         return _envelope(
             "ai_conversation_export",
             "ready",
@@ -560,6 +582,29 @@ class FakeServiceAdapter:
                 "tasks": [],
             },
         ]
+
+    @staticmethod
+    def _ai_corrupt_conversation_row() -> Dict[str, Any]:
+        return {
+            "conversation_id": "conv_corruptcccccccccccccccccccccccc",
+            "workspace_id": "personal_knowledge_base",
+            "title": "Corrupt conversation fixture",
+            "created_at": "2026-05-20T08:00:00Z",
+            "updated_at": "2026-05-20T08:01:00Z",
+            "provider_kind": "mock",
+            "message_count": 0,
+            "citation_count": 0,
+            "policy_decision_count": 0,
+            "status": "corrupt",
+            "summary_preview": "用于验证 GUI controlled error 状态；不得自动修复或删除。",
+            "not_formal_knowledge": True,
+            "not_long_term_memory": True,
+            "corrupt_fixture": True,
+            "messages": [],
+            "citations": [],
+            "policy_decisions": [],
+            "tasks": [],
+        }
 
     @staticmethod
     def _search_row(layer: str, index: int = 1) -> Dict[str, Any]:

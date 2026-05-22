@@ -33,6 +33,7 @@ def main() -> int:
 
     app = QApplication.instance() or QApplication(sys.argv)
     apply_light_theme(app)
+    assert_viewmodel_pagination_states()
     with tempfile.TemporaryDirectory(prefix="pkb-gui-history-") as tmp:
         adapter = FakeServiceAdapter()
         window = MainWindow(adapter=adapter, gui_settings_path=Path(tmp) / "gui-settings.json")
@@ -57,6 +58,7 @@ def main() -> int:
         history_list = history_view.findChild(QListWidget, "conversationHistoryList")
         assert history_list is not None
         assert history_list.count() == 2
+        assert "第 1 页" in history_view.page_label.text()
 
         first_item = history_list.item(0)
         QTest.mouseClick(history_list.viewport(), Qt.MouseButton.LeftButton, pos=history_list.visualItemRect(first_item).center())
@@ -68,7 +70,11 @@ def main() -> int:
         detail_text = " ".join(label.text() for label in history_view.findChildren(QLabel))
         assert "policy_1" in detail_text
         assert "task_snapshot_1" in detail_text
+        assert_detail_filters_do_not_reload(history_view, adapter, app)
 
+        copy_button = history_view.findChild(QPushButton, "conversationHistoryCopyJsonButton")
+        assert copy_button is not None
+        assert copy_button.isEnabled() is False
         QTest.mouseClick(history_view.export_button, Qt.MouseButton.LeftButton)
         app.processEvents()
         assert adapter.calls[-1][0] == "export_ai_conversation"
@@ -76,6 +82,13 @@ def main() -> int:
         assert preview is not None
         assert '"not_formal_knowledge": true' in preview.toPlainText()
         assert '"formal_search_records": false' in preview.toPlainText()
+        assert copy_button.isEnabled() is True
+        QTest.mouseClick(copy_button, Qt.MouseButton.LeftButton)
+        app.processEvents()
+        assert QApplication.clipboard().text() == preview.toPlainText()
+        state_label = history_view.findChild(QLabel, "conversationHistoryState")
+        assert state_label is not None
+        assert "对话记录不是正式知识" in state_label.text()
 
         original_question = QMessageBox.question
         try:
@@ -95,6 +108,33 @@ def main() -> int:
 
         assert not _has_call(adapter, "search")
         assert not _has_call(adapter, "load_recent_tasks")
+        window.close()
+        app.processEvents()
+
+    with tempfile.TemporaryDirectory(prefix="pkb-gui-history-corrupt-") as tmp:
+        adapter = FakeServiceAdapter(include_corrupt_conversation=True)
+        window = MainWindow(adapter=adapter, gui_settings_path=Path(tmp) / "gui-settings.json")
+        window.show()
+        app.processEvents()
+        overlay = window.shell.assistant_overlay
+        QTest.mouseClick(overlay.launcher, Qt.MouseButton.LeftButton)
+        app.processEvents()
+        QTest.mouseClick(overlay.panel.history_button, Qt.MouseButton.LeftButton)
+        app.processEvents()
+        history_view = overlay.panel.history_view
+        history_list = history_view.findChild(QListWidget, "conversationHistoryList")
+        assert history_list is not None
+        assert history_list.count() == 3
+        corrupt_item = history_list.item(2)
+        QTest.mouseClick(history_list.viewport(), Qt.MouseButton.LeftButton, pos=history_list.visualItemRect(corrupt_item).center())
+        app.processEvents()
+        state_label = history_view.findChild(QLabel, "conversationHistoryState")
+        assert state_label is not None
+        assert "读取对话失败" in state_label.text()
+        assert _has_call(adapter, "get_ai_conversation")
+        assert not _has_call(adapter, "delete_ai_conversation")
+        assert not _has_call(adapter, "bootstrap_storage")
+        assert len(adapter.ai_conversations) == 3
         window.close()
         app.processEvents()
 
@@ -167,6 +207,71 @@ def main() -> int:
 
 def _has_call(adapter: object, name: str) -> bool:
     return any(item[0] == name for item in getattr(adapter, "calls", []))
+
+
+def assert_viewmodel_pagination_states() -> None:
+    from gui.fixtures.fake_service_adapter import FakeServiceAdapter
+    from gui.viewmodels.conversation_history_viewmodel import ConversationHistoryViewModel
+
+    adapter = FakeServiceAdapter()
+    history = ConversationHistoryViewModel(adapter, limit=1)
+    first = history.load_page()
+    assert first["page"]["limit"] == 1
+    assert first["page"]["current_page"] == 1
+    assert first["page"]["can_previous"] is False
+    assert first["page"]["can_next"] is True
+    assert "第 1 页" in first["page"]["label"]
+    second = history.next_page()
+    assert second["page"]["current_page"] == 2
+    assert second["page"]["can_previous"] is True
+    assert second["page"]["can_next"] is False
+    empty = history.load_page(limit=1, offset=20)
+    assert empty["state"] == "empty"
+    assert "当前页没有对话历史" in empty["message"]
+    assert adapter.calls[-1] == ("list_ai_conversations", {"limit": 1, "offset": 20})
+
+
+def assert_detail_filters_do_not_reload(history_view: object, adapter: object, app: object) -> None:
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QGroupBox, QLabel, QPushButton
+
+    before_calls = list(getattr(adapter, "calls", []))
+    messages_button = history_view.findChild(QPushButton, "conversationHistoryFilterMessagesButton")
+    citations_button = history_view.findChild(QPushButton, "conversationHistoryFilterCitationsButton")
+    policies_button = history_view.findChild(QPushButton, "conversationHistoryFilterPoliciesButton")
+    tasks_button = history_view.findChild(QPushButton, "conversationHistoryFilterTasksButton")
+    all_button = history_view.findChild(QPushButton, "conversationHistoryFilterAllButton")
+    assert messages_button is not None
+    assert citations_button is not None
+    assert policies_button is not None
+    assert tasks_button is not None
+    assert all_button is not None
+
+    QTest.mouseClick(messages_button, Qt.MouseButton.LeftButton)
+    app.processEvents()
+    assert history_view.detail_filter == "messages"
+    assert history_view.findChildren(QLabel, "historyMessageContent")
+
+    QTest.mouseClick(citations_button, Qt.MouseButton.LeftButton)
+    app.processEvents()
+    assert history_view.detail_filter == "citations"
+    assert history_view.findChild(QGroupBox, "conversationHistoryCitationsGroup") is not None
+
+    QTest.mouseClick(policies_button, Qt.MouseButton.LeftButton)
+    app.processEvents()
+    assert history_view.detail_filter == "policies"
+    assert history_view.findChild(QGroupBox, "conversationHistoryPoliciesGroup") is not None
+
+    QTest.mouseClick(tasks_button, Qt.MouseButton.LeftButton)
+    app.processEvents()
+    assert history_view.detail_filter == "tasks"
+    assert history_view.findChild(QGroupBox, "conversationHistoryTasksGroup") is not None
+
+    QTest.mouseClick(all_button, Qt.MouseButton.LeftButton)
+    app.processEvents()
+    assert history_view.detail_filter == "all"
+    assert getattr(adapter, "calls", []) == before_calls
 
 
 def assert_no_direct_file_access() -> None:

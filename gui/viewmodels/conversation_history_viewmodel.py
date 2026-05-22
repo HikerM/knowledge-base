@@ -49,7 +49,7 @@ class ConversationHistoryViewModel:
             "conversations": list(self.conversations),
             "selected_conversation": dict(self.selected_conversation or {}),
             "export_preview": self.export_preview,
-            "page": {"limit": self.limit, "offset": self.offset, "count": len(self.conversations), "has_more": self._has_more()},
+            "page": self._page_model(),
             "errors": list(self.errors),
             "warnings": list(self.warnings),
             "not_formal_knowledge": True,
@@ -75,13 +75,13 @@ class ConversationHistoryViewModel:
         self.selected_conversation = None
         self.export_preview = ""
         if self.state == "not_bootstrapped":
-            self.message = str(data.get("message") or "尚未启用 AI 对话记录存储")
+            self.message = str(data.get("message") or "未启用 AI 对话记录存储。")
         elif self.state == "empty":
-            self.message = "还没有保存的 AI 对话。"
+            self.message = "当前页没有对话历史。可返回上一页。" if self.offset > 0 else "暂无对话历史。"
         elif self.state == "ready":
             self.message = "已加载对话历史。"
         else:
-            self.message = self._error_message("对话历史加载失败。")
+            self.message = self._error_message("读取对话失败。")
         return self.snapshot()
 
     def next_page(self) -> Dict[str, Any]:
@@ -105,10 +105,10 @@ class ConversationHistoryViewModel:
         elif self.state == "not_bootstrapped":
             data = response.get("data") or {}
             self.selected_conversation = None
-            self.message = str(data.get("message") or "尚未启用 AI 对话记录存储")
+            self.message = str(data.get("message") or "未启用 AI 对话记录存储。")
         else:
             self.selected_conversation = None
-            self.message = self._error_message("对话打开失败。")
+            self.message = self._error_message("读取对话失败。")
         return self.snapshot()
 
     def delete_conversation(self, conversation_id: str, confirmed: bool = False) -> Dict[str, Any]:
@@ -122,8 +122,10 @@ class ConversationHistoryViewModel:
         if response.get("state") in {"ready", "partial"}:
             self.selected_conversation = None
             self.export_preview = ""
-            self.message = "对话已删除。" if response.get("state") == "ready" else "对话已删除，trash cleanup pending。"
-            return self.load_page(offset=self.offset)
+            deleted_message = "对话已删除。" if response.get("state") == "ready" else "对话已删除，trash cleanup pending。"
+            self.load_page(offset=self.offset)
+            self.message = deleted_message
+            return self.snapshot()
         self.state = str(response.get("state") or "error")
         self.message = self._error_message("对话删除失败。")
         return self.snapshot()
@@ -137,10 +139,10 @@ class ConversationHistoryViewModel:
         if self.state == "ready":
             payload = (response.get("data") or {}).get("export_payload") or {}
             self.export_preview = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
-            self.message = "导出预览已生成；不会自动写入文件。"
+            self.message = "导出预览已生成；对话记录不是正式知识，不会自动写入文件。"
         elif self.state == "not_bootstrapped":
             self.export_preview = ""
-            self.message = "尚未启用 AI 对话记录存储"
+            self.message = "未启用 AI 对话记录存储。"
         else:
             self.export_preview = ""
             self.message = self._error_message("对话导出失败。")
@@ -162,6 +164,20 @@ class ConversationHistoryViewModel:
         data = self.last_response.get("data") or {}
         page = data.get("page") or {}
         return bool(page.get("has_more", False))
+
+    def _page_model(self) -> Dict[str, Any]:
+        current_page = self.offset // self.limit + 1 if self.limit else 1
+        has_more = self._has_more()
+        return {
+            "limit": self.limit,
+            "offset": self.offset,
+            "count": len(self.conversations),
+            "has_more": has_more,
+            "current_page": current_page,
+            "can_previous": self.offset > 0,
+            "can_next": has_more,
+            "label": f"第 {current_page} 页 | 本页 {len(self.conversations)} 条 | 每页最多 {self.limit} 条",
+        }
 
     def _error_message(self, fallback: str) -> str:
         if self.errors:
