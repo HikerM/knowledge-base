@@ -44,8 +44,10 @@ from knowledge_app.ai.persistence_contracts import (
     validate_no_formal_search_injection,
     validate_no_startup_scan_contract,
     validate_privacy_mode_no_write,
+    validate_storage_manifest,
     validate_storage_layout,
 )
+from knowledge_app.ai.persistence_io import AIPersistenceIOError
 from knowledge_app.ai.persistence_models import (
     AIBackupInclusion,
     AIClearPlan,
@@ -57,6 +59,7 @@ from knowledge_app.ai.persistence_models import (
     AIStorageLayout,
     AIStorageManifest,
 )
+from knowledge_app.ai.persistence_service import AIPersistenceServiceError, AIStorageBootstrapService
 from knowledge_app.ai.provider import AIProvider
 from knowledge_app.ai.retention_models import BackupInclusionPolicy, PrivacyModePolicy, RetentionPolicy
 
@@ -72,9 +75,12 @@ __all__ = [
     "AIExportPlan",
     "AIMigrationPlan",
     "AIPersistenceContractValidationError",
+    "AIPersistenceIOError",
     "AIPersistenceModelValidationError",
     "AIPersistencePlan",
+    "AIPersistenceServiceError",
     "AIRollbackPlan",
+    "AIStorageBootstrapService",
     "AIStorageLayout",
     "AIStorageManifest",
     "Capability",
@@ -112,5 +118,6 @@ __all__ = [
     "validate_no_formal_search_injection",
     "validate_no_startup_scan_contract",
     "validate_privacy_mode_no_write",
+    "validate_storage_manifest",
     "validate_storage_layout",
 ]

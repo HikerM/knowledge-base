@@ -40,27 +40,65 @@ def _default_source_of_truth() -> Dict[str, str]:
     }
 
 
+def _default_derived_indexes() -> Dict[str, bool]:
+    return {
+        "derived_only": True,
+        "rebuildable": True,
+    }
+
+
+def _default_backup_defaults() -> Dict[str, bool]:
+    return {
+        "include_ai_conversations": False,
+        "include_ai_memory": False,
+        "include_ai_drafts": False,
+        "include_ai_indexes": False,
+        "privacy_warning_required": True,
+    }
+
+
+def _default_privacy_defaults() -> Dict[str, bool]:
+    return {
+        "privacy_mode_default": False,
+        "cloud_context_preview_required": True,
+        "long_term_memory_requires_confirmation": True,
+    }
+
+
 @dataclass(frozen=True)
 class AIStorageManifest:
     """Directory manifest metadata for future workspace-scoped AI storage."""
 
     schema_version: str
     workspace_id: str
+    created_at: Optional[str] = None
     storage_layout_version: str = AI_STORAGE_LAYOUT_VERSION
     directories: Dict[str, str] = field(default_factory=_default_directories)
     source_of_truth: Dict[str, str] = field(default_factory=_default_source_of_truth)
+    derived_indexes: Dict[str, bool] = field(default_factory=_default_derived_indexes)
+    backup_defaults: Dict[str, bool] = field(default_factory=_default_backup_defaults)
+    privacy_defaults: Dict[str, bool] = field(default_factory=_default_privacy_defaults)
     privacy_mode_default: bool = False
     schema_min_reader_version: str = "2.5.1-static-contract"
     schema_writer_version: Optional[str] = None
     indexes_derived_only: bool = True
     indexes_rebuildable: bool = True
 
-    def validate(self) -> "AIStorageManifest":
+    def validate(
+        self,
+        workspace_root: Optional[str] = None,
+        install_root: Optional[str] = None,
+    ) -> "AIStorageManifest":
         _require_text(self.schema_version, "schema_version")
         _require_text(self.workspace_id, "workspace_id")
+        if self.created_at is not None:
+            _require_text(self.created_at, "created_at")
         _require_text(self.storage_layout_version, "storage_layout_version")
         _require_dict(self.directories, "directories")
         _require_dict(self.source_of_truth, "source_of_truth")
+        _require_dict(self.derived_indexes, "derived_indexes")
+        _require_dict(self.backup_defaults, "backup_defaults")
+        _require_dict(self.privacy_defaults, "privacy_defaults")
         _require_bool(self.privacy_mode_default, "privacy_mode_default")
         _require_text(self.schema_min_reader_version, "schema_min_reader_version")
         _require_bool(self.indexes_derived_only, "indexes_derived_only")
@@ -75,8 +113,21 @@ class AIStorageManifest:
             ["conversations", "memory", "drafts", "indexes"],
             "source_of_truth",
         )
+        _validate_manifest_directory_boundaries(self.directories, workspace_root, install_root)
+        _require_bool(self.derived_indexes.get("derived_only"), "derived_indexes.derived_only")
+        _require_bool(self.derived_indexes.get("rebuildable"), "derived_indexes.rebuildable")
+        for key, value in self.backup_defaults.items():
+            _require_text(key, "backup_defaults key")
+            _require_bool(value, f"backup_defaults.{key}")
+        for key, value in self.privacy_defaults.items():
+            _require_text(key, "privacy_defaults key")
+            _require_bool(value, f"privacy_defaults.{key}")
         if self.source_of_truth["indexes"] != SOURCE_DERIVED:
             raise AIPersistenceModelValidationError("indexes must be marked as derived source")
+        if self.derived_indexes["derived_only"] is not True:
+            raise AIPersistenceModelValidationError("derived_indexes must be derived only")
+        if self.derived_indexes["rebuildable"] is not True:
+            raise AIPersistenceModelValidationError("derived_indexes must be rebuildable")
         if self.indexes_derived_only is not True:
             raise AIPersistenceModelValidationError("indexes must be derived only")
         if self.indexes_rebuildable is not True:
@@ -88,9 +139,13 @@ class AIStorageManifest:
         return {
             "schema_version": self.schema_version,
             "workspace_id": self.workspace_id,
+            "created_at": self.created_at,
             "storage_layout_version": self.storage_layout_version,
             "directories": dict(self.directories),
             "source_of_truth": dict(self.source_of_truth),
+            "derived_indexes": dict(self.derived_indexes),
+            "backup_defaults": dict(self.backup_defaults),
+            "privacy_defaults": dict(self.privacy_defaults),
             "privacy_mode_default": self.privacy_mode_default,
             "schema_min_reader_version": self.schema_min_reader_version,
             "schema_writer_version": self.schema_writer_version,
@@ -105,9 +160,13 @@ class AIStorageManifest:
         return cls(
             schema_version=str(payload["schema_version"]),
             workspace_id=str(payload["workspace_id"]),
+            created_at=_optional_string(payload.get("created_at")),
             storage_layout_version=str(payload.get("storage_layout_version") or AI_STORAGE_LAYOUT_VERSION),
             directories=_optional_dict(payload, "directories", _default_directories()),
             source_of_truth=_optional_dict(payload, "source_of_truth", _default_source_of_truth()),
+            derived_indexes=_optional_dict(payload, "derived_indexes", _default_derived_indexes()),
+            backup_defaults=_optional_dict(payload, "backup_defaults", _default_backup_defaults()),
+            privacy_defaults=_optional_dict(payload, "privacy_defaults", _default_privacy_defaults()),
             privacy_mode_default=_optional_bool(payload, "privacy_mode_default", False),
             schema_min_reader_version=str(payload.get("schema_min_reader_version") or "2.5.1-static-contract"),
             schema_writer_version=_optional_string(payload.get("schema_writer_version")),
@@ -150,7 +209,7 @@ class AIStorageLayout:
         _require_positive_int(self.storage_growth_limit_mb, "storage_growth_limit_mb")
         if not isinstance(self.manifest, AIStorageManifest):
             raise AIPersistenceModelValidationError("manifest must be an AIStorageManifest")
-        self.manifest.validate()
+        self.manifest.validate(self.workspace_root, self.install_root)
         if self.source_records_are_truth is not True:
             raise AIPersistenceModelValidationError("AI source records must be the source of truth")
         if self.indexes_derived_only is not True:
@@ -236,6 +295,10 @@ class AIPersistencePlan:
     storage_growth_limit_mb: int = 1024
     privacy_mode: bool = False
     would_write_persistent_data: bool = False
+    dry_run: bool = True
+    would_modify: bool = False
+    plan_first: bool = True
+    requires_confirmation: bool = True
 
     def validate(self) -> "AIPersistencePlan":
         _require_text(self.schema_version, "schema_version")
@@ -255,6 +318,10 @@ class AIPersistencePlan:
             "derived_index_rebuildable",
             "privacy_mode",
             "would_write_persistent_data",
+            "dry_run",
+            "would_modify",
+            "plan_first",
+            "requires_confirmation",
         ]:
             _require_bool(getattr(self, field_name), field_name)
         _require_positive_int(self.conversation_page_size, "conversation_page_size")
@@ -262,6 +329,12 @@ class AIPersistencePlan:
         _require_positive_int(self.storage_growth_limit_mb, "storage_growth_limit_mb")
         if self.derived_index_rebuildable is not True:
             raise AIPersistenceModelValidationError("derived index must be rebuildable")
+        if self.plan_first is not True:
+            raise AIPersistenceModelValidationError("AI persistence bootstrap must be plan-first")
+        if self.dry_run is not True:
+            raise AIPersistenceModelValidationError("AI persistence plan must be dry-run")
+        if self.would_modify is not False:
+            raise AIPersistenceModelValidationError("AI persistence plan must not modify")
         return self
 
     def to_dict(self) -> Dict[str, Any]:
@@ -284,6 +357,10 @@ class AIPersistencePlan:
             "storage_growth_limit_mb": self.storage_growth_limit_mb,
             "privacy_mode": self.privacy_mode,
             "would_write_persistent_data": self.would_write_persistent_data,
+            "dry_run": self.dry_run,
+            "would_modify": self.would_modify,
+            "plan_first": self.plan_first,
+            "requires_confirmation": self.requires_confirmation,
         }
 
     @classmethod
@@ -308,6 +385,10 @@ class AIPersistencePlan:
             storage_growth_limit_mb=_optional_positive_int(payload, "storage_growth_limit_mb", 1024),
             privacy_mode=_optional_bool(payload, "privacy_mode", False),
             would_write_persistent_data=_optional_bool(payload, "would_write_persistent_data", False),
+            dry_run=_optional_bool(payload, "dry_run", True),
+            would_modify=_optional_bool(payload, "would_modify", False),
+            plan_first=_optional_bool(payload, "plan_first", True),
+            requires_confirmation=_optional_bool(payload, "requires_confirmation", True),
         ).validate()
 
 
@@ -849,6 +930,40 @@ def _validate_storage_path_boundary(layout: AIStorageLayout) -> None:
             raise AIPersistenceModelValidationError(f"{field_name} must be under storage_root")
 
 
+def _validate_manifest_directory_boundaries(
+    directories: Dict[str, Any],
+    workspace_root: Optional[str] = None,
+    install_root: Optional[str] = None,
+) -> None:
+    expected = {
+        "conversations": "ai/conversations",
+        "memory": "ai/memory",
+        "drafts": "ai/drafts",
+        "indexes": "ai/indexes",
+    }
+    normalized_workspace = _normalize_path(workspace_root) if workspace_root else None
+    normalized_storage_root = f"{normalized_workspace}/ai" if normalized_workspace else None
+    normalized_install_root = _normalize_path(install_root) if install_root else None
+
+    for key, expected_path in expected.items():
+        raw_value = directories.get(key)
+        _require_text(raw_value, f"directories.{key}")
+        normalized = _normalize_path(str(raw_value))
+        if _looks_like_absolute_path(normalized):
+            raise AIPersistenceModelValidationError(f"directories.{key} must be workspace-relative under ai/")
+        if _contains_malformed_path_segment(normalized):
+            raise AIPersistenceModelValidationError(f"directories.{key} contains malformed path segments")
+        if normalized != expected_path:
+            raise AIPersistenceModelValidationError(f"directories.{key} must be {expected_path}/")
+        _reject_forbidden_ai_path(normalized, f"directories.{key}", normalized_workspace or "", normalized_install_root)
+
+        if normalized_storage_root:
+            resolved = f"{normalized_workspace}/{normalized}"
+            if not _is_under_or_equal(resolved, normalized_storage_root):
+                raise AIPersistenceModelValidationError(f"directories.{key} must be under workspace_root/ai/")
+            _reject_forbidden_ai_path(resolved, f"directories.{key}", normalized_workspace or "", normalized_install_root)
+
+
 def _reject_forbidden_ai_path(path: str, field_name: str, workspace_root: str, install_root: Optional[str]) -> None:
     if _contains_path_segment(path, "knowledge") and _is_under_or_equal(path, workspace_root):
         raise AIPersistenceModelValidationError(f"{field_name} must not be inside knowledge/")
@@ -871,6 +986,19 @@ def _normalize_path(value: Optional[str]) -> str:
 
 def _path_basename(path: str) -> str:
     return path.rsplit("/", 1)[-1]
+
+
+def _looks_like_absolute_path(path: str) -> bool:
+    if path.startswith("/"):
+        return True
+    if len(path) >= 3 and path[1] == ":" and path[2] == "/":
+        return True
+    return False
+
+
+def _contains_malformed_path_segment(path: str) -> bool:
+    parts = [part for part in path.split("/") if part]
+    return any(part in {".", ".."} for part in parts)
 
 
 def _is_under_or_equal(child: str, parent: str) -> bool:

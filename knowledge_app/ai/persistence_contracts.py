@@ -12,11 +12,36 @@ from knowledge_app.ai.persistence_models import (
     AIPersistenceModelValidationError,
     AIPersistencePlan,
     AIStorageLayout,
+    AIStorageManifest,
 )
 
 
 class AIPersistenceContractValidationError(ValueError):
     """Raised when a static persistence contract is violated."""
+
+
+def validate_storage_manifest(
+    manifest: AIStorageManifest,
+    workspace_root: str | None = None,
+    install_root: str | None = None,
+) -> AIStorageManifest:
+    """Validate manifest directory boundaries and derived-index markers."""
+
+    try:
+        manifest.validate(workspace_root=workspace_root, install_root=install_root)
+    except AIPersistenceModelValidationError as exc:
+        raise AIPersistenceContractValidationError(str(exc)) from exc
+    if manifest.source_of_truth.get("indexes") != "derived":
+        raise AIPersistenceContractValidationError("indexes must be marked as derived")
+    if manifest.derived_indexes.get("derived_only") is not True:
+        raise AIPersistenceContractValidationError("manifest indexes must be derived only")
+    if manifest.derived_indexes.get("rebuildable") is not True:
+        raise AIPersistenceContractValidationError("manifest indexes must be rebuildable")
+    if manifest.indexes_derived_only is not True:
+        raise AIPersistenceContractValidationError("indexes must be derived only")
+    if manifest.indexes_rebuildable is not True:
+        raise AIPersistenceContractValidationError("derived indexes must be rebuildable")
+    return manifest
 
 
 def validate_storage_layout(layout: AIStorageLayout) -> AIStorageLayout:
@@ -26,6 +51,7 @@ def validate_storage_layout(layout: AIStorageLayout) -> AIStorageLayout:
         layout.validate()
     except AIPersistenceModelValidationError as exc:
         raise AIPersistenceContractValidationError(str(exc)) from exc
+    validate_storage_manifest(layout.manifest, layout.workspace_root, layout.install_root)
     if layout.manifest.source_of_truth.get("indexes") != "derived":
         raise AIPersistenceContractValidationError("indexes must be marked as derived")
     if layout.indexes_derived_only is not True:

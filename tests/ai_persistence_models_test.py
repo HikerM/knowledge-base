@@ -143,6 +143,26 @@ def assert_valid_layout_passes() -> None:
         raise AssertionError("minimal manifest must default indexes to derived")
 
 
+def assert_manifest_directory_boundaries() -> None:
+    AIStorageManifest.from_dict(valid_manifest_payload()).validate("D:/workspaces/pkb")
+
+    payload = valid_manifest_payload()
+    payload["directories"]["conversations"] = "knowledge/ai/conversations/"
+    expect_model_error(lambda: AIStorageManifest.from_dict(payload))
+
+    payload = valid_manifest_payload()
+    payload["directories"]["memory"] = ".kb/ai/memory/"
+    expect_model_error(lambda: AIStorageManifest.from_dict(payload))
+
+    payload = valid_manifest_payload()
+    payload["directories"]["drafts"] = "D:/Program Files/PersonalKnowledgeBase/ai/drafts/"
+    expect_model_error(lambda: AIStorageManifest.from_dict(payload))
+
+    payload = valid_manifest_payload()
+    payload["directories"]["indexes"] = "../ai/indexes/"
+    expect_model_error(lambda: AIStorageManifest.from_dict(payload))
+
+
 def assert_schema_version_required() -> None:
     payload = valid_layout_payload()
     del payload["schema_version"]
@@ -191,9 +211,17 @@ def assert_derived_indexes_marked_rebuildable() -> None:
         raise AssertionError("AI indexes must be rebuildable")
     if layout.manifest.source_of_truth["indexes"] != "derived":
         raise AssertionError("manifest must mark indexes as derived")
+    if layout.manifest.derived_indexes["derived_only"] is not True:
+        raise AssertionError("manifest derived_indexes must be derived only")
+    if layout.manifest.derived_indexes["rebuildable"] is not True:
+        raise AssertionError("manifest derived_indexes must be rebuildable")
 
     payload = copy.deepcopy(layout_payload)
     payload["indexes_rebuildable"] = False
+    expect_model_error(lambda: AIStorageLayout.from_dict(payload))
+
+    payload = copy.deepcopy(layout_payload)
+    payload["manifest"]["derived_indexes"] = {"derived_only": True, "rebuildable": False}
     expect_model_error(lambda: AIStorageLayout.from_dict(payload))
 
 
@@ -300,6 +328,7 @@ def assert_models_do_not_create_workspace_ai_files() -> None:
 
 def main() -> int:
     assert_valid_layout_passes()
+    assert_manifest_directory_boundaries()
     assert_schema_version_required()
     assert_knowledge_storage_rejected()
     assert_kb_storage_rejected()

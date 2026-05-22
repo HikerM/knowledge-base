@@ -64,6 +64,9 @@ AI Assistant Control Plane：
 - v2.5.0 新增 Persistent ConversationStore / MemoryService design-only 文档，见 [docs/ai-conversation-persistence-design.md](D:/AI/personal-knowledge-base/docs/ai-conversation-persistence-design.md)、[docs/ai-memory-persistence-design.md](D:/AI/personal-knowledge-base/docs/ai-memory-persistence-design.md)、[docs/ai-persistence-migration-rollback.md](D:/AI/personal-knowledge-base/docs/ai-persistence-migration-rollback.md) 和 [docs/ai-backup-export-clear-policy.md](D:/AI/personal-knowledge-base/docs/ai-backup-export-clear-policy.md)。
 - v2.5.0 只设计未来持久化：推荐 workspace-scoped `ai/conversations/`、`ai/memory/`、`ai/drafts/`、`ai/indexes/`，JSONL / JSON records 作为 source of truth，SQLite 只能作为可重建 derived index；每个 record 和目录 manifest 必须有 `schema_version`，并且必须先有 atomic writes、migration/rollback、retention、deletion、export、backup、privacy mode 和 audit gates。
 - v2.5.1 新增 Persistent storage static contract tests：`knowledge_app/ai/persistence_models.py` 和 `knowledge_app/ai/persistence_contracts.py` 只把 v2.5.0 持久化边界表达为 IO-free 静态模型、计划模型和纯函数 validator；测试锁定 workspace-scoped storage、derived index、backup/export/clear、migration/rollback、startup scan、pagination、privacy mode 和 formal search 边界。
+- v2.5.2 新增 AI persistence minimal bootstrap：`AIStorageBootstrapService` 只在明确调用且 `confirmed=True` 时创建 workspace-scoped `ai/`、`ai/conversations/`、`ai/memory/`、`ai/drafts/`、`ai/indexes/` 和 `ai/manifest.json`，并通过 service-layer atomic JSON writer 写入 manifest。
+- v2.5.2 仍不实现 conversation / memory 正文持久化，不创建 `conversations/*.jsonl` 或 `memory/*.jsonl`，不保存长期记忆到磁盘，不接真实 AI，不做 RSS/vector，不修改 `knowledge/**/*.md`、SQLite schema 或 search/index/audit 行为。
+- v2.5.2 bootstrap 不会在 GUI 启动、`workspace-status` 或 App startup 自动执行；`plan_bootstrap` 只生成 dry-run 计划，`bootstrap_storage` 必须由调用方显式确认。
 - `config/ai-capabilities.example.yaml` 仍是 example contract，不是运行时自动执行入口；v2.3.0 只在用户发送 mock assistant 消息时显式加载它做白名单和 policy 判定，不会执行 capability。
 - v2.5.0 仍不接 OpenAI、本地模型、ModelScope，不下载模型，不做 RSS/vector，不实现真实 AI 问答，不实现持久化 ConversationStore / MemoryService，不创建 `workspace/ai`，不创建 conversation 文件，不保存真实长期记忆到磁盘，不执行 mutation，不改变 search/index/audit 行为。
 - v2.5.1 仍不实现真实持久化，不创建 `workspace/ai`，不写 conversation/memory/draft 文件，不保存长期记忆到磁盘，不修改 `knowledge/**/*.md`、SQLite schema 或 search/index/audit 行为。
@@ -193,6 +196,8 @@ TaskQueue baseline / enhancement：
 - `knowledge_app/ai/provider.py`: AIProvider interface；当前只有 mock provider 实现。
 - `knowledge_app/ai/mock_provider.py`: deterministic offline MockAIProvider，不访问网络、不读文件、不读 SQLite、不执行 service。
 - `knowledge_app/ai/assistant_service.py`: AssistantService skeleton，负责 registry / policy / service read path / mock provider 串联；ask flow 只调 SearchService，summary flow 只调 DocumentService 单篇打开，不执行 mutation。
+- `knowledge_app/ai/persistence_io.py`: v2.5.2 service-layer atomic JSON helper，只提供 manifest 等 JSON 的通用原子读写和 temp cleanup，不写 conversation/memory 正文。
+- `knowledge_app/ai/persistence_service.py`: v2.5.2 `AIStorageBootstrapService`，只在显式确认后创建 workspace-scoped AI storage layout 和 manifest，不接 GUI startup 自动路径。
 - `gui/assistant/`: 右下角悬浮 AI 助手 UI skeleton；v2.3.0 增加问我的资料、总结当前文档、整理建议、生成清单快捷入口。
 - `gui/viewmodels/assistant_viewmodel.py`: assistant ViewModel，只调用 adapter，不直接调用 provider/service/core。
 - `gui/adapters/service_adapter.py`: `send_assistant_message_mock` 是 GUI 到 AssistantService skeleton 的唯一入口。

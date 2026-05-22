@@ -19,6 +19,7 @@ from knowledge_app.ai.persistence_contracts import (  # noqa: E402
     validate_no_formal_search_injection,
     validate_no_startup_scan_contract,
     validate_privacy_mode_no_write,
+    validate_storage_manifest,
     validate_storage_layout,
 )
 from knowledge_app.ai.persistence_models import (  # noqa: E402
@@ -113,6 +114,73 @@ def assert_valid_layout_passes() -> None:
         raise AssertionError("derived indexes must be rebuildable")
     if layout.manifest.source_of_truth["indexes"] != "derived":
         raise AssertionError("manifest indexes must be derived")
+
+
+def assert_manifest_directory_boundary_contract() -> None:
+    manifest = validate_storage_manifest(valid_manifest(), "D:/workspaces/pkb")
+    if manifest.directories["conversations"] != "ai/conversations/":
+        raise AssertionError("manifest must keep ai/conversations directory")
+
+    expect_contract_error(
+        lambda: validate_storage_manifest(
+            AIStorageManifest(
+                schema_version="ai-storage-manifest-v1",
+                workspace_id="workspace_01",
+                directories={
+                    "conversations": "knowledge/ai/conversations/",
+                    "memory": "ai/memory/",
+                    "drafts": "ai/drafts/",
+                    "indexes": "ai/indexes/",
+                },
+            ),
+            "D:/workspaces/pkb",
+        )
+    )
+    expect_contract_error(
+        lambda: validate_storage_manifest(
+            AIStorageManifest(
+                schema_version="ai-storage-manifest-v1",
+                workspace_id="workspace_01",
+                directories={
+                    "conversations": "ai/conversations/",
+                    "memory": ".kb/ai/memory/",
+                    "drafts": "ai/drafts/",
+                    "indexes": "ai/indexes/",
+                },
+            ),
+            "D:/workspaces/pkb",
+        )
+    )
+    expect_contract_error(
+        lambda: validate_storage_manifest(
+            AIStorageManifest(
+                schema_version="ai-storage-manifest-v1",
+                workspace_id="workspace_01",
+                directories={
+                    "conversations": "ai/conversations/",
+                    "memory": "ai/memory/",
+                    "drafts": "D:/Program Files/PersonalKnowledgeBase/ai/drafts/",
+                    "indexes": "ai/indexes/",
+                },
+            ),
+            "D:/workspaces/pkb",
+        )
+    )
+    expect_contract_error(
+        lambda: validate_storage_manifest(
+            AIStorageManifest(
+                schema_version="ai-storage-manifest-v1",
+                workspace_id="workspace_01",
+                directories={
+                    "conversations": "conversations/",
+                    "memory": "ai/memory/",
+                    "drafts": "ai/drafts/",
+                    "indexes": "ai/indexes/",
+                },
+            ),
+            "D:/workspaces/pkb",
+        )
+    )
 
 
 def assert_backup_flags_default_false() -> None:
@@ -321,6 +389,8 @@ def assert_no_forbidden_imports_in_persistence_modules() -> None:
     for relative_path in [
         "knowledge_app/ai/persistence_models.py",
         "knowledge_app/ai/persistence_contracts.py",
+        "knowledge_app/ai/persistence_io.py",
+        "knowledge_app/ai/persistence_service.py",
     ]:
         source = (SOURCE_ROOT / relative_path).read_text(encoding="utf-8")
         for line in source.splitlines():
@@ -334,6 +404,7 @@ def assert_no_forbidden_imports_in_persistence_modules() -> None:
 
 def main() -> int:
     assert_valid_layout_passes()
+    assert_manifest_directory_boundary_contract()
     assert_backup_flags_default_false()
     assert_privacy_mode_no_write()
     assert_migration_without_snapshot_rejected()
