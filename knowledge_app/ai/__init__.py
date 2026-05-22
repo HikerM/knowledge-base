@@ -37,6 +37,26 @@ from knowledge_app.ai.memory_service import MemoryService, MemoryServiceError
 from knowledge_app.ai.models import Capability, CapabilityAuditSpec, CapabilityLevel, PermissionDecision
 from knowledge_app.ai.mock_provider import MockAIProvider
 from knowledge_app.ai.permission_policy import PermissionPolicy
+from knowledge_app.ai.persistence_contracts import (
+    AIPersistenceContractValidationError,
+    validate_backup_inclusion,
+    validate_migration_requires_plan_snapshot_approval,
+    validate_no_formal_search_injection,
+    validate_no_startup_scan_contract,
+    validate_privacy_mode_no_write,
+    validate_storage_layout,
+)
+from knowledge_app.ai.persistence_models import (
+    AIBackupInclusion,
+    AIClearPlan,
+    AIExportPlan,
+    AIMigrationPlan,
+    AIPersistenceModelValidationError,
+    AIPersistencePlan,
+    AIRollbackPlan,
+    AIStorageLayout,
+    AIStorageManifest,
+)
 from knowledge_app.ai.provider import AIProvider
 from knowledge_app.ai.retention_models import BackupInclusionPolicy, PrivacyModePolicy, RetentionPolicy
 
@@ -47,6 +67,16 @@ __all__ = [
     "AssistantRequest",
     "AssistantResponse",
     "AssistantService",
+    "AIBackupInclusion",
+    "AIClearPlan",
+    "AIExportPlan",
+    "AIMigrationPlan",
+    "AIPersistenceContractValidationError",
+    "AIPersistenceModelValidationError",
+    "AIPersistencePlan",
+    "AIRollbackPlan",
+    "AIStorageLayout",
+    "AIStorageManifest",
     "Capability",
     "CapabilityAuditSpec",
     "CapabilityLevel",
@@ -77,4 +107,10 @@ __all__ = [
     "SavedMemory",
     "SuggestedAction",
     "TaskReference",
+    "validate_backup_inclusion",
+    "validate_migration_requires_plan_snapshot_approval",
+    "validate_no_formal_search_injection",
+    "validate_no_startup_scan_contract",
+    "validate_privacy_mode_no_write",
+    "validate_storage_layout",
 ]
