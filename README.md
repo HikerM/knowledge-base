@@ -68,6 +68,7 @@ AI Assistant Control Plane：
 - v2.5.2 仍不实现 conversation / memory 正文持久化，不创建 `conversations/*.jsonl` 或 `memory/*.jsonl`，不保存长期记忆到磁盘，不接真实 AI，不做 RSS/vector，不修改 `knowledge/**/*.md`、SQLite schema 或 search/index/audit 行为。
 - v2.5.2 bootstrap 不会在 GUI 启动、`workspace-status` 或 App startup 自动执行；`plan_bootstrap` 只生成 dry-run 计划，`bootstrap_storage` 必须由调用方显式确认。
 - v2.5.3 新增 Conversation persistence minimal implementation：`ConversationPersistenceService` 只在显式 service 方法调用时读写 `workspace/ai/conversations/`，采用 `manifest.json` + `conv_<id>/conversation.json` + `conv_<id>/messages.jsonl` 布局；metadata 通过 `write_json_atomic` 写入，message JSONL 通过 atomic rewrite 追加，读取时遇到损坏 JSONL 行或 partial line 会返回 controlled error，不静默修复。
+- v2.5.3 conversation persistence 包含 recovery hardening：`append_message` 写入前完成 message、conversation metadata 和 manifest validation，并用 backup + rollback 保持 `messages.jsonl`、`conversation.json`、`manifest.json` 一致；`delete_conversation` 使用 `.trash_*` staging，manifest 更新失败必须恢复 active dir，trash cleanup 失败必须记录 `cleanup_pending` 或返回受控失败。
 - v2.5.3 conversation data 不是 formal knowledge，不进入 `SearchService` formal index，不写 `.kb/`，不修改 SQLite schema，不改变 search/index/audit 行为，不参与 App startup scan，也不会让 GUI/provider/ViewModel 直接 IO 或自动加载全部 conversation。
 - v2.5.3 仍不实现 MemoryService 持久化，不写 `workspace/ai/memory/*.jsonl`，不保存长期记忆到磁盘，不接真实 AI，不下载模型，不做 RSS/vector。
 - `config/ai-capabilities.example.yaml` 仍是 example contract，不是运行时自动执行入口；v2.3.0 只在用户发送 mock assistant 消息时显式加载它做白名单和 policy 判定，不会执行 capability。
@@ -201,7 +202,7 @@ TaskQueue baseline / enhancement：
 - `knowledge_app/ai/assistant_service.py`: AssistantService skeleton，负责 registry / policy / service read path / mock provider 串联；ask flow 只调 SearchService，summary flow 只调 DocumentService 单篇打开，不执行 mutation。
 - `knowledge_app/ai/persistence_io.py`: v2.5.2 service-layer atomic JSON helper，只提供 manifest 等 JSON 的通用原子读写和 temp cleanup，不写 conversation/memory 正文。
 - `knowledge_app/ai/persistence_service.py`: v2.5.2 `AIStorageBootstrapService`，只在显式确认后创建 workspace-scoped AI storage layout 和 manifest，不接 GUI startup 自动路径。
-- `knowledge_app/ai/conversation_persistence_service.py`: v2.5.3 `ConversationPersistenceService`，只通过显式 service API 管理 `ai/conversations/manifest.json`、`conv_<id>/conversation.json` 和 `conv_<id>/messages.jsonl`；不读写 memory、knowledge、`.kb` 或 SQLite。
+- `knowledge_app/ai/conversation_persistence_service.py`: v2.5.3 `ConversationPersistenceService`，只通过显式 service API 管理 `ai/conversations/manifest.json`、`conv_<id>/conversation.json` 和 `conv_<id>/messages.jsonl`；append/delete 必须保持跨文件一致性，persistence failure 必须 controlled error 或 cleanup pending，不读写 memory、knowledge、`.kb` 或 SQLite。后续 GUI conversation history viewer 依赖该边界，只能显式分页读取。
 - `gui/assistant/`: 右下角悬浮 AI 助手 UI skeleton；v2.3.0 增加问我的资料、总结当前文档、整理建议、生成清单快捷入口。
 - `gui/viewmodels/assistant_viewmodel.py`: assistant ViewModel，只调用 adapter，不直接调用 provider/service/core。
 - `gui/adapters/service_adapter.py`: `send_assistant_message_mock` 是 GUI 到 AssistantService skeleton 的唯一入口。

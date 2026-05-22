@@ -108,6 +108,14 @@ def conversation_dir(workspace: Path, conversation_id: str) -> Path:
     return workspace / "ai" / "conversations" / conversation_id
 
 
+def conversations_manifest_path(workspace: Path) -> Path:
+    return workspace / "ai" / "conversations" / "manifest.json"
+
+
+def read_conversations_manifest(workspace: Path) -> dict:
+    return json.loads(conversations_manifest_path(workspace).read_text(encoding="utf-8"))
+
+
 def assert_bootstrap_required() -> None:
     with tempfile.TemporaryDirectory(prefix="pkb-ai-conv-") as temp:
         workspace = Path(temp) / "workspace"
@@ -273,6 +281,210 @@ def assert_corrupt_message_jsonl_blocked() -> None:
         expect_service_error(lambda: service.get_conversation(workspace, conversation.conversation_id))
 
 
+def assert_append_metadata_write_failure_rolls_back() -> None:
+    with tempfile.TemporaryDirectory(prefix="pkb-ai-conv-") as temp:
+        workspace = Path(temp) / "workspace"
+        workspace.mkdir()
+        workspace_id = bootstrap_workspace(workspace)
+        service = ConversationPersistenceService()
+        conversation = service.create_conversation(workspace, workspace_id)
+        service.append_message(workspace, conversation.conversation_id, valid_message("msg_1"))
+        before_messages = (conversation_dir(workspace, conversation.conversation_id) / "messages.jsonl").read_text(
+            encoding="utf-8"
+        )
+        original_write = persistence_module.write_json_atomic
+
+        def fail_metadata(path, data):
+            if Path(path).name == "conversation.json":
+                raise persistence_module.AIPersistenceIOError("forced metadata write failure")
+            return original_write(path, data)
+
+        persistence_module.write_json_atomic = fail_metadata
+        try:
+            expect_service_error(
+                lambda: service.append_message(workspace, conversation.conversation_id, valid_message("msg_2"))
+            )
+        finally:
+            persistence_module.write_json_atomic = original_write
+
+        after_messages = (conversation_dir(workspace, conversation.conversation_id) / "messages.jsonl").read_text(
+            encoding="utf-8"
+        )
+        if after_messages != before_messages:
+            raise AssertionError("metadata write failure left messages.jsonl permanently ahead")
+        restored = service.get_conversation(workspace, conversation.conversation_id)
+        if [message.message_id for message in restored.messages] != ["msg_1"]:
+            raise AssertionError("metadata write rollback did not restore original message set")
+        listed = service.list_conversations(workspace, workspace_id)
+        if listed[0].metadata["message_count"] != 1:
+            raise AssertionError("metadata write rollback left stale list metadata")
+
+
+def assert_append_manifest_write_failure_rolls_back() -> None:
+    with tempfile.TemporaryDirectory(prefix="pkb-ai-conv-") as temp:
+        workspace = Path(temp) / "workspace"
+        workspace.mkdir()
+        workspace_id = bootstrap_workspace(workspace)
+        service = ConversationPersistenceService()
+        conversation = service.create_conversation(workspace, workspace_id)
+        service.append_message(workspace, conversation.conversation_id, valid_message("msg_1"))
+        before_manifest = read_conversations_manifest(workspace)
+        original_write = persistence_module.write_json_atomic
+
+        def fail_conversations_manifest(path, data):
+            target = Path(path)
+            if target.name == "manifest.json" and target.parent.name == "conversations":
+                raise persistence_module.AIPersistenceIOError("forced manifest write failure")
+            return original_write(path, data)
+
+        persistence_module.write_json_atomic = fail_conversations_manifest
+        try:
+            expect_service_error(
+                lambda: service.append_message(workspace, conversation.conversation_id, valid_message("msg_2"))
+            )
+        finally:
+            persistence_module.write_json_atomic = original_write
+
+        restored = service.get_conversation(workspace, conversation.conversation_id)
+        if [message.message_id for message in restored.messages] != ["msg_1"]:
+            raise AssertionError("manifest write rollback did not restore original messages")
+        after_manifest = read_conversations_manifest(workspace)
+        if after_manifest != before_manifest:
+            raise AssertionError("manifest write rollback changed manifest")
+
+
+def assert_stale_metadata_detected_without_silent_return() -> None:
+    with tempfile.TemporaryDirectory(prefix="pkb-ai-conv-") as temp:
+        workspace = Path(temp) / "workspace"
+        workspace.mkdir()
+        workspace_id = bootstrap_workspace(workspace)
+        service = ConversationPersistenceService()
+        conversation = service.create_conversation(workspace, workspace_id)
+        service.append_message(workspace, conversation.conversation_id, valid_message("msg_1"))
+        metadata_path = conversation_dir(workspace, conversation.conversation_id) / "conversation.json"
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata["metadata"]["message_count"] = 0
+        metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+        expect_service_error(lambda: service.get_conversation(workspace, conversation.conversation_id))
+        expect_service_error(lambda: service.list_conversations(workspace, workspace_id))
+
+
+def assert_delete_manifest_write_failure_rolls_back_active_dir() -> None:
+    with tempfile.TemporaryDirectory(prefix="pkb-ai-conv-") as temp:
+        workspace = Path(temp) / "workspace"
+        workspace.mkdir()
+        workspace_id = bootstrap_workspace(workspace)
+        service = ConversationPersistenceService()
+        conversation = service.create_conversation(workspace, workspace_id)
+        original_write = persistence_module.write_json_atomic
+
+        def fail_conversations_manifest(path, data):
+            target = Path(path)
+            if target.name == "manifest.json" and target.parent.name == "conversations":
+                raise persistence_module.AIPersistenceIOError("forced delete manifest write failure")
+            return original_write(path, data)
+
+        persistence_module.write_json_atomic = fail_conversations_manifest
+        try:
+            expect_service_error(lambda: service.delete_conversation(workspace, conversation.conversation_id))
+        finally:
+            persistence_module.write_json_atomic = original_write
+
+        if not conversation_dir(workspace, conversation.conversation_id).exists():
+            raise AssertionError("delete manifest failure did not restore active conversation dir")
+        restored = service.get_conversation(workspace, conversation.conversation_id)
+        if restored.conversation_id != conversation.conversation_id:
+            raise AssertionError("delete rollback restored wrong conversation")
+        listed = service.list_conversations(workspace, workspace_id)
+        if [item.conversation_id for item in listed] != [conversation.conversation_id]:
+            raise AssertionError("delete rollback left manifest inconsistent")
+
+
+def assert_delete_trash_cleanup_failure_records_pending_cleanup() -> None:
+    with tempfile.TemporaryDirectory(prefix="pkb-ai-conv-") as temp:
+        workspace = Path(temp) / "workspace"
+        workspace.mkdir()
+        workspace_id = bootstrap_workspace(workspace)
+        memory_sentinel = workspace / "ai" / "memory" / "manual_sentinel.txt"
+        memory_sentinel.write_text("existing memory-side file", encoding="utf-8")
+        service = ConversationPersistenceService()
+        conversation = service.create_conversation(workspace, workspace_id)
+        original_rmtree = persistence_module.shutil.rmtree
+
+        def fail_rmtree(path):
+            raise OSError("forced trash cleanup failure")
+
+        persistence_module.shutil.rmtree = fail_rmtree
+        try:
+            result = service.delete_conversation(workspace, conversation.conversation_id)
+        finally:
+            persistence_module.shutil.rmtree = original_rmtree
+
+        if result is not False:
+            raise AssertionError("trash cleanup failure should return cleanup-pending false")
+        if conversation_dir(workspace, conversation.conversation_id).exists():
+            raise AssertionError("trash cleanup failure left active conversation dir")
+        expect_service_error(lambda: service.get_conversation(workspace, conversation.conversation_id))
+        listed = service.list_conversations(workspace, workspace_id)
+        if listed:
+            raise AssertionError("trash cleanup failure left deleted conversation in active list")
+        manifest = read_conversations_manifest(workspace)
+        if not manifest["cleanup_pending"]:
+            raise AssertionError("trash cleanup failure did not record cleanup_pending")
+        if not memory_sentinel.exists():
+            raise AssertionError("trash cleanup failure touched memory/")
+
+
+def assert_delete_success_manifest_list_get_consistent() -> None:
+    with tempfile.TemporaryDirectory(prefix="pkb-ai-conv-") as temp:
+        workspace = Path(temp) / "workspace"
+        workspace.mkdir()
+        workspace_id = bootstrap_workspace(workspace)
+        service = ConversationPersistenceService()
+        conversation = service.create_conversation(workspace, workspace_id)
+        if service.delete_conversation(workspace, conversation.conversation_id) is not True:
+            raise AssertionError("delete_conversation should return true on full cleanup success")
+        manifest = read_conversations_manifest(workspace)
+        if manifest["conversations"]:
+            raise AssertionError("delete success left conversation in manifest")
+        expect_service_error(lambda: service.get_conversation(workspace, conversation.conversation_id))
+        if service.list_conversations(workspace, workspace_id):
+            raise AssertionError("delete success left conversation in list")
+
+
+def assert_consistency_check_detects_orphan_and_missing_dirs() -> None:
+    with tempfile.TemporaryDirectory(prefix="pkb-ai-conv-") as temp:
+        workspace = Path(temp) / "workspace"
+        workspace.mkdir()
+        workspace_id = bootstrap_workspace(workspace)
+        service = ConversationPersistenceService()
+        first = service.create_conversation(workspace, workspace_id, title="First")
+        orphan = service.create_conversation(workspace, workspace_id, title="Orphan")
+        manifest = read_conversations_manifest(workspace)
+        manifest["conversations"] = [
+            entry for entry in manifest["conversations"] if entry["conversation_id"] != orphan.conversation_id
+        ]
+        conversations_manifest_path(workspace).write_text(json.dumps(manifest), encoding="utf-8")
+        expect_service_error(lambda: service.list_conversations(workspace, workspace_id))
+
+        fixed_manifest = read_conversations_manifest(workspace)
+        fixed_manifest["conversations"].append(
+            {
+                "conversation_id": orphan.conversation_id,
+                "workspace_id": workspace_id,
+                "title": "Orphan",
+                "created_at": orphan.created_at,
+                "updated_at": orphan.updated_at,
+                "provider_kind": "mock",
+                "message_count": 0,
+                "not_formal_knowledge": True,
+            }
+        )
+        conversations_manifest_path(workspace).write_text(json.dumps(fixed_manifest), encoding="utf-8")
+        persistence_module.shutil.rmtree(conversation_dir(workspace, first.conversation_id))
+        expect_service_error(lambda: service.list_conversations(workspace, workspace_id))
+
+
 def assert_no_memory_knowledge_kb_or_sqlite_writes() -> None:
     with tempfile.TemporaryDirectory(prefix="pkb-ai-conv-") as temp:
         workspace = Path(temp) / "workspace"
@@ -354,6 +566,13 @@ def main() -> int:
     assert_export_includes_citations_and_policy_decisions()
     assert_corrupt_manifest_blocked()
     assert_corrupt_message_jsonl_blocked()
+    assert_append_metadata_write_failure_rolls_back()
+    assert_append_manifest_write_failure_rolls_back()
+    assert_stale_metadata_detected_without_silent_return()
+    assert_delete_manifest_write_failure_rolls_back_active_dir()
+    assert_delete_trash_cleanup_failure_records_pending_cleanup()
+    assert_delete_success_manifest_list_get_consistent()
+    assert_consistency_check_detects_orphan_and_missing_dirs()
     assert_no_memory_knowledge_kb_or_sqlite_writes()
     assert_no_startup_scan_or_auto_bootstrap()
     assert_no_formal_search_contamination()

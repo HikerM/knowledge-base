@@ -22,7 +22,7 @@ import os
 from pathlib import Path
 import shutil
 import tempfile
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import uuid
 
 from knowledge_app.ai.conversation_models import (
@@ -125,10 +125,9 @@ class ConversationPersistenceService:
             created_dir = True
             _write_messages_jsonl_atomic(messages_path, [])
             write_json_atomic(metadata_path, _metadata_payload(record))
-            _write_conversations_manifest(
-                conversations_root,
-                _upsert_manifest_entry(manifest, _manifest_entry(record)),
-            )
+            updated_manifest = _upsert_manifest_entry(manifest, _manifest_entry(record))
+            _write_conversations_manifest(conversations_root, updated_manifest)
+            _assert_conversation_consistency(conversations_root, conversation_id, updated_manifest)
             return _clone_conversation(record)
         except (
             AIPersistenceIOError,
@@ -157,6 +156,8 @@ class ConversationPersistenceService:
         try:
             metadata_record = _read_conversation_metadata(metadata_path)
             messages = _read_messages_jsonl(messages_path)
+            manifest = _read_conversations_manifest(conversations_root, layout.manifest.workspace_id, required=False)
+            _assert_conversation_consistency(conversations_root, conversation_id, manifest)
             payload = dict(message.to_dict() if isinstance(message, MessageRecord) else message)
             message_record = _coerce_message_record(payload, metadata_record.provider_kind)
             citation_records = _coerce_citation_records(payload.get("citation_records", []))
@@ -181,14 +182,37 @@ class ConversationPersistenceService:
             ).validate()
 
             updated_messages = [*messages, message_record]
-            _write_messages_jsonl_atomic(messages_path, updated_messages)
-            write_json_atomic(metadata_path, _metadata_payload(updated))
-            manifest = _read_conversations_manifest(conversations_root, layout.manifest.workspace_id, required=False)
-            _write_conversations_manifest(
-                conversations_root,
-                _upsert_manifest_entry(manifest, _manifest_entry(updated)),
+            updated_metadata_payload = _metadata_payload(updated)
+            updated_manifest = _upsert_manifest_entry(manifest, _manifest_entry(updated))
+
+            _serialize_messages_jsonl(updated_messages)
+            json.dumps(updated_metadata_payload, ensure_ascii=False, indent=2, sort_keys=True)
+            _validate_conversations_manifest(updated_manifest, layout.manifest.workspace_id)
+
+            backups = _capture_file_backups([messages_path, metadata_path, conversations_root / "manifest.json"])
+            try:
+                _write_messages_jsonl_atomic(messages_path, updated_messages)
+                write_json_atomic(metadata_path, updated_metadata_payload)
+                _write_conversations_manifest(conversations_root, updated_manifest)
+                _assert_conversation_consistency(conversations_root, conversation_id, updated_manifest)
+            except (
+                AIPersistenceIOError,
+                AIPersistenceModelValidationError,
+                ConversationModelValidationError,
+                ConversationPersistenceServiceError,
+                OSError,
+                TypeError,
+                ValueError,
+            ) as write_exc:
+                _restore_file_backups(backups)
+                _assert_conversation_consistency(conversations_root, conversation_id, manifest)
+                raise ConversationPersistenceServiceError(f"append message rolled back after write failure: {write_exc}") from write_exc
+            return _clone_conversation(
+                replace(
+                    _read_conversation_metadata(metadata_path),
+                    messages=_read_messages_jsonl(messages_path),
+                ).validate()
             )
-            return _clone_conversation(replace(updated, messages=updated_messages).validate())
         except (
             AIPersistenceIOError,
             AIPersistenceModelValidationError,
@@ -207,6 +231,8 @@ class ConversationPersistenceService:
         try:
             metadata_record = _read_conversation_metadata(conversation_dir / "conversation.json")
             messages = _read_messages_jsonl(conversation_dir / "messages.jsonl")
+            manifest = _read_conversations_manifest(conversations_root, layout.manifest.workspace_id, required=False)
+            _assert_conversation_consistency(conversations_root, conversation_id, manifest)
             return _clone_conversation(replace(metadata_record, messages=messages).validate())
         except (
             AIPersistenceIOError,
@@ -233,12 +259,14 @@ class ConversationPersistenceService:
         conversations_root = _conversations_root(layout)
         try:
             manifest = _read_conversations_manifest(conversations_root, workspace_id, required=False)
+            _assert_conversations_manifest_consistency(conversations_root, manifest)
             entries = [entry for entry in manifest["conversations"] if entry["workspace_id"] == workspace_id]
             entries.sort(key=lambda item: (item["updated_at"], item["created_at"], item["conversation_id"]), reverse=True)
             page = entries[offset : offset + limit]
             records = []
             for entry in page:
                 conversation_dir = _safe_existing_conversation_dir(conversations_root, entry["conversation_id"])
+                _assert_conversation_consistency(conversations_root, entry["conversation_id"], manifest)
                 records.append(_clone_conversation(_read_conversation_metadata(conversation_dir / "conversation.json")))
             return records
         except (
@@ -256,17 +284,14 @@ class ConversationPersistenceService:
         layout = self._load_layout(workspace_root)
         conversations_root = _conversations_root(layout)
         conversation_dir = _safe_existing_conversation_dir(conversations_root, conversation_id)
-        staging_dir = conversations_root / f".deleting_{conversation_id}_{uuid.uuid4().hex}"
-        _assert_under(staging_dir, conversations_root, "delete staging path")
+        trash_dir = conversations_root / f".trash_{conversation_id}_{uuid.uuid4().hex}"
+        _assert_under(trash_dir, conversations_root, "delete trash path")
+        manifest = _read_conversations_manifest(conversations_root, layout.manifest.workspace_id, required=False)
+        _assert_conversation_consistency(conversations_root, conversation_id, manifest)
+        updated_manifest = _remove_manifest_entry(manifest, conversation_id)
         try:
-            conversation_dir.rename(staging_dir)
-            manifest = _read_conversations_manifest(conversations_root, layout.manifest.workspace_id, required=False)
-            _write_conversations_manifest(
-                conversations_root,
-                _remove_manifest_entry(manifest, conversation_id),
-            )
-            shutil.rmtree(staging_dir)
-            return True
+            conversation_dir.rename(trash_dir)
+            _write_conversations_manifest(conversations_root, updated_manifest)
         except (
             AIPersistenceIOError,
             AIPersistenceModelValidationError,
@@ -275,12 +300,38 @@ class ConversationPersistenceService:
             ValueError,
             json.JSONDecodeError,
         ) as exc:
-            if staging_dir.exists() and not conversation_dir.exists():
+            if trash_dir.exists() and not conversation_dir.exists():
                 try:
-                    staging_dir.rename(conversation_dir)
-                except OSError:
-                    pass
+                    trash_dir.rename(conversation_dir)
+                except OSError as rollback_exc:
+                    raise ConversationPersistenceServiceError(
+                        f"delete conversation failed and rollback failed; repair required: {rollback_exc}"
+                    ) from exc
+            _assert_conversation_consistency(conversations_root, conversation_id, manifest)
             raise ConversationPersistenceServiceError(f"delete conversation failed: {exc}") from exc
+
+        try:
+            shutil.rmtree(trash_dir)
+            _assert_deleted_conversation_consistency(conversations_root, conversation_id, updated_manifest)
+            return True
+        except OSError as cleanup_exc:
+            cleanup_manifest = _add_cleanup_pending_entry(
+                _read_conversations_manifest(conversations_root, layout.manifest.workspace_id, required=False),
+                conversation_id,
+                trash_dir.name,
+                str(cleanup_exc),
+            )
+            _write_conversations_manifest(conversations_root, cleanup_manifest)
+            _assert_deleted_conversation_consistency(conversations_root, conversation_id, cleanup_manifest)
+            return False
+        except (
+            AIPersistenceIOError,
+            AIPersistenceModelValidationError,
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+        ) as exc:
+            raise ConversationPersistenceServiceError(f"delete conversation cleanup state failed: {exc}") from exc
 
     def export_conversation(self, workspace_root: Path | str, conversation_id: str) -> Dict[str, Any]:
         layout = self._load_layout(workspace_root)
@@ -407,10 +458,18 @@ def _read_messages_jsonl(path: Path) -> List[MessageRecord]:
     return records
 
 
+def _serialize_messages_jsonl(messages: List[MessageRecord]) -> str:
+    lines = []
+    for message in messages:
+        lines.append(json.dumps(message.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+    return "".join(f"{line}\n" for line in lines)
+
+
 def _write_messages_jsonl_atomic(path: Path, messages: List[MessageRecord]) -> Path:
     parent = path.parent
     if not parent.exists() or not parent.is_dir():
         raise AIPersistenceIOError(f"target parent directory does not exist: {parent}")
+    serialized = _serialize_messages_jsonl(messages)
     temp_path: Path | None = None
     try:
         file_descriptor, temp_name = tempfile.mkstemp(
@@ -421,9 +480,7 @@ def _write_messages_jsonl_atomic(path: Path, messages: List[MessageRecord]) -> P
         )
         temp_path = Path(temp_name)
         with os.fdopen(file_descriptor, "w", encoding="utf-8", newline="\n") as handle:
-            for message in messages:
-                json.dump(message.to_dict(), handle, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-                handle.write("\n")
+            handle.write(serialized)
             handle.flush()
             _fsync_file(handle)
         os.replace(str(temp_path), str(path))
@@ -460,6 +517,7 @@ def _empty_conversations_manifest(workspace_id: str) -> Dict[str, Any]:
         "not_long_term_memory": True,
         "writer_version": CONVERSATION_PERSISTENCE_WRITER_VERSION,
         "conversations": [],
+        "cleanup_pending": [],
     }
 
 
@@ -479,6 +537,9 @@ def _validate_conversations_manifest(payload: Dict[str, Any], workspace_id: str)
     conversations = payload.get("conversations")
     if not isinstance(conversations, list):
         raise ConversationPersistenceServiceError("conversations manifest conversations must be a list")
+    cleanup_pending = payload.get("cleanup_pending", [])
+    if not isinstance(cleanup_pending, list):
+        raise ConversationPersistenceServiceError("conversations manifest cleanup_pending must be a list")
     seen: set[str] = set()
     validated_entries = []
     for index, entry in enumerate(conversations):
@@ -505,6 +566,23 @@ def _validate_conversations_manifest(payload: Dict[str, Any], workspace_id: str)
                 "not_formal_knowledge": _require_true_bool(entry.get("not_formal_knowledge"), "not_formal_knowledge"),
             }
         )
+    validated_cleanup = []
+    for index, entry in enumerate(cleanup_pending):
+        if not isinstance(entry, dict):
+            raise ConversationPersistenceServiceError(f"cleanup_pending entry {index} must be a dictionary")
+        conversation_id = str(entry.get("conversation_id") or "")
+        _validate_conversation_id(conversation_id)
+        trash_dir = _require_text_value(entry.get("trash_dir"), "cleanup_pending.trash_dir")
+        if "/" in trash_dir or "\\" in trash_dir or not trash_dir.startswith(f".trash_{conversation_id}_"):
+            raise ConversationPersistenceServiceError("cleanup_pending trash_dir must be a local trash directory name")
+        validated_cleanup.append(
+            {
+                "conversation_id": conversation_id,
+                "trash_dir": trash_dir,
+                "created_at": _require_text_value(entry.get("created_at"), "cleanup_pending.created_at"),
+                "error": _require_text_value(entry.get("error"), "cleanup_pending.error"),
+            }
+        )
     return {
         "schema_version": CONVERSATIONS_MANIFEST_SCHEMA_VERSION,
         "workspace_id": workspace_id,
@@ -513,6 +591,7 @@ def _validate_conversations_manifest(payload: Dict[str, Any], workspace_id: str)
         "not_long_term_memory": True,
         "writer_version": str(payload.get("writer_version") or CONVERSATION_PERSISTENCE_WRITER_VERSION),
         "conversations": validated_entries,
+        "cleanup_pending": validated_cleanup,
     }
 
 
@@ -549,6 +628,113 @@ def _remove_manifest_entry(manifest: Dict[str, Any], conversation_id: str) -> Di
         item for item in manifest["conversations"] if item["conversation_id"] != conversation_id
     ]
     return updated
+
+
+def _add_cleanup_pending_entry(
+    manifest: Dict[str, Any],
+    conversation_id: str,
+    trash_dir_name: str,
+    error: str,
+) -> Dict[str, Any]:
+    _validate_conversation_id(conversation_id)
+    updated = dict(manifest)
+    pending = [
+        item
+        for item in manifest.get("cleanup_pending", [])
+        if item.get("conversation_id") != conversation_id or item.get("trash_dir") != trash_dir_name
+    ]
+    pending.append(
+        {
+            "conversation_id": conversation_id,
+            "trash_dir": trash_dir_name,
+            "created_at": _now_iso(),
+            "error": error or "trash cleanup failed",
+        }
+    )
+    updated["cleanup_pending"] = pending
+    updated["writer_version"] = CONVERSATION_PERSISTENCE_WRITER_VERSION
+    return _validate_conversations_manifest(updated, str(updated.get("workspace_id") or ""))
+
+
+def _manifest_entry_for(manifest: Dict[str, Any], conversation_id: str) -> Optional[Dict[str, Any]]:
+    for entry in manifest["conversations"]:
+        if entry["conversation_id"] == conversation_id:
+            return entry
+    return None
+
+
+def _assert_conversation_consistency(
+    conversations_root: Path,
+    conversation_id: str,
+    manifest: Optional[Dict[str, Any]],
+) -> None:
+    conversation_dir = _safe_existing_conversation_dir(conversations_root, conversation_id)
+    metadata_record = _read_conversation_metadata(conversation_dir / "conversation.json")
+    messages = _read_messages_jsonl(conversation_dir / "messages.jsonl")
+    if metadata_record.conversation_id != conversation_id:
+        raise ConversationPersistenceServiceError("conversation metadata id does not match directory")
+    message_count = metadata_record.metadata.get("message_count")
+    if type(message_count) is not int:
+        raise ConversationPersistenceServiceError("conversation metadata message_count must be an integer")
+    if message_count != len(messages):
+        raise ConversationPersistenceServiceError("conversation metadata message_count does not match messages.jsonl")
+    if manifest is None:
+        return
+    entry = _manifest_entry_for(manifest, conversation_id)
+    if entry is None:
+        raise ConversationPersistenceServiceError("conversations manifest is missing conversation entry")
+    if entry["workspace_id"] != metadata_record.workspace_id:
+        raise ConversationPersistenceServiceError("manifest workspace_id does not match conversation metadata")
+    if entry["title"] != metadata_record.title:
+        raise ConversationPersistenceServiceError("manifest title does not match conversation metadata")
+    if entry["updated_at"] != metadata_record.updated_at:
+        raise ConversationPersistenceServiceError("manifest updated_at does not match conversation metadata")
+    if entry["provider_kind"] != metadata_record.provider_kind:
+        raise ConversationPersistenceServiceError("manifest provider_kind does not match conversation metadata")
+    if entry["message_count"] != message_count:
+        raise ConversationPersistenceServiceError("manifest message_count does not match conversation metadata")
+
+
+def _assert_deleted_conversation_consistency(
+    conversations_root: Path,
+    conversation_id: str,
+    manifest: Dict[str, Any],
+) -> None:
+    _validate_conversation_id(conversation_id)
+    active_path = _safe_conversation_dir(conversations_root, conversation_id)
+    if active_path.exists():
+        raise ConversationPersistenceServiceError("deleted conversation still has an active directory")
+    if _manifest_entry_for(manifest, conversation_id) is not None:
+        raise ConversationPersistenceServiceError("deleted conversation is still listed in manifest")
+
+
+def _assert_conversations_manifest_consistency(conversations_root: Path, manifest: Dict[str, Any]) -> None:
+    manifest_ids = {entry["conversation_id"] for entry in manifest["conversations"]}
+    missing_dirs = _detect_manifest_missing_conversation_dir(conversations_root, manifest)
+    if missing_dirs:
+        raise ConversationPersistenceServiceError(f"manifest references missing conversation dirs: {', '.join(missing_dirs)}")
+    orphan_dirs = _detect_orphan_conversation_dirs(conversations_root, manifest)
+    if orphan_dirs:
+        raise ConversationPersistenceServiceError(f"orphan conversation dirs detected: {', '.join(orphan_dirs)}")
+    for conversation_id in sorted(manifest_ids):
+        _assert_conversation_consistency(conversations_root, conversation_id, manifest)
+
+
+def _detect_orphan_conversation_dirs(conversations_root: Path, manifest: Dict[str, Any]) -> List[str]:
+    manifest_ids = {entry["conversation_id"] for entry in manifest["conversations"]}
+    orphan_dirs = []
+    for child in conversations_root.iterdir():
+        if child.is_dir() and child.name.startswith("conv_") and child.name not in manifest_ids:
+            orphan_dirs.append(child.name)
+    return sorted(orphan_dirs)
+
+
+def _detect_manifest_missing_conversation_dir(conversations_root: Path, manifest: Dict[str, Any]) -> List[str]:
+    missing = []
+    for entry in manifest["conversations"]:
+        if not _safe_conversation_dir(conversations_root, entry["conversation_id"]).is_dir():
+            missing.append(entry["conversation_id"])
+    return sorted(missing)
 
 
 def _coerce_message_record(payload: Dict[str, Any], default_provider_kind: str) -> MessageRecord:
@@ -740,6 +926,54 @@ def _fsync_directory(directory: Path) -> None:
         pass
     finally:
         os.close(descriptor)
+
+
+def _capture_file_backups(paths: List[Path]) -> Dict[Path, Optional[bytes]]:
+    backups: Dict[Path, Optional[bytes]] = {}
+    for path in paths:
+        try:
+            backups[path] = path.read_bytes() if path.exists() else None
+        except OSError as exc:
+            raise ConversationPersistenceServiceError(f"could not capture persistence backup: {path}: {exc}") from exc
+    return backups
+
+
+def _restore_file_backups(backups: Dict[Path, Optional[bytes]]) -> None:
+    errors = []
+    for path, data in backups.items():
+        try:
+            _restore_file_bytes(path, data)
+        except OSError as exc:
+            errors.append(f"{path}: {exc}")
+    if errors:
+        joined = "; ".join(errors)
+        raise ConversationPersistenceServiceError(f"rollback failed; repair required: {joined}")
+
+
+def _restore_file_bytes(path: Path, data: Optional[bytes]) -> None:
+    if data is None:
+        if path.exists():
+            path.unlink()
+        return
+    parent = path.parent
+    if not parent.exists() or not parent.is_dir():
+        raise OSError(f"restore parent directory does not exist: {parent}")
+    file_descriptor, temp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.restore.",
+        suffix=".tmp",
+        dir=str(parent),
+    )
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(file_descriptor, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            _fsync_file(handle)
+        os.replace(str(temp_path), str(path))
+        _fsync_directory(parent)
+    except OSError:
+        _remove_file_quietly(temp_path)
+        raise
 
 
 def _remove_file_quietly(path: Path) -> None:
