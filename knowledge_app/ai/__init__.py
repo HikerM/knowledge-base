@@ -24,6 +24,10 @@ from knowledge_app.ai.conversation_models import (
     PolicyDecisionRecord,
     TaskReference,
 )
+from knowledge_app.ai.conversation_persistence_service import (
+    ConversationPersistenceService,
+    ConversationPersistenceServiceError,
+)
 from knowledge_app.ai.conversation_store import ConversationStore, ConversationStoreError
 from knowledge_app.ai.memory_models import (
     MemoryCandidate,
@@ -91,6 +95,8 @@ __all__ = [
     "Citation",
     "CitationRecord",
     "ConversationRecord",
+    "ConversationPersistenceService",
+    "ConversationPersistenceServiceError",
     "ConversationSummary",
     "ConversationStore",
     "ConversationStoreError",
