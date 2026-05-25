@@ -378,7 +378,7 @@ class ServiceAdapter:
         try:
             memory = self._memory().accept_candidate(candidate_id, confirmed=confirmed)
             candidates = self._memory().list_candidates(self._ai_workspace_id())
-            memories = self._memory().list_memories(self._ai_workspace_id(), include_deleted=True)
+            memories = self._memory().list_memories(self._ai_workspace_id(), include_disabled=True, include_deleted=True)
         except MemoryServiceError as exc:
             return self._memory_error("ai_memory_accept_candidate", service, str(exc))
         except Exception as exc:  # noqa: BLE001
@@ -424,7 +424,7 @@ class ServiceAdapter:
         }
         return envelope("ai_memory_expire_candidate", "ready", data, [service])
 
-    def list_saved_memories(self) -> Dict[str, Any]:
+    def list_saved_memories(self, status: str | None = None) -> Dict[str, Any]:
         service = "MemoryService"
         try:
             memories = self._memory().list_memories(self._ai_workspace_id(), include_disabled=True, include_deleted=True)
@@ -433,8 +433,11 @@ class ServiceAdapter:
         except Exception as exc:  # noqa: BLE001
             return self._memory_error("ai_memory_saved", service, str(exc))
         rows = [self._saved_memory_row(item.to_dict()) for item in memories]
+        if status:
+            rows = [row for row in rows if row["status"] == status]
         data = {
             "workspace_id": self._ai_workspace_id(),
+            "status_filter": status,
             "memories": rows,
             "count": len(rows),
             "storage": self._memory_storage_state(),

@@ -94,6 +94,52 @@ QT_QPA_PLATFORM=offscreen PKB_GUI_AUTO_CLOSE_MS=1000 python -m gui.app
 - [ ] 设置表格不可编辑。
 - [ ] 不提供编辑表单、保存、应用或 execute 操作。
 
+## AI 记忆设置 v2.6.2 补充
+
+命令：
+
+```bash
+python -m gui.app --workspace D:\AI\personal-knowledge-base
+```
+
+边界：
+
+- [ ] 「设置」中存在「AI 记忆」入口。
+- [ ] 启动应用和打开「设置」页不会自动加载 MemoryCandidate、SavedMemory、backup preview、export preview 或 privacy status。
+- [ ] 进入「AI 记忆」页后显示：`AI 记忆当前为内存模拟模式，关闭应用后不会保留。`
+- [ ] 页面说明长期记忆必须由用户确认后才会保存。
+- [ ] 页面说明 AI 记忆不会作为正式知识，也不会进入搜索规则。
+- [ ] 页面说明当前不会发送到云端。
+- [ ] 页面说明删除为删除记录，不是正式知识删除。
+- [ ] 当前实现只使用 in-memory MemoryService；关闭应用后不会持久化，不创建 `workspace/ai`，不写 `workspace/ai/memory/*.jsonl`。
+
+MemoryCandidate：
+
+- [ ] 点击「加载候选」后才显示候选列表。
+- [ ] 候选筛选包含：全部、待确认、已接受、已拒绝、已过期。
+- [ ] 候选项显示 `proposed_text`、type、sensitivity、source_message_ids 和 status。
+- [ ] 点击「接受」会显示确认提示；未确认不会保存。
+- [ ] `sensitivity=blocked` 候选不可接受，页面显示 blocked candidate 错误态。
+- [ ] 点击「拒绝」只把候选标记为 rejected，不保存 SavedMemory。
+- [ ] 点击「标记过期」会显示确认提示；确认后候选变为 expired，且不保存 SavedMemory。
+- [ ] 无候选时显示空态，不自动创建候选。
+
+SavedMemory：
+
+- [ ] 点击「加载已保存记忆」后才显示 SavedMemory 列表。
+- [ ] SavedMemory 筛选包含：全部、启用、已禁用、已删除。
+- [ ] active / disabled / deleted 状态显示正确。
+- [ ] 删除后显示 tombstone：`已删除，仅保留删除记录`。
+- [ ] redacted text 显示：`内容已删除`。
+- [ ] 禁用、删除、清空只影响当前工作区的内存模拟记忆，不影响 conversation，不影响正式知识。
+
+Preview：
+
+- [ ] backup preview 显示 `include_ai_memory=false` 和 `include_ai_drafts=false`。
+- [ ] export preview 显示 `writes_file=false`、`cloud_send_allowed=false`、`formal_search_records=false`。
+- [ ] 可复制 export preview JSON；复制只进入剪贴板，不写入文件。
+- [ ] privacy mode 时显示禁止保存 AI 记忆，并阻止保存。
+
 ## 窗口适配
 
 - [ ] 在 `920x640` 附近窗口尺寸下，主导航、顶部栏、列表和预览区不重叠。

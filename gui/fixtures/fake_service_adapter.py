@@ -503,14 +503,16 @@ class FakeServiceAdapter:
             ["MemoryService"],
         )
 
-    def list_saved_memories(self) -> Dict[str, Any]:
-        self.calls.append(("list_saved_memories", {}))
+    def list_saved_memories(self, status: str | None = None) -> Dict[str, Any]:
+        self.calls.append(("list_saved_memories", {"status": status}))
         memories = self.memory_service.list_memories(self.memory_workspace_id, include_disabled=True, include_deleted=True)
         rows = [self._saved_memory_row(item.to_dict()) for item in memories]
+        if status:
+            rows = [row for row in rows if row["status"] == status]
         return _envelope(
             "ai_memory_saved",
             "ready" if rows else "empty",
-            {"workspace_id": self.memory_workspace_id, "memories": rows, "count": len(rows), "storage": self._memory_storage_state()},
+            {"workspace_id": self.memory_workspace_id, "status_filter": status, "memories": rows, "count": len(rows), "storage": self._memory_storage_state()},
             ["MemoryService"],
         )
 

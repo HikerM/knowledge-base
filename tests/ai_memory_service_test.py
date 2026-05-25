@@ -154,6 +154,41 @@ def assert_delete_memory_does_not_affect_conversation() -> None:
     assert conversation_store.get_conversation(conversation.conversation_id).conversation_id == conversation.conversation_id
 
 
+def assert_clear_memory_scoped_and_does_not_affect_conversation() -> None:
+    conversation_store = ConversationStore()
+    memory_service = MemoryService()
+    conversation_a = conversation_store.create_conversation("workspace_01")
+    conversation_b = conversation_store.create_conversation("workspace_02")
+    memory_a = memory_service.accept_candidate(
+        memory_service.create_candidate(
+            conversation_id=conversation_a.conversation_id,
+            workspace_id="workspace_01",
+            proposed_text="Workspace 01 preference.",
+            type="preference",
+            source_message_ids=["msg_a"],
+        ).candidate_id,
+        confirmed=True,
+    )
+    memory_b = memory_service.accept_candidate(
+        memory_service.create_candidate(
+            conversation_id=conversation_b.conversation_id,
+            workspace_id="workspace_02",
+            proposed_text="Workspace 02 preference.",
+            type="preference",
+            source_message_ids=["msg_b"],
+        ).candidate_id,
+        confirmed=True,
+    )
+    assert memory_service.clear_memory("workspace_01") == 1
+    assert memory_service.list_memories("workspace_01") == []
+    assert [item.memory_id for item in memory_service.list_memories("workspace_02")] == [memory_b.memory_id]
+    deleted_a = memory_service.list_memories("workspace_01", include_deleted=True)
+    assert deleted_a[0].memory_id == memory_a.memory_id
+    assert deleted_a[0].status == MemoryStatus.DELETED.value
+    assert conversation_store.get_conversation(conversation_a.conversation_id).conversation_id == conversation_a.conversation_id
+    assert conversation_store.get_conversation(conversation_b.conversation_id).conversation_id == conversation_b.conversation_id
+
+
 def assert_no_files_or_workspace_ai_created() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         workspace = Path(temp_dir) / "workspace"
@@ -276,6 +311,7 @@ def main() -> int:
     assert_expire_candidate_does_not_save_memory()
     assert_delete_disable_clear_memory()
     assert_delete_memory_does_not_affect_conversation()
+    assert_clear_memory_scoped_and_does_not_affect_conversation()
     assert_no_files_or_workspace_ai_created()
     assert_memory_does_not_become_formal_knowledge_or_authorize_mutation()
     assert_retention_enforcement_expires_pending_candidates_only()

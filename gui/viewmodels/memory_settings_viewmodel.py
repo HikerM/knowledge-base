@@ -15,6 +15,7 @@ class MemorySettingsViewModel:
     def __init__(self, adapter: Any | None):
         self.adapter = adapter
         self.status_filter: str | None = None
+        self.memory_status_filter: str | None = None
         self.candidates: List[Dict[str, Any]] = []
         self.memories: List[Dict[str, Any]] = []
         self.backup_preview: Dict[str, Any] = {}
@@ -31,6 +32,7 @@ class MemorySettingsViewModel:
 
     def reset(self) -> Dict[str, Any]:
         self.status_filter = None
+        self.memory_status_filter = None
         self.candidates = []
         self.memories = []
         self.backup_preview = {}
@@ -50,6 +52,7 @@ class MemorySettingsViewModel:
             "state": self.state,
             "message": self.message,
             "status_filter": self.status_filter,
+            "memory_status_filter": self.memory_status_filter,
             "candidates": list(self.candidates),
             "memories": list(self.memories),
             "backup_preview": dict(self.backup_preview),
@@ -83,7 +86,7 @@ class MemorySettingsViewModel:
         self.status_filter = normalized_status
         if response.get("state") in {"ready", "empty"}:
             data = response.get("data") or {}
-            self.candidates = [dict(item) for item in data.get("candidates") or []]
+            self.candidates = self._apply_candidate_filter([dict(item) for item in data.get("candidates") or []])
             self.state = str(response.get("state") or "empty")
             self.message = "已加载 MemoryCandidate。" if self.candidates else "没有符合条件的 MemoryCandidate。"
         else:
@@ -98,8 +101,8 @@ class MemorySettingsViewModel:
         self._capture_response(response)
         if response.get("state") == "ready":
             data = response.get("data") or {}
-            self.candidates = [dict(item) for item in data.get("candidates") or self.candidates]
-            self.memories = [dict(item) for item in data.get("memories") or self.memories]
+            self.candidates = self._apply_candidate_filter([dict(item) for item in data.get("candidates") or self.candidates])
+            self.memories = self._apply_memory_filter([dict(item) for item in data.get("memories") or self.memories])
             self.state = "ready"
             self.message = "已保存到内存中的 SavedMemory；不会写入磁盘。"
         else:
@@ -111,31 +114,36 @@ class MemorySettingsViewModel:
         self._capture_response(response)
         if response.get("state") == "ready":
             data = response.get("data") or {}
-            self.candidates = [dict(item) for item in data.get("candidates") or self.candidates]
+            self.candidates = self._apply_candidate_filter([dict(item) for item in data.get("candidates") or self.candidates])
             self.state = "ready"
             self.message = "已拒绝 MemoryCandidate；不会保存长期记忆。"
         else:
             self.message = self._error_message("拒绝 MemoryCandidate 失败。")
         return self.snapshot()
 
-    def expire_candidate(self, candidate_id: str) -> Dict[str, Any]:
+    def expire_candidate(self, candidate_id: str, confirmed: bool = False) -> Dict[str, Any]:
+        if confirmed is not True:
+            self.message = "标记过期 MemoryCandidate 需要确认；过期不会保存长期记忆。"
+            return self.snapshot()
         response = self._call("expire_memory_candidate", candidate_id=candidate_id)
         self._capture_response(response)
         if response.get("state") == "ready":
             data = response.get("data") or {}
-            self.candidates = [dict(item) for item in data.get("candidates") or self.candidates]
+            self.candidates = self._apply_candidate_filter([dict(item) for item in data.get("candidates") or self.candidates])
             self.state = "ready"
-            self.message = "已将 MemoryCandidate 标记为 expired。"
+            self.message = "已将 MemoryCandidate 标记为 expired；不会保存 SavedMemory。"
         else:
             self.message = self._error_message("过期 MemoryCandidate 失败。")
         return self.snapshot()
 
-    def load_memories(self) -> Dict[str, Any]:
-        response = self._call("list_saved_memories")
+    def load_memories(self, status: str | None = None) -> Dict[str, Any]:
+        normalized_status = status or None
+        response = self._call("list_saved_memories", status=normalized_status)
         self._capture_response(response)
+        self.memory_status_filter = normalized_status
         if response.get("state") in {"ready", "empty"}:
             data = response.get("data") or {}
-            self.memories = [dict(item) for item in data.get("memories") or []]
+            self.memories = self._apply_memory_filter([dict(item) for item in data.get("memories") or []])
             self.state = str(response.get("state") or "empty")
             self.message = "已加载 SavedMemory。" if self.memories else "当前没有 SavedMemory。"
         else:
@@ -147,7 +155,7 @@ class MemorySettingsViewModel:
         self._capture_response(response)
         if response.get("state") == "ready":
             data = response.get("data") or {}
-            self.memories = [dict(item) for item in data.get("memories") or self.memories]
+            self.memories = self._apply_memory_filter([dict(item) for item in data.get("memories") or self.memories])
             self.state = "ready"
             self.message = "已禁用 SavedMemory；仅影响内存模拟状态。"
         else:
@@ -162,7 +170,7 @@ class MemorySettingsViewModel:
         self._capture_response(response)
         if response.get("state") == "ready":
             data = response.get("data") or {}
-            self.memories = [dict(item) for item in data.get("memories") or self.memories]
+            self.memories = self._apply_memory_filter([dict(item) for item in data.get("memories") or self.memories])
             self.state = "ready"
             self.message = "已生成删除记录；内容已删除，不影响正式知识。"
         else:
@@ -177,7 +185,7 @@ class MemorySettingsViewModel:
         self._capture_response(response)
         if response.get("state") == "ready":
             data = response.get("data") or {}
-            self.memories = [dict(item) for item in data.get("memories") or []]
+            self.memories = self._apply_memory_filter([dict(item) for item in data.get("memories") or []])
             self.state = "ready"
             self.message = f"已清空当前工作区内存记忆：{int(data.get('deleted_count') or 0)} 条。"
         else:
@@ -224,5 +232,21 @@ class MemorySettingsViewModel:
 
     def _error_message(self, fallback: str) -> str:
         if self.errors:
-            return "; ".join(str(item.get("message") or "") for item in self.errors if item.get("message")) or fallback
+            message = "; ".join(str(item.get("message") or "") for item in self.errors if item.get("message")) or fallback
+            lower = message.lower()
+            if "privacy mode" in lower:
+                return "隐私模式已开启，禁止保存 AI 记忆。"
+            if "blocked" in lower:
+                return "blocked candidate 不可保存为长期记忆。"
+            return message
         return fallback
+
+    def _apply_candidate_filter(self, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not self.status_filter:
+            return rows
+        return [row for row in rows if str(row.get("status") or "") == self.status_filter]
+
+    def _apply_memory_filter(self, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not self.memory_status_filter:
+            return rows
+        return [row for row in rows if str(row.get("status") or "") == self.memory_status_filter]

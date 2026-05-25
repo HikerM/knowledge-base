@@ -91,9 +91,11 @@ def main() -> int:
         allowed_ai_record_buttons = {
             "memoryAcceptCandidateButton",
             "memoryRejectCandidateButton",
+            "memoryExpireCandidateButton",
             "memoryDisableButton",
             "memoryDeleteButton",
             "memoryClearButton",
+            "memoryCopyExportPreviewButton",
             "conversationHistoryDeleteButton",
         }
         all_button_text = " ".join(button.text().lower() for button in window.findChildren(QPushButton) if button.objectName() not in allowed_ai_record_buttons)
