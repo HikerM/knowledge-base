@@ -43,6 +43,15 @@ from knowledge_app.ai.local_model_catalog import (
     load_local_model_catalog,
     validate_local_model_catalog,
 )
+from knowledge_app.ai.local_model_download_models import (
+    ModelDownloadPlan,
+    LocalModelDownloadPlanValidationError,
+)
+from knowledge_app.ai.local_model_download_plan_service import (
+    ModelDownloadPlanService,
+    LocalModelDownloadPlanServiceError,
+    create_download_plan,
+)
 from knowledge_app.ai.local_model_policy import (
     LocalModelPolicyValidationError,
     validate_local_model_download_policy,
@@ -123,6 +132,8 @@ __all__ = [
     "ConversationStoreError",
     "LocalModelCatalog",
     "LocalModelCatalogValidationError",
+    "LocalModelDownloadPlanServiceError",
+    "LocalModelDownloadPlanValidationError",
     "LocalModelDownloadPolicy",
     "LocalModelEntry",
     "LocalModelPolicyValidationError",
@@ -137,6 +148,8 @@ __all__ = [
     "MemoryStatus",
     "MemoryType",
     "MessageRecord",
+    "ModelDownloadPlan",
+    "ModelDownloadPlanService",
     "MockAIProvider",
     "PermissionDecision",
     "PermissionPolicy",
@@ -164,4 +177,5 @@ __all__ = [
     "get_model",
     "list_models_by_tier",
     "load_local_model_catalog",
+    "create_download_plan",
 ]
