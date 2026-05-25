@@ -191,6 +191,7 @@ models:
 storage_policy:
   default_model_dir_windows: "%LOCALAPPDATA%\\PersonalKnowledgeBase\\models\\"
   user_custom_model_dir_allowed: true
+  user_custom_dir_requires_future_confirmation: true
   forbidden_locations:
     - "workspace"
     - "software_install_dir"
@@ -202,15 +203,21 @@ storage_policy:
     - "system_dir"
   uninstall_app_deletes_models_by_default: false
   user_can_delete_model_files_in_settings: true
+  delete_model_requires_confirmation: true
 
 download_policy:
   stage: "design_only"
   source_kind: "modelscope"
+  no_auto_download: true
   actual_download_enabled: false
+  confirmation_required: true
   single_file_gguf_only: true
+  no_repository_download: true
   whole_repository_download_allowed: false
   arbitrary_url_download_allowed: false
+  no_shell_script: true
   shell_download_script_allowed: false
+  no_arbitrary_command: true
   user_confirmation_required: true
   task_queue_required: true
   no_30gb_default: true

@@ -74,9 +74,11 @@ AI Assistant Control Plane：
 - v2.7.0 新增 Local Model Installer design-only 文档和配置草案，见 [docs/local-model-installer-design.md](D:/AI/personal-knowledge-base/docs/local-model-installer-design.md)、[docs/local-model-catalog-policy.md](D:/AI/personal-knowledge-base/docs/local-model-catalog-policy.md)、[docs/local-model-runtime-boundary.md](D:/AI/personal-knowledge-base/docs/local-model-runtime-boundary.md)、[docs/local-model-privacy-and-storage-policy.md](D:/AI/personal-knowledge-base/docs/local-model-privacy-and-storage-policy.md) 和 [config/local-model-catalog.example.yaml](D:/AI/personal-knowledge-base/config/local-model-catalog.example.yaml)。
 - v2.7.0 只设计本地模型安装助手，不下载模型，不接 ModelScope 实际下载，不接 OpenAI，不接本地 `llama.cpp` / server，不启动模型进程，不执行 shell 下载脚本，不做真实 AI provider，不修改 GUI 执行逻辑，不修改 `knowledge/**/*.md`、SQLite schema 或 search/index/audit 行为。
 - v2.7.0 catalog 默认模型是 `Qwen3-0.6B-GGUF Q4_K_M` 极轻量档；30GB+ 模型不得作为默认推荐。未来所有下载必须用户确认并通过 TaskQueue，模型默认存放 `%LOCALAPPDATA%\PersonalKnowledgeBase\models\`，不得放 workspace 或安装目录。
+- v2.7.1 新增 Local Model Catalog static loader / tests：`knowledge_app/ai/local_model_catalog.py` 只负责 YAML 解析、schema validation、默认模型和 GGUF/reference-only 约束；`knowledge_app/ai/local_model_policy.py` 只负责 storage/download/verification policy 静态校验。
+- v2.7.1 仍无真实模型下载、无 ModelScope 网络访问、无本地模型 runtime、无 `llama.cpp` / server、无本地 HTTP、无真实 provider；catalog validation 必须先于未来 installer/runtime，默认模型必须保持 ultra_light，30GB+ 不得默认，`sha256=pending` 必须阻止 verified install。
 - `config/ai-capabilities.example.yaml` 仍是 example contract，不是运行时自动执行入口；v2.3.0 只在用户发送 mock assistant 消息时显式加载它做白名单和 policy 判定，不会执行 capability。
 - v2.5.0 仍不接 OpenAI、本地模型、ModelScope，不下载模型，不做 RSS/vector，不实现真实 AI 问答，不实现持久化 ConversationStore / MemoryService，不创建 `workspace/ai`，不创建 conversation 文件，不保存真实长期记忆到磁盘，不执行 mutation，不改变 search/index/audit 行为。
-- v2.7.0 仍无真实模型下载、无模型 runtime、无真实 provider、无云端接入；`config/local-model-catalog.example.yaml` 只是 design-only catalog，不是下载指令。
+- v2.7.1 仍无真实模型下载、无模型 runtime、无真实 provider、无云端接入；`config/local-model-catalog.example.yaml` 仍只是 design-only catalog，不是下载指令。
 - v2.5.1 仍不实现真实持久化，不创建 `workspace/ai`，不写 conversation/memory/draft 文件，不保存长期记忆到磁盘，不修改 `knowledge/**/*.md`、SQLite schema 或 search/index/audit 行为。
 - AI 助手控制平面仍必须遵守：`用户自然语言 -> IntentRouter -> CapabilityRegistry -> PermissionPolicy -> ContextBuilder -> AIProvider -> Response / Plan -> Confirmation if needed -> Service / TaskQueue`。当前实现只到 MockAIProvider response，不进入真实 Service / TaskQueue 执行。
 - AI 助手不得直接读写 Markdown，不得直接读写 SQLite，不得拼接 CLI 命令字符串，只能通过 `knowledge_app.services`。
@@ -207,7 +209,9 @@ TaskQueue baseline / enhancement：
 - `knowledge_app/ai/persistence_io.py`: v2.5.2 service-layer atomic JSON helper，只提供 manifest 等 JSON 的通用原子读写和 temp cleanup，不写 conversation/memory 正文。
 - `knowledge_app/ai/persistence_service.py`: v2.5.2 `AIStorageBootstrapService`，只在显式确认后创建 workspace-scoped AI storage layout 和 manifest，不接 GUI startup 自动路径。
 - `knowledge_app/ai/conversation_persistence_service.py`: v2.5.3 `ConversationPersistenceService`，只通过显式 service API 管理 `ai/conversations/manifest.json`、`conv_<id>/conversation.json` 和 `conv_<id>/messages.jsonl`；append/delete 必须保持跨文件一致性，persistence failure 必须 controlled error 或 cleanup pending，不读写 memory、knowledge、`.kb` 或 SQLite。后续 GUI conversation history viewer 依赖该边界，只能显式分页读取。
-- `config/local-model-catalog.example.yaml`: v2.7.0 本地模型安装助手 design-only catalog 草案；默认 `Qwen3-0.6B-GGUF Q4_K_M` 极轻量档，所有 sha256 当前为 pending，不允许 verified install。
+- `knowledge_app/ai/local_model_catalog.py`: v2.7.1 本地模型 catalog 静态 loader 和 schema validator，只解析 YAML 到内存模型，不下载模型、不联网、不启动 runtime。
+- `knowledge_app/ai/local_model_policy.py`: v2.7.1 本地模型 storage/download/verification policy 静态 validator，锁定 LocalAppData 默认路径、禁止 workspace/install/knowledge/.kb、禁止自动下载、shell script 和 arbitrary command。
+- `config/local-model-catalog.example.yaml`: v2.7.1 本地模型安装助手 design-only catalog 草案；默认 `Qwen3-0.6B-GGUF Q4_K_M` 极轻量档，所有 sha256 当前为 pending，不允许 verified install。
 - `gui/assistant/`: 右下角悬浮 AI 助手 UI skeleton；v2.3.0 增加问我的资料、总结当前文档、整理建议、生成清单快捷入口。
 - `gui/viewmodels/assistant_viewmodel.py`: assistant ViewModel，只调用 adapter，不直接调用 provider/service/core。
 - `gui/adapters/service_adapter.py`: `send_assistant_message_mock` 是 GUI 到 AssistantService skeleton 的唯一入口。
@@ -919,6 +923,7 @@ knowledge/09-ai-agent/snippets/codex/agent-task-template.md
 - v2.5.0 Persistent ConversationStore / MemoryService Design：新增真实持久化设计文档，明确 storage layout、JSONL / JSON source of truth、schema version、manifest、atomic writes、migration/rollback、retention、deletion、export、backup、privacy mode、audit gates、performance 和 future tests；仍是 design-only，不创建 `workspace/ai`，不写 conversation/memory 文件，不实现真实持久化。
 - v2.5.1 Persistent Storage Static Contract Tests：把 v2.5.0 设计转成静态模型、plan 模型和 contract tests；仍无真实持久化、无 `workspace/ai` 写入、无 conversation/memory 文件、无长期记忆落盘。
 - v2.7.0 Local Model Installer Design：新增本地模型安装助手设计、catalog policy、runtime boundary、privacy/storage policy 和 example YAML；仍无真实下载、无模型 runtime、无真实 provider，未来实现前必须补 catalog parse、默认极轻量模型、no 30GB default、sha256 pending blocks install、TaskQueue progress/cancel、no arbitrary command、no context bypass 和 privacy confirmation 测试。
+- v2.7.1 Local Model Catalog Static Loader / Tests：新增 catalog YAML loader、schema validation、storage/download/verification policy validator 和测试；仍无下载、无 ModelScope 网络访问、无 runtime、无 provider，下一步才可设计 installer UI 或 TaskQueue 下载计划。
 - RSS 和 GitHub Releases 受控采集，结果先进入 raw。
 - 自动摘要和人工审核队列。
 - 向量检索作为 FTS5 补充召回或 rerank。
