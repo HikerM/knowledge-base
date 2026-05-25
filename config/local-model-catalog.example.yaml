@@ -1,0 +1,236 @@
+schema_version: "local-model-catalog-v0.1"
+stage: "design_only"
+description: "Draft local model catalog for v2.7.0 installer design. Not runtime configuration and not a download instruction."
+
+default_model: "qwen3_0_6b_gguf_q4_k_m"
+
+tiers:
+  ultra_light:
+    label: "极轻量"
+    required_model_family: "Qwen3-0.6B-GGUF"
+    default_allowed: true
+    user_copy:
+      - "适合普通笔记本"
+      - "无需显卡"
+  light:
+    label: "轻量"
+    required_model_family: "Qwen3-1.7B-GGUF"
+    default_allowed: false
+    user_copy:
+      - "适合主流轻薄本"
+      - "无需显卡"
+  standard:
+    label: "标准"
+    required_model_family: "Qwen3-4B-GGUF"
+    default_allowed: false
+    user_copy:
+      - "需要较大内存"
+      - "下载较大，请确认磁盘空间"
+  high_quality:
+    label: "高质量"
+    required_model_family: "Qwen3-8B-GGUF"
+    default_allowed: false
+    user_copy:
+      - "需要较大内存"
+      - "下载较大，请确认磁盘空间"
+
+models:
+  - id: "qwen3_0_6b_gguf_q4_k_m"
+    tier: "ultra_light"
+    display_name: "Qwen3-0.6B-GGUF Q4_K_M"
+    provider_kind: "local"
+    model_id: "Qwen/Qwen3-0.6B-GGUF"
+    filename: "qwen3-0.6b-q4_k_m.gguf"
+    url: ""
+    modelscope_reference: "modelscope://Qwen/Qwen3-0.6B-GGUF/qwen3-0.6b-q4_k_m.gguf"
+    sha256: "pending"
+    expected_size: "pending_estimate_0.6_gb"
+    expected_size_gb: 0.6
+    download_size_gb: 0.6
+    install_size_gb: 1.0
+    license: "pending_upstream_license_review"
+    quantization: "Q4_K_M"
+    context_length: 8192
+    recommended_threads: 4
+    minimum_ram_gb: 4
+    recommended_ram_gb: 8
+    requires_gpu: false
+    is_default: true
+    target_users:
+      - "普通笔记本用户"
+      - "低配置设备用户"
+      - "首次体验本地模型的用户"
+    suitable_tasks:
+      - "短问答"
+      - "简单摘要"
+      - "离线隐私模式体验"
+    unsuitable_tasks:
+      - "长文档深度总结"
+      - "复杂推理"
+      - "多文档综合"
+    risk_notice:
+      - "质量有限，回答可能过短或不稳定。"
+      - "仍需遵守 ContextPolicy 和 citation 要求。"
+    verification_status: "pending"
+    verified_install_allowed: false
+
+  - id: "qwen3_1_7b_gguf_q4_k_m"
+    tier: "light"
+    display_name: "Qwen3-1.7B-GGUF Q4_K_M"
+    provider_kind: "local"
+    model_id: "Qwen/Qwen3-1.7B-GGUF"
+    filename: "qwen3-1.7b-q4_k_m.gguf"
+    url: ""
+    modelscope_reference: "modelscope://Qwen/Qwen3-1.7B-GGUF/qwen3-1.7b-q4_k_m.gguf"
+    sha256: "pending"
+    expected_size: "pending_estimate_1.4_gb"
+    expected_size_gb: 1.4
+    download_size_gb: 1.4
+    install_size_gb: 2.2
+    license: "pending_upstream_license_review"
+    quantization: "Q4_K_M"
+    context_length: 8192
+    recommended_threads: 4
+    minimum_ram_gb: 8
+    recommended_ram_gb: 12
+    requires_gpu: false
+    is_default: false
+    target_users:
+      - "主流轻薄本用户"
+      - "希望质量高于默认档的用户"
+    suitable_tasks:
+      - "单篇文档摘要"
+      - "普通问答"
+      - "清单草稿"
+    unsuitable_tasks:
+      - "大上下文"
+      - "多轮复杂规划"
+      - "代码深度审查"
+    risk_notice:
+      - "下载较大，请确认磁盘空间。"
+      - "低内存设备可能变慢。"
+    verification_status: "pending"
+    verified_install_allowed: false
+
+  - id: "qwen3_4b_gguf_q4"
+    tier: "standard"
+    display_name: "Qwen3-4B-GGUF Q4"
+    provider_kind: "local"
+    model_id: "Qwen/Qwen3-4B-GGUF"
+    filename: "qwen3-4b-q4.gguf"
+    url: ""
+    modelscope_reference: "modelscope://Qwen/Qwen3-4B-GGUF/qwen3-4b-q4.gguf"
+    sha256: "pending"
+    expected_size: "pending_estimate_3.0_gb"
+    expected_size_gb: 3.0
+    download_size_gb: 3.0
+    install_size_gb: 5.0
+    license: "pending_upstream_license_review"
+    quantization: "Q4"
+    context_length: 8192
+    recommended_threads: 6
+    minimum_ram_gb: 12
+    recommended_ram_gb: 16
+    requires_gpu: false
+    is_default: false
+    target_users:
+      - "16 GB 内存设备用户"
+      - "希望更稳定摘要的用户"
+    suitable_tasks:
+      - "较长文档摘要"
+      - "结构化提炼"
+      - "中等复杂度问答"
+    unsuitable_tasks:
+      - "超长上下文"
+      - "专业代码推理"
+      - "高质量多步规划"
+    risk_notice:
+      - "需要较大内存。"
+      - "运行时可能占用明显 CPU 和电量。"
+    verification_status: "pending"
+    verified_install_allowed: false
+
+  - id: "qwen3_8b_gguf_q4"
+    tier: "high_quality"
+    display_name: "Qwen3-8B-GGUF Q4"
+    provider_kind: "local"
+    model_id: "Qwen/Qwen3-8B-GGUF"
+    filename: "qwen3-8b-q4.gguf"
+    url: ""
+    modelscope_reference: "modelscope://Qwen/Qwen3-8B-GGUF/qwen3-8b-q4.gguf"
+    sha256: "pending"
+    expected_size: "pending_estimate_6.0_gb"
+    expected_size_gb: 6.0
+    download_size_gb: 6.0
+    install_size_gb: 9.0
+    license: "pending_upstream_license_review"
+    quantization: "Q4"
+    context_length: 8192
+    recommended_threads: 8
+    minimum_ram_gb: 16
+    recommended_ram_gb: 24
+    requires_gpu: false
+    is_default: false
+    target_users:
+      - "高内存电脑用户"
+      - "愿意接受更大下载和更慢速度的用户"
+    suitable_tasks:
+      - "更高质量摘要"
+      - "复杂问答"
+      - "较长知识整理"
+    unsuitable_tasks:
+      - "低配置笔记本"
+      - "需要实时响应的场景"
+      - "磁盘空间紧张的设备"
+    risk_notice:
+      - "下载较大，请确认磁盘空间。"
+      - "首次加载和推理会更慢。"
+    verification_status: "pending"
+    verified_install_allowed: false
+
+storage_policy:
+  default_model_dir_windows: "%LOCALAPPDATA%\\PersonalKnowledgeBase\\models\\"
+  user_custom_model_dir_allowed: true
+  forbidden_locations:
+    - "workspace"
+    - "software_install_dir"
+    - "knowledge"
+    - ".kb"
+    - "config"
+    - "templates"
+    - "reports"
+    - "system_dir"
+  uninstall_app_deletes_models_by_default: false
+  user_can_delete_model_files_in_settings: true
+
+download_policy:
+  stage: "design_only"
+  source_kind: "modelscope"
+  actual_download_enabled: false
+  single_file_gguf_only: true
+  whole_repository_download_allowed: false
+  arbitrary_url_download_allowed: false
+  shell_download_script_allowed: false
+  user_confirmation_required: true
+  task_queue_required: true
+  no_30gb_default: true
+  max_default_download_size_gb: 2.0
+  reject_default_if_download_size_gb_gte: 30.0
+
+verification_policy:
+  sha256_required_for_verified_install: true
+  sha256_pending_blocks_verified_install: true
+  expected_size_required: true
+  invalid_checksum_fails_install: true
+  license_review_required: true
+
+privacy_policy:
+  local_mode_data_leaves_device_by_default: false
+  cloud_mode_enabled: false
+  context_policy_required: true
+  direct_markdown_access_allowed: false
+  direct_sqlite_access_allowed: false
+  capability_registry_required: true
+  permission_policy_required: true
+  provider_can_execute_mutation: false
+  provider_can_execute_shell: false
