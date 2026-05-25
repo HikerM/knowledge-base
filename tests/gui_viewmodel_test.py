@@ -20,6 +20,7 @@ from gui.viewmodels.conversation_history_viewmodel import ConversationHistoryVie
 from gui.viewmodels.dashboard_viewmodel import DashboardViewModel
 from gui.viewmodels.document_viewmodel import DocumentViewModel
 from gui.viewmodels.library_viewmodel import LibraryViewModel
+from gui.viewmodels.memory_settings_viewmodel import MemorySettingsViewModel
 from gui.viewmodels.search_viewmodel import SearchViewModel
 from gui.viewmodels.settings_viewmodel import SettingsViewModel
 from gui.viewmodels.task_viewmodel import TaskViewModel
@@ -112,6 +113,20 @@ def assert_fake_viewmodels() -> None:
     assert '"not_formal_knowledge": true' in export["export_preview"]
     assert adapter.calls[-1][0] == "export_ai_conversation"
 
+    memory = MemorySettingsViewModel(adapter)
+    initial_memory = memory.snapshot()
+    assert initial_memory["state"] == "idle"
+    assert not any(call[0] == "list_memory_candidates" for call in adapter.calls)
+    memory_candidates = memory.load_candidates()
+    assert memory_candidates["candidates"]
+    assert adapter.calls[-1][0] == "list_memory_candidates"
+    memory_previews = memory.refresh_previews()
+    assert memory_previews["backup_preview"]["default_backup"]["include_ai_memory"] is False
+    assert memory_previews["export_preview"]["includes"]["formal_search_records"] is False
+    assert adapter.calls[-3][0] == "preview_memory_backup"
+    assert adapter.calls[-2][0] == "preview_memory_export"
+    assert adapter.calls[-1][0] == "get_memory_privacy_status"
+
     caps = adapter.capabilities()
     assert all(value is False for value in caps.values())
     assert not hasattr(adapter, "execute_mutation")
@@ -167,7 +182,7 @@ def assert_service_adapter_startup_guards() -> None:
 
 
 def assert_viewmodels_do_not_import_services() -> None:
-    modules = [WorkspaceViewModel, WorkspaceCreationViewModel, DashboardViewModel, SearchViewModel, LibraryViewModel, DocumentViewModel, TaskViewModel, SettingsViewModel, AssistantViewModel, ConversationHistoryViewModel]
+    modules = [WorkspaceViewModel, WorkspaceCreationViewModel, DashboardViewModel, SearchViewModel, LibraryViewModel, DocumentViewModel, TaskViewModel, SettingsViewModel, AssistantViewModel, ConversationHistoryViewModel, MemorySettingsViewModel]
     for cls in modules:
         source = inspect.getsource(sys.modules[cls.__module__])
         assert "knowledge_app.services" not in source

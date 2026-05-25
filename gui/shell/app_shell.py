@@ -17,6 +17,7 @@ from gui.viewmodels.assistant_viewmodel import AssistantViewModel
 from gui.viewmodels.dashboard_viewmodel import DashboardViewModel
 from gui.viewmodels.document_viewmodel import DocumentViewModel
 from gui.viewmodels.library_viewmodel import LibraryViewModel
+from gui.viewmodels.memory_settings_viewmodel import MemorySettingsViewModel
 from gui.viewmodels.search_viewmodel import SearchViewModel
 from gui.viewmodels.settings_viewmodel import SettingsViewModel
 from gui.viewmodels.task_viewmodel import TaskViewModel
@@ -55,6 +56,7 @@ class AppShell(QWidget):
         self.document_vm = DocumentViewModel(adapter)
         self.task_vm = TaskViewModel(adapter)
         self.settings_vm = SettingsViewModel(adapter)
+        self.memory_settings_vm = MemorySettingsViewModel(adapter)
         self.assistant_vm = AssistantViewModel(adapter, ui_context_provider=self._assistant_ui_context)
         self.workspace_creation_vm = WorkspaceCreationViewModel(self.creation_adapter)
         self.reset_window_layout = reset_window_layout
@@ -73,7 +75,7 @@ class AppShell(QWidget):
         self.search_view = SearchView(self.search_vm, self.document_vm)
         self.library_view = LibraryView(self.library_vm, self.document_vm)
         self.task_view = TaskSummaryView(self.task_vm)
-        self.settings_view = SettingsEntryView(self.settings_vm, gui_settings_provider=gui_settings_provider, reset_window_layout=self._reset_window_layout)
+        self.settings_view = SettingsEntryView(self.settings_vm, self.memory_settings_vm, gui_settings_provider=gui_settings_provider, reset_window_layout=self._reset_window_layout)
 
         self.routes = {
             "workspace_gate": self.workspace_gate_view,
@@ -154,6 +156,7 @@ class AppShell(QWidget):
         self.document_vm.adapter = adapter
         self.task_vm.adapter = adapter
         self.settings_vm.adapter = adapter
+        self.memory_settings_vm.set_adapter(adapter)
         self.assistant_overlay.set_adapter(adapter)
         self.loaded_routes.clear()
         self._load_startup_status()

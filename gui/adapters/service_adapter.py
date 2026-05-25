@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from knowledge_app.ai.conversation_persistence_service import ConversationPersistenceService, ConversationPersistenceServiceError
+from knowledge_app.ai.memory_service import MemoryService, MemoryServiceError
 from knowledge_app.services.backup_service import BackupService
 from knowledge_app.services.category_service import CategoryService
 from knowledge_app.services.document_service import DocumentService
@@ -36,8 +37,9 @@ from gui.adapters.viewmodel_helpers import (
 class ServiceAdapter:
     """Thin adapter over read-only service-layer calls used by the GUI."""
 
-    def __init__(self, workspace_path: Path | str | None = None):
+    def __init__(self, workspace_path: Path | str | None = None, memory_service: MemoryService | None = None):
         self.workspace_path = Path(workspace_path).resolve() if workspace_path else Path.cwd().resolve()
+        self._memory_service = memory_service
 
     def load_workspace_status(self) -> Dict[str, Any]:
         service = "WorkspaceStatusService"
@@ -197,6 +199,7 @@ class ServiceAdapter:
         data = status.get("data") or {}
         sections = [
             {"section_id": "workspace_status", "label": "工作区状态", "phase": "phase_1_read_only", "read_only": True, "editable": False, "execute_available": False},
+            {"section_id": "ai_memory", "label": "AI 记忆", "phase": "v2.6.1_in_memory_mock", "read_only": True, "editable": False, "execute_available": False},
             {"section_id": "category_settings", "label": "分类设置", "phase": "future", "read_only": True, "editable": False, "execute_available": False},
             {"section_id": "template_manager", "label": "模板管理", "phase": "future", "read_only": True, "editable": False, "execute_available": False},
             {"section_id": "source_manager", "label": "来源管理", "phase": "future", "read_only": True, "editable": False, "execute_available": False},
@@ -352,14 +355,253 @@ class ServiceAdapter:
             [service],
         )
 
+    def list_memory_candidates(self, status: str | None = None) -> Dict[str, Any]:
+        service = "MemoryService"
+        try:
+            candidates = self._memory().list_candidates(self._ai_workspace_id(), status=status)
+        except MemoryServiceError as exc:
+            return self._memory_error("ai_memory_candidates", service, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return self._memory_error("ai_memory_candidates", service, str(exc))
+        rows = [self._memory_candidate_row(item.to_dict()) for item in candidates]
+        data = {
+            "workspace_id": self._ai_workspace_id(),
+            "status_filter": status,
+            "candidates": rows,
+            "count": len(rows),
+            "storage": self._memory_storage_state(),
+        }
+        return envelope("ai_memory_candidates", "ready" if rows else "empty", data, [service])
+
+    def accept_memory_candidate(self, candidate_id: str, confirmed: bool) -> Dict[str, Any]:
+        service = "MemoryService"
+        try:
+            memory = self._memory().accept_candidate(candidate_id, confirmed=confirmed)
+            candidates = self._memory().list_candidates(self._ai_workspace_id())
+            memories = self._memory().list_memories(self._ai_workspace_id(), include_deleted=True)
+        except MemoryServiceError as exc:
+            return self._memory_error("ai_memory_accept_candidate", service, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return self._memory_error("ai_memory_accept_candidate", service, str(exc))
+        data = {
+            "accepted_candidate_id": candidate_id,
+            "memory": self._saved_memory_row(memory.to_dict()),
+            "candidates": [self._memory_candidate_row(item.to_dict()) for item in candidates],
+            "memories": [self._saved_memory_row(item.to_dict()) for item in memories],
+            "storage": self._memory_storage_state(),
+        }
+        return envelope("ai_memory_accept_candidate", "ready", data, [service])
+
+    def reject_memory_candidate(self, candidate_id: str) -> Dict[str, Any]:
+        service = "MemoryService"
+        try:
+            candidate = self._memory().reject_candidate(candidate_id)
+            candidates = self._memory().list_candidates(self._ai_workspace_id())
+        except MemoryServiceError as exc:
+            return self._memory_error("ai_memory_reject_candidate", service, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return self._memory_error("ai_memory_reject_candidate", service, str(exc))
+        data = {
+            "candidate": self._memory_candidate_row(candidate.to_dict()),
+            "candidates": [self._memory_candidate_row(item.to_dict()) for item in candidates],
+            "storage": self._memory_storage_state(),
+        }
+        return envelope("ai_memory_reject_candidate", "ready", data, [service])
+
+    def expire_memory_candidate(self, candidate_id: str) -> Dict[str, Any]:
+        service = "MemoryService"
+        try:
+            candidate = self._memory().expire_candidate(candidate_id)
+            candidates = self._memory().list_candidates(self._ai_workspace_id())
+        except MemoryServiceError as exc:
+            return self._memory_error("ai_memory_expire_candidate", service, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return self._memory_error("ai_memory_expire_candidate", service, str(exc))
+        data = {
+            "candidate": self._memory_candidate_row(candidate.to_dict()),
+            "candidates": [self._memory_candidate_row(item.to_dict()) for item in candidates],
+            "storage": self._memory_storage_state(),
+        }
+        return envelope("ai_memory_expire_candidate", "ready", data, [service])
+
+    def list_saved_memories(self) -> Dict[str, Any]:
+        service = "MemoryService"
+        try:
+            memories = self._memory().list_memories(self._ai_workspace_id(), include_disabled=True, include_deleted=True)
+        except MemoryServiceError as exc:
+            return self._memory_error("ai_memory_saved", service, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return self._memory_error("ai_memory_saved", service, str(exc))
+        rows = [self._saved_memory_row(item.to_dict()) for item in memories]
+        data = {
+            "workspace_id": self._ai_workspace_id(),
+            "memories": rows,
+            "count": len(rows),
+            "storage": self._memory_storage_state(),
+        }
+        return envelope("ai_memory_saved", "ready" if rows else "empty", data, [service])
+
+    def disable_memory(self, memory_id: str) -> Dict[str, Any]:
+        service = "MemoryService"
+        try:
+            memory = self._memory().disable_memory(memory_id)
+            memories = self._memory().list_memories(self._ai_workspace_id(), include_disabled=True, include_deleted=True)
+        except MemoryServiceError as exc:
+            return self._memory_error("ai_memory_disable", service, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return self._memory_error("ai_memory_disable", service, str(exc))
+        data = {
+            "memory": self._saved_memory_row(memory.to_dict()),
+            "memories": [self._saved_memory_row(item.to_dict()) for item in memories],
+            "storage": self._memory_storage_state(),
+        }
+        return envelope("ai_memory_disable", "ready", data, [service])
+
+    def delete_memory(self, memory_id: str) -> Dict[str, Any]:
+        service = "MemoryService"
+        try:
+            memory = self._memory().delete_memory(memory_id)
+            memories = self._memory().list_memories(self._ai_workspace_id(), include_disabled=True, include_deleted=True)
+        except MemoryServiceError as exc:
+            return self._memory_error("ai_memory_delete", service, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return self._memory_error("ai_memory_delete", service, str(exc))
+        data = {
+            "memory": self._saved_memory_row(memory.to_dict()),
+            "memories": [self._saved_memory_row(item.to_dict()) for item in memories],
+            "storage": self._memory_storage_state(),
+        }
+        return envelope("ai_memory_delete", "ready", data, [service])
+
+    def clear_memory(self) -> Dict[str, Any]:
+        service = "MemoryService"
+        try:
+            deleted_count = self._memory().clear_memory(self._ai_workspace_id())
+            memories = self._memory().list_memories(self._ai_workspace_id(), include_disabled=True, include_deleted=True)
+        except MemoryServiceError as exc:
+            return self._memory_error("ai_memory_clear", service, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return self._memory_error("ai_memory_clear", service, str(exc))
+        data = {
+            "deleted_count": deleted_count,
+            "memories": [self._saved_memory_row(item.to_dict()) for item in memories],
+            "storage": self._memory_storage_state(),
+        }
+        return envelope("ai_memory_clear", "ready", data, [service])
+
+    def preview_memory_backup(self) -> Dict[str, Any]:
+        service = "MemoryService"
+        try:
+            preview = self._memory().backup_policy_preview(self._ai_workspace_id())
+        except MemoryServiceError as exc:
+            return self._memory_error("ai_memory_backup_preview", service, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return self._memory_error("ai_memory_backup_preview", service, str(exc))
+        return envelope("ai_memory_backup_preview", "ready", preview, [service])
+
+    def preview_memory_export(self) -> Dict[str, Any]:
+        service = "MemoryService"
+        try:
+            preview = self._memory().export_memory_preview(self._ai_workspace_id(), include_disabled=True, include_deleted=True)
+        except MemoryServiceError as exc:
+            return self._memory_error("ai_memory_export_preview", service, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return self._memory_error("ai_memory_export_preview", service, str(exc))
+        return envelope("ai_memory_export_preview", "ready", preview, [service])
+
+    def get_memory_privacy_status(self) -> Dict[str, Any]:
+        service = "MemoryService"
+        try:
+            privacy = self._memory().retention_policy.privacy.validate().to_dict()
+        except Exception as exc:  # noqa: BLE001
+            return self._memory_error("ai_memory_privacy_status", service, str(exc))
+        privacy_mode = bool(privacy.get("privacy_mode", False))
+        candidate_allowed = bool(privacy.get("memory_candidate_creation_allowed", False)) and not privacy_mode
+        cloud_allowed = bool(privacy.get("cloud_memory_send_allowed", False))
+        data = {
+            "workspace_id": self._ai_workspace_id(),
+            "storage": self._memory_storage_state(),
+            "privacy": privacy,
+            "memory_candidate_creation_allowed": candidate_allowed,
+            "memory_save_allowed": candidate_allowed and not cloud_allowed,
+            "cloud_send_allowed": cloud_allowed,
+            "not_formal_knowledge": True,
+            "formal_search_records": False,
+            "save_blocked_reason": "隐私模式已开启，禁止保存 AI 记忆。" if privacy_mode else "",
+        }
+        return envelope("ai_memory_privacy_status", "ready", data, [service])
+
     def capabilities(self) -> Dict[str, bool]:
         names = ["mutation_ui", "category_execute", "archive_execute", "delete_execute", "merge_execute", "template_apply_execute", "restore_execute", "rss", "vector_search"]
         return {name: False for name in names}
+
+    def _memory(self) -> MemoryService:
+        if self._memory_service is None:
+            self._memory_service = MemoryService()
+        return self._memory_service
 
     def _ai_workspace_id(self) -> str:
         text = self.workspace_path.name.strip().lower()
         safe = "".join(character if character.isalnum() else "_" for character in text).strip("_")
         return safe or "workspace"
+
+    def _memory_storage_state(self) -> Dict[str, Any]:
+        return {
+            "mode": "in_memory",
+            "mock_mode": True,
+            "writes_file": False,
+            "creates_workspace_ai": False,
+            "not_formal_knowledge": True,
+            "cloud_send_allowed": False,
+            "auto_loaded": False,
+        }
+
+    @staticmethod
+    def _memory_candidate_row(payload: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "candidate_id": str(payload.get("candidate_id") or ""),
+            "conversation_id": str(payload.get("conversation_id") or ""),
+            "workspace_id": str(payload.get("workspace_id") or ""),
+            "type": str(payload.get("type") or ""),
+            "proposed_text": str(payload.get("proposed_text") or ""),
+            "source_message_ids": [str(item) for item in payload.get("source_message_ids") or []],
+            "sensitivity": str(payload.get("sensitivity") or ""),
+            "requires_confirmation": bool(payload.get("requires_confirmation", True)),
+            "status": str(payload.get("status") or ""),
+            "metadata": dict(payload.get("metadata") or {}),
+            "not_formal_knowledge": True,
+            "cloud_send_allowed": False,
+        }
+
+    @staticmethod
+    def _saved_memory_row(payload: Dict[str, Any]) -> Dict[str, Any]:
+        metadata = dict(payload.get("metadata") or {})
+        status = str(payload.get("status") or "")
+        redacted = bool(metadata.get("text_redacted", False)) or (status == "deleted" and not str(payload.get("text") or ""))
+        source = dict(payload.get("source") or {})
+        return {
+            "memory_id": str(payload.get("memory_id") or ""),
+            "workspace_id": str(payload.get("workspace_id") or ""),
+            "type": str(payload.get("type") or ""),
+            "text": "内容已删除" if redacted else str(payload.get("text") or ""),
+            "text_redacted": redacted,
+            "created_at": str(payload.get("created_at") or ""),
+            "updated_at": str(payload.get("updated_at") or ""),
+            "source": source,
+            "source_candidate_id": str(source.get("candidate_id") or ""),
+            "source_message_ids": [str(item) for item in source.get("source_message_ids") or []],
+            "sensitivity": str(payload.get("sensitivity") or ""),
+            "status": status,
+            "metadata": metadata,
+            "tombstone_label": "已删除，仅保留删除记录" if status == "deleted" else "",
+            "not_formal_knowledge": True,
+            "cloud_send_allowed": False,
+        }
+
+    @staticmethod
+    def _memory_error(view_id: str, service: str, message: str) -> Dict[str, Any]:
+        return envelope(view_id, "error", None, [service], errors=[ui_error(service, message)])
+
 
     @staticmethod
     def _conversation_summary(payload: Dict[str, Any]) -> Dict[str, Any]:

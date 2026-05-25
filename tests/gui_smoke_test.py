@@ -75,6 +75,11 @@ def main() -> int:
             "open_document",
             "load_task_detail",
             "load_settings_entry",
+            "list_memory_candidates",
+            "list_saved_memories",
+            "preview_memory_backup",
+            "preview_memory_export",
+            "get_memory_privacy_status",
         }
         assert not any(call[0] in startup_forbidden for call in adapter.calls)
         assert window.minimumWidth() >= 920
@@ -83,7 +88,15 @@ def main() -> int:
         nav_labels = [button.text() for button in window.shell.sidebar._buttons.values()]
         for label in ["首页", "搜索", "知识库", "审核", "任务中心", "维护", "设置"]:
             assert label in nav_labels
-        all_button_text = " ".join(button.text().lower() for button in window.findChildren(QPushButton))
+        allowed_ai_record_buttons = {
+            "memoryAcceptCandidateButton",
+            "memoryRejectCandidateButton",
+            "memoryDisableButton",
+            "memoryDeleteButton",
+            "memoryClearButton",
+            "conversationHistoryDeleteButton",
+        }
+        all_button_text = " ".join(button.text().lower() for button in window.findChildren(QPushButton) if button.objectName() not in allowed_ai_record_buttons)
         for forbidden in ["cancel", "retry", "cleanup", "archive", "delete", "merge", "restore", "rss", "vector", "归档", "删除", "合并", "恢复"]:
             assert forbidden not in all_button_text
         window.close()

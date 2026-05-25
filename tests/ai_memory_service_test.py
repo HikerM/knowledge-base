@@ -169,6 +169,8 @@ def assert_no_files_or_workspace_ai_created() -> None:
         )
         memory = service.accept_candidate(candidate.candidate_id, confirmed=True)
         service.disable_memory(memory.memory_id)
+        service.backup_policy_preview(str(workspace))
+        service.export_memory_preview(str(workspace), include_deleted=True)
         after = sorted(path.relative_to(workspace) for path in workspace.rglob("*"))
         assert before == after
         assert not (workspace / "ai").exists()

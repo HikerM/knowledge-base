@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+from knowledge_app.ai.memory_service import MemoryService, MemoryServiceError
+from knowledge_app.ai.retention_models import PrivacyModePolicy, RetentionPolicy
 from knowledge_app.models.operation_result import OperationResult
 from knowledge_app.models.search_result import SearchResult
 
@@ -36,12 +38,22 @@ def _error_envelope(view_id: str, service: str, message: str, code: str = "fixtu
 class FakeServiceAdapter:
     """Fixture adapter that exposes only first-stage read-only capabilities."""
 
-    def __init__(self, ai_storage_bootstrapped: bool = True, include_corrupt_conversation: bool = False):
+    def __init__(
+        self,
+        ai_storage_bootstrapped: bool = True,
+        include_corrupt_conversation: bool = False,
+        memory_privacy_mode: bool = False,
+    ):
         self.calls: list[tuple[str, Dict[str, Any]]] = []
         self.ai_storage_bootstrapped = ai_storage_bootstrapped
         self.ai_conversations = self._ai_conversation_rows()
         if include_corrupt_conversation:
             self.ai_conversations.append(self._ai_corrupt_conversation_row())
+        self.memory_workspace_id = "personal_knowledge_base"
+        self.memory_service = MemoryService()
+        self._seed_memory_fixtures()
+        if memory_privacy_mode:
+            self.memory_service.retention_policy = RetentionPolicy(privacy=PrivacyModePolicy(privacy_mode=True)).validate()
 
     def load_workspace_status(self) -> Dict[str, Any]:
         self.calls.append(("load_workspace_status", {}))
@@ -212,6 +224,7 @@ class FakeServiceAdapter:
                 "index_status": "ready",
                 "mutation_actions_available": False,
                 "sections": [
+                    {"section_id": "ai_memory", "label": "AI 记忆", "phase": "v2.6.1_in_memory_mock", "read_only": True, "editable": False, "execute_available": False},
                     {"section_id": "category_settings", "label": "分类设置", "phase": "future", "read_only": True, "editable": False, "execute_available": False},
                     {"section_id": "template_manager", "label": "模板管理", "phase": "future", "read_only": True, "editable": False, "execute_available": False},
                 ],
@@ -427,6 +440,155 @@ class FakeServiceAdapter:
             ["ConversationPersistenceService"],
         )
 
+    def list_memory_candidates(self, status: str | None = None) -> Dict[str, Any]:
+        self.calls.append(("list_memory_candidates", {"status": status}))
+        try:
+            candidates = self.memory_service.list_candidates(self.memory_workspace_id, status=status)
+        except MemoryServiceError as exc:
+            return self._memory_error("ai_memory_candidates", str(exc))
+        rows = [self._memory_candidate_row(item.to_dict()) for item in candidates]
+        return _envelope(
+            "ai_memory_candidates",
+            "ready" if rows else "empty",
+            {"workspace_id": self.memory_workspace_id, "status_filter": status, "candidates": rows, "count": len(rows), "storage": self._memory_storage_state()},
+            ["MemoryService"],
+        )
+
+    def accept_memory_candidate(self, candidate_id: str, confirmed: bool) -> Dict[str, Any]:
+        self.calls.append(("accept_memory_candidate", {"candidate_id": candidate_id, "confirmed": confirmed}))
+        try:
+            memory = self.memory_service.accept_candidate(candidate_id, confirmed=confirmed)
+            candidates = self.memory_service.list_candidates(self.memory_workspace_id)
+            memories = self.memory_service.list_memories(self.memory_workspace_id, include_disabled=True, include_deleted=True)
+        except MemoryServiceError as exc:
+            return self._memory_error("ai_memory_accept_candidate", str(exc))
+        return _envelope(
+            "ai_memory_accept_candidate",
+            "ready",
+            {
+                "accepted_candidate_id": candidate_id,
+                "memory": self._saved_memory_row(memory.to_dict()),
+                "candidates": [self._memory_candidate_row(item.to_dict()) for item in candidates],
+                "memories": [self._saved_memory_row(item.to_dict()) for item in memories],
+                "storage": self._memory_storage_state(),
+            },
+            ["MemoryService"],
+        )
+
+    def reject_memory_candidate(self, candidate_id: str) -> Dict[str, Any]:
+        self.calls.append(("reject_memory_candidate", {"candidate_id": candidate_id}))
+        try:
+            candidate = self.memory_service.reject_candidate(candidate_id)
+            candidates = self.memory_service.list_candidates(self.memory_workspace_id)
+        except MemoryServiceError as exc:
+            return self._memory_error("ai_memory_reject_candidate", str(exc))
+        return _envelope(
+            "ai_memory_reject_candidate",
+            "ready",
+            {"candidate": self._memory_candidate_row(candidate.to_dict()), "candidates": [self._memory_candidate_row(item.to_dict()) for item in candidates], "storage": self._memory_storage_state()},
+            ["MemoryService"],
+        )
+
+    def expire_memory_candidate(self, candidate_id: str) -> Dict[str, Any]:
+        self.calls.append(("expire_memory_candidate", {"candidate_id": candidate_id}))
+        try:
+            candidate = self.memory_service.expire_candidate(candidate_id)
+            candidates = self.memory_service.list_candidates(self.memory_workspace_id)
+        except MemoryServiceError as exc:
+            return self._memory_error("ai_memory_expire_candidate", str(exc))
+        return _envelope(
+            "ai_memory_expire_candidate",
+            "ready",
+            {"candidate": self._memory_candidate_row(candidate.to_dict()), "candidates": [self._memory_candidate_row(item.to_dict()) for item in candidates], "storage": self._memory_storage_state()},
+            ["MemoryService"],
+        )
+
+    def list_saved_memories(self) -> Dict[str, Any]:
+        self.calls.append(("list_saved_memories", {}))
+        memories = self.memory_service.list_memories(self.memory_workspace_id, include_disabled=True, include_deleted=True)
+        rows = [self._saved_memory_row(item.to_dict()) for item in memories]
+        return _envelope(
+            "ai_memory_saved",
+            "ready" if rows else "empty",
+            {"workspace_id": self.memory_workspace_id, "memories": rows, "count": len(rows), "storage": self._memory_storage_state()},
+            ["MemoryService"],
+        )
+
+    def disable_memory(self, memory_id: str) -> Dict[str, Any]:
+        self.calls.append(("disable_memory", {"memory_id": memory_id}))
+        try:
+            memory = self.memory_service.disable_memory(memory_id)
+            memories = self.memory_service.list_memories(self.memory_workspace_id, include_disabled=True, include_deleted=True)
+        except MemoryServiceError as exc:
+            return self._memory_error("ai_memory_disable", str(exc))
+        return _envelope(
+            "ai_memory_disable",
+            "ready",
+            {"memory": self._saved_memory_row(memory.to_dict()), "memories": [self._saved_memory_row(item.to_dict()) for item in memories], "storage": self._memory_storage_state()},
+            ["MemoryService"],
+        )
+
+    def delete_memory(self, memory_id: str) -> Dict[str, Any]:
+        self.calls.append(("delete_memory", {"memory_id": memory_id}))
+        try:
+            memory = self.memory_service.delete_memory(memory_id)
+            memories = self.memory_service.list_memories(self.memory_workspace_id, include_disabled=True, include_deleted=True)
+        except MemoryServiceError as exc:
+            return self._memory_error("ai_memory_delete", str(exc))
+        return _envelope(
+            "ai_memory_delete",
+            "ready",
+            {"memory": self._saved_memory_row(memory.to_dict()), "memories": [self._saved_memory_row(item.to_dict()) for item in memories], "storage": self._memory_storage_state()},
+            ["MemoryService"],
+        )
+
+    def clear_memory(self) -> Dict[str, Any]:
+        self.calls.append(("clear_memory", {}))
+        deleted_count = self.memory_service.clear_memory(self.memory_workspace_id)
+        memories = self.memory_service.list_memories(self.memory_workspace_id, include_disabled=True, include_deleted=True)
+        return _envelope(
+            "ai_memory_clear",
+            "ready",
+            {"deleted_count": deleted_count, "memories": [self._saved_memory_row(item.to_dict()) for item in memories], "storage": self._memory_storage_state()},
+            ["MemoryService"],
+        )
+
+    def preview_memory_backup(self) -> Dict[str, Any]:
+        self.calls.append(("preview_memory_backup", {}))
+        return _envelope("ai_memory_backup_preview", "ready", self.memory_service.backup_policy_preview(self.memory_workspace_id), ["MemoryService"])
+
+    def preview_memory_export(self) -> Dict[str, Any]:
+        self.calls.append(("preview_memory_export", {}))
+        return _envelope(
+            "ai_memory_export_preview",
+            "ready",
+            self.memory_service.export_memory_preview(self.memory_workspace_id, include_disabled=True, include_deleted=True),
+            ["MemoryService"],
+        )
+
+    def get_memory_privacy_status(self) -> Dict[str, Any]:
+        self.calls.append(("get_memory_privacy_status", {}))
+        privacy = self.memory_service.retention_policy.privacy.validate().to_dict()
+        privacy_mode = bool(privacy.get("privacy_mode", False))
+        candidate_allowed = bool(privacy.get("memory_candidate_creation_allowed", False)) and not privacy_mode
+        cloud_allowed = bool(privacy.get("cloud_memory_send_allowed", False))
+        return _envelope(
+            "ai_memory_privacy_status",
+            "ready",
+            {
+                "workspace_id": self.memory_workspace_id,
+                "storage": self._memory_storage_state(),
+                "privacy": privacy,
+                "memory_candidate_creation_allowed": candidate_allowed,
+                "memory_save_allowed": candidate_allowed and not cloud_allowed,
+                "cloud_send_allowed": cloud_allowed,
+                "not_formal_knowledge": True,
+                "formal_search_records": False,
+                "save_blocked_reason": "隐私模式已开启，禁止保存 AI 记忆。" if privacy_mode else "",
+            },
+            ["MemoryService"],
+        )
+
     def capabilities(self) -> Dict[str, bool]:
         self.calls.append(("capabilities", {}))
         return {
@@ -440,6 +602,131 @@ class FakeServiceAdapter:
             "rss": False,
             "vector_search": False,
         }
+
+    def _seed_memory_fixtures(self) -> None:
+        self.memory_service.create_candidate(
+            conversation_id="conv_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            workspace_id=self.memory_workspace_id,
+            proposed_text="用户偏好简洁的验证摘要。",
+            type="preference",
+            source_message_ids=["msg_user_1"],
+        )
+        self.memory_service.create_candidate(
+            conversation_id="conv_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            workspace_id=self.memory_workspace_id,
+            proposed_text="高敏感信息不应保存。",
+            type="preference",
+            source_message_ids=["msg_blocked_1"],
+            sensitivity="blocked",
+        )
+        rejected = self.memory_service.create_candidate(
+            conversation_id="conv_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            workspace_id=self.memory_workspace_id,
+            proposed_text="用户偏好过时的输出格式。",
+            type="format",
+            source_message_ids=["msg_rejected_1"],
+        )
+        self.memory_service.reject_candidate(rejected.candidate_id)
+        expired = self.memory_service.create_candidate(
+            conversation_id="conv_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            workspace_id=self.memory_workspace_id,
+            proposed_text="临时任务偏好。",
+            type="workflow",
+            source_message_ids=["msg_expired_1"],
+        )
+        self.memory_service.expire_candidate(expired.candidate_id)
+        self.memory_service.accept_candidate(
+            self.memory_service.create_candidate(
+                conversation_id="conv_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                workspace_id=self.memory_workspace_id,
+                proposed_text="用户偏好中文摘要。",
+                type="preference",
+                source_message_ids=["msg_saved_1"],
+            ).candidate_id,
+            confirmed=True,
+        )
+        disabled = self.memory_service.accept_candidate(
+            self.memory_service.create_candidate(
+                conversation_id="conv_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                workspace_id=self.memory_workspace_id,
+                proposed_text="用户偏好保留命令输出。",
+                type="workflow",
+                source_message_ids=["msg_saved_2"],
+            ).candidate_id,
+            confirmed=True,
+        )
+        self.memory_service.disable_memory(disabled.memory_id)
+        deleted = self.memory_service.accept_candidate(
+            self.memory_service.create_candidate(
+                conversation_id="conv_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                workspace_id=self.memory_workspace_id,
+                proposed_text="用户偏好已删除示例。",
+                type="format",
+                source_message_ids=["msg_saved_3"],
+            ).candidate_id,
+            confirmed=True,
+        )
+        self.memory_service.delete_memory(deleted.memory_id)
+
+    @staticmethod
+    def _memory_storage_state() -> Dict[str, Any]:
+        return {
+            "mode": "in_memory",
+            "mock_mode": True,
+            "writes_file": False,
+            "creates_workspace_ai": False,
+            "not_formal_knowledge": True,
+            "cloud_send_allowed": False,
+            "auto_loaded": False,
+        }
+
+    @staticmethod
+    def _memory_candidate_row(payload: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "candidate_id": str(payload.get("candidate_id") or ""),
+            "conversation_id": str(payload.get("conversation_id") or ""),
+            "workspace_id": str(payload.get("workspace_id") or ""),
+            "type": str(payload.get("type") or ""),
+            "proposed_text": str(payload.get("proposed_text") or ""),
+            "source_message_ids": [str(item) for item in payload.get("source_message_ids") or []],
+            "sensitivity": str(payload.get("sensitivity") or ""),
+            "requires_confirmation": bool(payload.get("requires_confirmation", True)),
+            "status": str(payload.get("status") or ""),
+            "metadata": dict(payload.get("metadata") or {}),
+            "not_formal_knowledge": True,
+            "cloud_send_allowed": False,
+        }
+
+    @staticmethod
+    def _saved_memory_row(payload: Dict[str, Any]) -> Dict[str, Any]:
+        metadata = dict(payload.get("metadata") or {})
+        status = str(payload.get("status") or "")
+        redacted = bool(metadata.get("text_redacted", False)) or (status == "deleted" and not str(payload.get("text") or ""))
+        source = dict(payload.get("source") or {})
+        return {
+            "memory_id": str(payload.get("memory_id") or ""),
+            "workspace_id": str(payload.get("workspace_id") or ""),
+            "type": str(payload.get("type") or ""),
+            "text": "内容已删除" if redacted else str(payload.get("text") or ""),
+            "text_redacted": redacted,
+            "created_at": str(payload.get("created_at") or ""),
+            "updated_at": str(payload.get("updated_at") or ""),
+            "source": source,
+            "source_candidate_id": str(source.get("candidate_id") or ""),
+            "source_message_ids": [str(item) for item in source.get("source_message_ids") or []],
+            "sensitivity": str(payload.get("sensitivity") or ""),
+            "status": status,
+            "metadata": metadata,
+            "tombstone_label": "已删除，仅保留删除记录" if status == "deleted" else "",
+            "not_formal_knowledge": True,
+            "cloud_send_allowed": False,
+        }
+
+    @staticmethod
+    def _memory_error(view_id: str, message: str) -> Dict[str, Any]:
+        payload = _envelope(view_id, "error", None, ["MemoryService"])
+        payload["errors"] = [{"service": "MemoryService", "message": message, "code": "memory_service_error"}]
+        return payload
 
     def _find_ai_conversation(self, conversation_id: str) -> Dict[str, Any] | None:
         for row in self.ai_conversations:

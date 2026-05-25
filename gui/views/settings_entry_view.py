@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict
 
-from PySide6.QtWidgets import QLabel, QListWidget, QMessageBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QListWidget, QMessageBox, QStackedWidget, QVBoxLayout, QWidget
 
 from gui.styles.tokens import SPACING
+from gui.views.memory_settings_view import MemorySettingsView
 from gui.widgets.card import Card
 from gui.widgets.controls import secondary_button
 from gui.widgets.formatters import bool_label, status_label
@@ -21,11 +22,20 @@ def _short_path(path: str, max_chars: int = 72) -> str:
 
 
 class SettingsEntryView(QWidget):
-    def __init__(self, settings_vm: Any, gui_settings_provider: Callable[[], Dict[str, Any]] | None = None, reset_window_layout: Callable[[], None] | None = None):
+    def __init__(
+        self,
+        settings_vm: Any,
+        memory_settings_vm: Any,
+        gui_settings_provider: Callable[[], Dict[str, Any]] | None = None,
+        reset_window_layout: Callable[[], None] | None = None,
+    ):
         super().__init__()
         self.settings_vm = settings_vm
+        self.memory_settings_vm = memory_settings_vm
         self.gui_settings_provider = gui_settings_provider
         self.reset_window_layout = reset_window_layout
+        self.stack = QStackedWidget()
+        self.entry_page = QWidget()
         self.workspace_card = Card("工作区", "未知", "")
         self.window_card = Card("窗口布局", "未加载", "")
         self.reset_window_button = secondary_button("重置窗口布局")
@@ -42,22 +52,42 @@ class SettingsEntryView(QWidget):
         self.notice = QLabel("知识库设置保持只读；窗口布局只保存到当前用户目录，不写入工作区。")
         self.notice.setObjectName("mutedText")
         self.notice.setWordWrap(True)
+        self.memory_settings_button = secondary_button("AI 记忆")
+        self.memory_settings_button.setObjectName("memorySettingsEntryButton")
         self.sections = QListWidget()
-        root = QVBoxLayout(self)
-        root.setContentsMargins(SPACING.page, SPACING.page, SPACING.page, SPACING.page)
-        root.setSpacing(SPACING.gap)
-        root.addWidget(SectionHeader("设置", "查看工作区和只读能力边界。"))
-        root.addWidget(self.workspace_card)
-        root.addWidget(self.window_card)
-        root.addWidget(self.local_card)
-        root.addWidget(self.service_card)
-        root.addWidget(self.notice)
+        self.memory_view = MemorySettingsView(self.memory_settings_vm)
+
+        entry_root = QVBoxLayout(self.entry_page)
+        entry_root.setContentsMargins(SPACING.page, SPACING.page, SPACING.page, SPACING.page)
+        entry_root.setSpacing(SPACING.gap)
+        entry_root.addWidget(SectionHeader("设置", "查看工作区和只读能力边界。"))
+        entry_root.addWidget(self.workspace_card)
+        entry_root.addWidget(self.window_card)
+        entry_root.addWidget(self.local_card)
+        entry_root.addWidget(self.service_card)
+        entry_root.addWidget(self.notice)
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setSpacing(SPACING.compact)
+        action_row.addWidget(self.memory_settings_button)
+        action_row.addStretch(1)
+        entry_root.addLayout(action_row)
         section_title = QLabel("功能区域")
         section_title.setObjectName("cardValue")
-        root.addWidget(section_title)
-        root.addWidget(self.sections, 1)
+        entry_root.addWidget(section_title)
+        entry_root.addWidget(self.sections, 1)
+
+        self.stack.addWidget(self.entry_page)
+        self.stack.addWidget(self.memory_view)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(self.stack)
+
+        self.memory_settings_button.clicked.connect(self.open_memory_settings)
+        self.memory_view.back_requested.connect(self.show_entry)
 
     def load_settings(self) -> None:
+        self.show_entry()
         self.render_settings(self.settings_vm.load_entry())
 
     def focus_primary(self) -> None:
@@ -86,6 +116,14 @@ class SettingsEntryView(QWidget):
             self.sections.addItem(f"{values[0]} · {values[1]} · 只读 {values[2]} · 可编辑 {values[3]} · 可执行 {values[4]}")
         if not rows:
             self.sections.addItem("没有可展示的设置区域。")
+
+    def open_memory_settings(self) -> None:
+        self.memory_view.render(self.memory_settings_vm.snapshot())
+        self.stack.setCurrentWidget(self.memory_view)
+        self.memory_view.focus_primary()
+
+    def show_entry(self) -> None:
+        self.stack.setCurrentWidget(self.entry_page)
 
     def _render_gui_settings(self, snapshot: Dict[str, Any]) -> None:
         size_text = f"{snapshot.get('window_width', 0)} x {snapshot.get('window_height', 0)}"
@@ -116,4 +154,6 @@ class SettingsEntryView(QWidget):
             return "未来阶段"
         if value == "phase_1_read_only":
             return "第一阶段只读"
+        if value == "v2.6.1_in_memory_mock":
+            return "v2.6.1 内存模拟"
         return value or "未知"
